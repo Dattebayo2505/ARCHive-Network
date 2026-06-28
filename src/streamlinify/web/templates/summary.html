@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="summary">
+  <h2>Build complete</h2>
+  <p>Media files copied: {{ result.copied }}</p>
+  <p>Albums written: {{ result.albums_written }}</p>
+  <p>Orphans: {{ result.orphans|length }}</p>
+  <pre>{{ summary }}</pre>
+  <a href="/gallery">← Back to gallery</a>
+</section>
+{% endblock %}
