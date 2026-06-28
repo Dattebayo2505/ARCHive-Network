@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# uv / virtualenv
+.venv/
+venv/
+
+# Runtime working data (unzipped imports, thumbnail cache, selection state, build output)
+workspace/
+ready/
+
+# Claude Code local (machine-specific) settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
