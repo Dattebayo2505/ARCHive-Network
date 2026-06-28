@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="ingest">
+  <form action="/upload" method="post" enctype="multipart/form-data">
+    <label>Drop export .zip <input type="file" name="file" accept=".zip" required></label>
+    <button type="submit">Upload</button>
+  </form>
+  <form action="/load-folder" method="post">
+    <label>or folder path <input type="text" name="folder" size="60" required></label>
+    <button type="submit">Load</button>
+  </form>
+  {% if errors %}<ul class="errors">{% for e in errors %}<li>Missing: {{ e }}</li>{% endfor %}</ul>{% endif %}
+</section>
+{% endblock %}
