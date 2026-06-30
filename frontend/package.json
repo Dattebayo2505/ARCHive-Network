@@ -1,0 +1,29 @@
+{
+  "name": "streamlinify-frontend",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node build",
+    "sync": "svelte-kit sync",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@skeletonlabs/skeleton": "^3",
+    "@skeletonlabs/skeleton-svelte": "^1",
+    "@sveltejs/adapter-node": "^5",
+    "@sveltejs/kit": "^2",
+    "@sveltejs/vite-plugin-svelte": "^4",
+    "@tailwindcss/vite": "^4",
+    "@testing-library/jest-dom": "^6",
+    "@testing-library/svelte": "^5",
+    "jsdom": "^25",
+    "svelte": "^5",
+    "tailwindcss": "^4",
+    "vite": "^5",
+    "vitest": "^2"
+  }
+}
