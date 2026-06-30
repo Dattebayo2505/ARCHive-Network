@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 
 from ..selection.policy import CapExceeded
+from .serializers import inventory_payload
 
 router = APIRouter()
+
+
+class ToggleRequest(BaseModel):
+    album_fbid: str
+    photo_fbid: str
 
 
 def _session(request: Request):
@@ -15,22 +22,18 @@ def _session(request: Request):
     return session
 
 
-@router.get("/gallery")
-def gallery(request: Request):
+@router.get("/api/inventory")
+def inventory(request: Request) -> dict:
     session = _session(request)
-    return request.app.state.templates.TemplateResponse(
-        request,
-        "gallery.html",
-        {
-            "albums": session.inventory.albums,
-            "non_album": session.inventory.non_album_photos,
-            "selection": session.selection,
-            "max_per_album": session.selection.policy.max_per_album,
-        },
+    return inventory_payload(
+        session.export_root.name,
+        session.inventory,
+        session.selection,
+        session.selection.policy.max_per_album,
     )
 
 
-@router.get("/thumb/{fbid}")
+@router.get("/api/thumb/{fbid}")
 def thumb(request: Request, fbid: str):
     session = _session(request)
     photo = session.inventory.photo_by_fbid(fbid)
@@ -40,13 +43,14 @@ def thumb(request: Request, fbid: str):
     return FileResponse(path, media_type="image/jpeg")
 
 
-@router.post("/toggle")
-def toggle(request: Request, album_fbid: str = Form(...), photo_fbid: str = Form(...)):
+@router.post("/api/toggle")
+def toggle(request: Request, body: ToggleRequest):
     session = _session(request)
     try:
-        selected = session.selection.toggle(album_fbid, photo_fbid)
+        selected = session.selection.toggle(body.album_fbid, body.photo_fbid)
     except CapExceeded:
         return JSONResponse(
-            {"error": "cap", "count": session.selection.count(album_fbid)}, status_code=409
+            {"error": "cap", "count": session.selection.count(body.album_fbid)},
+            status_code=409,
         )
-    return {"selected": selected, "count": session.selection.count(album_fbid)}
+    return {"selected": selected, "count": session.selection.count(body.album_fbid)}

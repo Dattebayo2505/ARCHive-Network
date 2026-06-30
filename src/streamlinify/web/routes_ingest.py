@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, File, Request, UploadFile
+from pydantic import BaseModel
 
 from ..config import settings
 from ..ingest.unzip import extract_zip
@@ -17,35 +17,44 @@ from .session import Session
 router = APIRouter()
 
 
-@router.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    return request.app.state.templates.TemplateResponse(request, "index.html", {"errors": None})
+class FolderRequest(BaseModel):
+    folder: str
 
 
-def _start_session(request: Request, export_root: Path):
+@router.get("/")
+def health() -> dict:
+    return {"name": "streamlinify", "status": "ok"}
+
+
+@router.get("/api/session")
+def session_status(request: Request) -> dict:
+    session = request.app.state.session
+    if session is None:
+        return {"loaded": False, "export_name": None}
+    return {"loaded": True, "export_name": session.export_root.name}
+
+
+def _start_session(request: Request, export_root: Path) -> dict:
     report = validate_export(export_root)
     if not report.ok:
-        return request.app.state.templates.TemplateResponse(
-            request, "index.html", {"errors": report.missing}, status_code=200
-        )
+        return {"ok": False, "errors": list(report.missing)}
     workspace = settings.workspace_dir
-    session = Session(
+    request.app.state.session = Session(
         export_root=export_root,
         inventory=build_inventory(export_root),
         selection=SelectionState(workspace / "selection.json", DefaultPolicy()),
         thumbnails=ThumbnailService(workspace / "thumbs"),
     )
-    request.app.state.session = session
-    return RedirectResponse("/gallery", status_code=303)
+    return {"ok": True, "errors": [], "export_name": export_root.name}
 
 
-@router.post("/load-folder")
-def load_folder(request: Request, folder: str = Form(...)):
-    return _start_session(request, find_export_root(Path(folder)))
+@router.post("/api/ingest/folder")
+def ingest_folder(request: Request, body: FolderRequest) -> dict:
+    return _start_session(request, find_export_root(Path(body.folder)))
 
 
-@router.post("/upload")
-def upload(request: Request, file: UploadFile = File(...)):
+@router.post("/api/ingest/upload")
+def ingest_upload(request: Request, file: UploadFile = File(...)) -> dict:
     workspace = settings.workspace_dir
     import_dir = workspace / "import"
     import_dir.mkdir(parents=True, exist_ok=True)

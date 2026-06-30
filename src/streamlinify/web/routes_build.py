@@ -9,8 +9,8 @@ from ..transform.report import format_summary
 router = APIRouter()
 
 
-@router.post("/build")
-def build(request: Request):
+@router.post("/api/build")
+def build(request: Request) -> dict:
     session = request.app.state.session
     if session is None:
         raise HTTPException(status_code=404, detail="No export loaded")
@@ -21,6 +21,9 @@ def build(request: Request):
     dest = settings.workspace_dir / "ready" / session.export_root.name
     result = build_ready_folder(session.export_root, dest, keep)
 
-    return request.app.state.templates.TemplateResponse(
-        request, "summary.html", {"summary": format_summary(result), "result": result}
-    )
+    return {
+        "copied": result.copied,
+        "albums_written": result.albums_written,
+        "orphans": result.orphans,
+        "summary": format_summary(result),
+    }
