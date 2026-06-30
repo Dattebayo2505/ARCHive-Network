@@ -6,6 +6,10 @@
 
 ---
 
+> **Note (2026-06-30):** the **UI-stack decision** here (Jinja2 + Alpine.js, no build step — §4 row
+> "UI stack" and §7) is **superseded by** `2026-06-30-svelte-frontend-design.md` (SvelteKit + Skeleton).
+> All other parts of this design still hold.
+
 ## 1. Overview
 
 A local, single-user **FastAPI** web tool (managed with **uv**) that streamlines the
