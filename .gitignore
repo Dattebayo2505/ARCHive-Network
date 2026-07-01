@@ -16,6 +16,11 @@ ready/
 
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
+.claude/skills
+
+# impeccable (design tool) local state
+.impeccable/
+.superpowers/
 
 # OS
 .DS_Store
