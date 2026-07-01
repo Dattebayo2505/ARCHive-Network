@@ -41,6 +41,59 @@ def test_thumbnail_orphan_404(export_root: Path, tmp_path: Path, monkeypatch):
     assert client.get("/api/thumb/m02").status_code == 404
 
 
+def test_preview_served(export_root: Path, tmp_path: Path, monkeypatch):
+    client = _loaded_client(export_root, tmp_path, monkeypatch)
+    resp = client.get("/api/preview/a01")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("image/")
+
+
+def test_preview_orphan_404(export_root: Path, tmp_path: Path, monkeypatch):
+    client = _loaded_client(export_root, tmp_path, monkeypatch)
+    assert client.get("/api/preview/m02").status_code == 404
+
+
+def test_reveal_photo(export_root: Path, tmp_path: Path, monkeypatch):
+    client = _loaded_client(export_root, tmp_path, monkeypatch)
+    seen: list[Path] = []
+    monkeypatch.setattr(
+        "streamlinify.web.routes_gallery.reveal_path", lambda p: seen.append(p)
+    )
+    resp = client.post("/api/reveal", json={"photo_fbid": "a01"})
+    assert resp.status_code == 200 and resp.json() == {"ok": True}
+    assert seen[0].name == "a01.jpg"
+
+
+def test_reveal_album_opens_media_folder(export_root: Path, tmp_path: Path, monkeypatch):
+    client = _loaded_client(export_root, tmp_path, monkeypatch)
+    seen: list[Path] = []
+    monkeypatch.setattr(
+        "streamlinify.web.routes_gallery.reveal_path", lambda p: seen.append(p)
+    )
+    resp = client.post("/api/reveal", json={"album_fbid": "111"})
+    assert resp.status_code == 200
+    assert seen[0].name == "AnimoFest_111" and seen[0].is_dir()
+
+
+def test_reveal_orphan_photo_404(export_root: Path, tmp_path: Path, monkeypatch):
+    client = _loaded_client(export_root, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "streamlinify.web.routes_gallery.reveal_path", lambda p: None
+    )
+    assert client.post("/api/reveal", json={"photo_fbid": "m02"}).status_code == 404
+
+
+def test_reveal_requires_a_target(export_root: Path, tmp_path: Path, monkeypatch):
+    client = _loaded_client(export_root, tmp_path, monkeypatch)
+    assert client.post("/api/reveal", json={}).status_code == 400
+
+
+def test_reveal_404_without_session(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_app())
+    assert client.post("/api/reveal", json={"photo_fbid": "a01"}).status_code == 404
+
+
 def test_toggle_then_cap(export_root: Path, tmp_path: Path, monkeypatch):
     client = _loaded_client(export_root, tmp_path, monkeypatch)
     ok = client.post("/api/toggle", json={"album_fbid": "111", "photo_fbid": "a01"})

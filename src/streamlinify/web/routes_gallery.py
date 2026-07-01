@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+from ..config import settings
+from ..reveal import RevealError, reveal_path
 from ..selection.policy import CapExceeded
+from ..thumbnails.service import ThumbnailService
 from .serializers import inventory_payload
 
 router = APIRouter()
@@ -13,6 +18,11 @@ router = APIRouter()
 class ToggleRequest(BaseModel):
     album_fbid: str
     photo_fbid: str
+
+
+class RevealRequest(BaseModel):
+    photo_fbid: str | None = None
+    album_fbid: str | None = None
 
 
 def _session(request: Request):
@@ -41,6 +51,67 @@ def thumb(request: Request, fbid: str):
         raise HTTPException(status_code=404, detail="No such photo")
     path = session.thumbnails.thumbnail_path(fbid, photo.resolved_path)
     return FileResponse(path, media_type="image/jpeg")
+
+
+@router.get("/api/preview/{fbid}")
+def preview(request: Request, fbid: str):
+    """A larger cached thumbnail for the full-screen preview viewer.
+
+    The 256px gallery thumbnails look soft blown up to fill the screen, so the
+    viewer pulls a crisper render. Reuses the same on-disk cache (keyed by size)
+    and reads the read-only original — nothing in the export is modified.
+    """
+    session = _session(request)
+    photo = session.inventory.photo_by_fbid(fbid)
+    if photo is None or not photo.exists:
+        raise HTTPException(status_code=404, detail="No such photo")
+    previews = ThumbnailService(session.thumbnails.cache_dir, size=settings.preview_size)
+    path = previews.thumbnail_path(fbid, photo.resolved_path)
+    return FileResponse(path, media_type="image/jpeg")
+
+
+def _reveal_target(session, body: RevealRequest) -> Path:
+    """Resolve which on-disk path a reveal request points at.
+
+    A photo reveals its own file; an album reveals the media folder its photos
+    live in. The path is confined to the loaded export so a reveal can never
+    point the file manager outside the read-only original.
+    """
+    if body.photo_fbid:
+        photo = session.inventory.photo_by_fbid(body.photo_fbid)
+        if photo is None or not photo.exists:
+            raise HTTPException(status_code=404, detail="No such photo")
+        target = photo.resolved_path
+    elif body.album_fbid:
+        album = next(
+            (a for a in session.inventory.albums if a.fb_album_id == body.album_fbid),
+            None,
+        )
+        if album is None or not album.photos:
+            raise HTTPException(status_code=404, detail="No such album")
+        target = album.photos[0].resolved_path.parent
+    else:
+        raise HTTPException(status_code=400, detail="photo_fbid or album_fbid required")
+
+    root = session.export_root.resolve()
+    resolved = target.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise HTTPException(status_code=403, detail="Path is outside the export")
+    if not resolved.exists():
+        raise HTTPException(status_code=404, detail="File is missing from the export")
+    return resolved
+
+
+@router.post("/api/reveal")
+def reveal(request: Request, body: RevealRequest):
+    """Open the host file manager on a photo's file or an album's folder."""
+    session = _session(request)
+    target = _reveal_target(session, body)
+    try:
+        reveal_path(target)
+    except RevealError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 @router.post("/api/toggle")
