@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 
 from ..config import settings
+from ..reveal import RevealError, reveal_path
 from ..transform.builder import build_ready_folder
 from ..transform.report import format_summary
 
@@ -18,8 +19,17 @@ def build(request: Request) -> dict:
     keep = session.selection.selected_fbids()
     keep |= {p.fbid for p in session.inventory.non_album_photos if p.exists}
 
-    dest = settings.workspace_dir / "ready" / session.export_root.name
+    ready_root = settings.workspace_dir / "ready"
+    dest = ready_root / session.export_root.name
     result = build_ready_folder(session.export_root, dest, keep)
+
+    # Streamlinify owns the local desktop, so pop the OS file manager open on the
+    # workspace/ready/ folder — the volunteer's next step is to grab the build. A
+    # reveal failure must never sink an otherwise-successful build.
+    try:
+        reveal_path(ready_root)
+    except RevealError:
+        pass
 
     return {
         "copied": result.copied,
