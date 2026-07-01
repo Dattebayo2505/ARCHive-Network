@@ -1,11 +1,27 @@
 <script>
 	import PhotoTile from './PhotoTile.svelte';
+	import { sizeMin } from '$lib/viewSizes.js';
 
-	let { album, thumb, onToggle } = $props();
+	let { album, thumb, full = false, size = 'm', onToggle, onContextMenu } = $props();
+
+	let min = $derived(sizeMin(size));
 </script>
 
-<section class="grid gap-2" style="grid-template-columns: repeat(auto-fill, 130px);">
+<!-- Masonry columns: tiles keep their true aspect ratio and still tile without
+     gaps. The view-size control sets the column width, so density still works. -->
+<div style="columns: {min}; column-gap: 0.75rem;">
 	{#each album.photos as photo (photo.fbid)}
-		<PhotoTile {photo} src={photo.exists ? thumb(photo.fbid) : ''} {onToggle} />
+		<!-- contextmenu lives on the wrapper, not the tile button, so right-click
+		     still works on blocked (disabled) and missing tiles. -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="mb-3 break-inside-avoid"
+			oncontextmenu={(e) => {
+				e.preventDefault();
+				onContextMenu?.(photo, e);
+			}}
+		>
+			<PhotoTile {photo} src={photo.exists ? thumb(photo.fbid) : ''} {full} {onToggle} />
+		</div>
 	{/each}
-</section>
+</div>
