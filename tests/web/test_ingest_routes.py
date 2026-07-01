@@ -56,6 +56,27 @@ def test_ingest_zip_corrupt_archive(tmp_path: Path, monkeypatch):
     assert resp.status_code == 400
 
 
+def test_ingest_upload_extracts_and_removes_archive(
+    export_root: Path, tmp_path: Path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    archive = tmp_path / "export.zip"
+    _zip_tree(export_root, archive)  # archive contains export/posts/...
+
+    client = TestClient(create_app())
+    with archive.open("rb") as fh:
+        resp = client.post("/api/ingest/upload", files={"file": ("export.zip", fh, "application/zip")})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "errors": [], "export_name": "export"}
+    import_dir = tmp_path / "workspace" / "import"
+    # The tree is extracted…
+    assert (import_dir / "unzipped" / "export" / "posts").is_dir()
+    # …and the uploaded archive is not left sitting alongside it.
+    assert not (import_dir / "export.zip").exists()
+    assert list(import_dir.glob("*.zip")) == []
+
+
 def test_ingest_folder_ok(export_root: Path, tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # workspace/ is created under cwd
     client = TestClient(create_app())

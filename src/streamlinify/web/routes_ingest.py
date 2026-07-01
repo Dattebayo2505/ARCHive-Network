@@ -98,8 +98,12 @@ def ingest_upload(request: Request, file: UploadFile = File(...)) -> dict:
     import_dir.mkdir(parents=True, exist_ok=True)
     zip_path = import_dir / (file.filename or "export.zip")
     # Stream the upload to disk in chunks rather than reading the whole (~900 MB)
-    # archive into memory.
-    with zip_path.open("wb") as out:
-        shutil.copyfileobj(file.file, out)
-    extracted = extract_zip(zip_path, import_dir / "unzipped")
+    # archive into memory, then delete it once extracted so only the unzipped
+    # tree is left in workspace/import/ — never the archive alongside it.
+    try:
+        with zip_path.open("wb") as out:
+            shutil.copyfileobj(file.file, out)
+        extracted = extract_zip(zip_path, import_dir / "unzipped")
+    finally:
+        zip_path.unlink(missing_ok=True)
     return _start_session(request, find_export_root(extracted))
