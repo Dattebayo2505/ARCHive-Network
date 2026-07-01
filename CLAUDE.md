@@ -19,6 +19,9 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
   trampoline). Prefix every uv command with `UV_LINK_MODE=copy`; use `--no-sync` for tests
   (src is on pythonpath, so no install needed); retry `uv sync` a few times for real installs.
 - Project is an **editable** install from `src/streamlinify/` — never goes stale once installed.
+- Zip extraction shells out to a **vendored 7-Zip** at `vendor/7za.exe` (committed; far faster than
+  Python's `zipfile` on the ~875 MB export). Must be the zip-capable build — the reduced `7zr.exe`
+  only reads 7z/xz/lzma, **not zip**. Override the path via `STREAMLINIFY_SEVEN_ZIP_EXE`.
 - Frontend needs Node 20+. From `frontend/`: `npm install` once, then `npm run dev`. The UI reads
   `VITE_API_BASE` (default `http://127.0.0.1:8000`); both servers must run together.
 
@@ -31,6 +34,16 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
   `adapter-node`) talking to FastAPI over a JSON API. `web/` routers are now a thin **JSON API**
   under `/api` (+ `/api/thumb/{fbid}` images) with CORS; no server-rendered HTML. The ≤10/album cap
   is still enforced **server-side** (the `409` response). Two servers run together (API :8000, UI :3000/:5173).
+- `GET /api/browse?path=` lists sub-dirs (logic in `ingest/browse.py`) so the ingest screen offers a
+  **server-side folder picker** instead of a typed path (browsers can't hand the server an absolute path).
+
+## Design system (frontend)
+- `PRODUCT.md` (strategic: register, users, brand) + `DESIGN.md` (visual: the **DLSU-green "archers"**
+  theme — calm, light, paper-calm; green for identity/primary action only) are the source of truth
+  for UI work. The custom Skeleton theme lives in `frontend/src/app.css`.
+- The UI is **deliberately light-only**, locked with `color-scheme: only light` + a class-based
+  `dark` variant in `app.css` (Skeleton/Tailwind v4 default to `prefers-color-scheme`, which would
+  auto-invert to dark). Don't reintroduce dark mode without a product decision.
 
 ## FB-export data rules (the parser depends on these)
 - Resolve media `uri` by taking the substring from `posts/` onward (strip the export-folder prefix).
