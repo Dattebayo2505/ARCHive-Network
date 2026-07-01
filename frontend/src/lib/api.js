@@ -8,6 +8,10 @@ export function thumbUrl(fbid) {
 	return url(`/api/thumb/${encodeURIComponent(fbid)}`);
 }
 
+export function previewUrl(fbid) {
+	return url(`/api/preview/${encodeURIComponent(fbid)}`);
+}
+
 export async function getSession(fetchFn = fetch) {
 	return (await fetchFn(url('/api/session'))).json();
 }
@@ -18,20 +22,77 @@ export async function getInventory(fetchFn = fetch) {
 	return res.json();
 }
 
-export async function ingestFolder(folder, fetchFn = fetch) {
-	const res = await fetchFn(url('/api/ingest/folder'), {
-		method: 'POST',
-		headers: jsonHeaders,
-		body: JSON.stringify({ folder })
-	});
-	return res.json();
+// A cross-origin/CORS or connection failure makes fetch reject (throw) rather
+// than return a response. Turn that into a readable message so the UI shows an
+// error instead of hanging (e.g. the folder picker stuck on skeletons).
+const UNREACHABLE = 'Could not reach the API server. Is it running on port 8000?';
+
+export async function browse(path, fetchFn = fetch) {
+	const qs = path ? `?path=${encodeURIComponent(path)}` : '';
+	let res;
+	try {
+		res = await fetchFn(url(`/api/browse${qs}`));
+	} catch {
+		return { ok: false, error: UNREACHABLE };
+	}
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		return { ok: false, error: data.detail ?? 'Could not open that folder.' };
+	}
+	return { ok: true, ...(await res.json()) };
 }
 
-export async function ingestUpload(file, fetchFn = fetch) {
-	const fd = new FormData();
-	fd.append('file', file);
-	const res = await fetchFn(url('/api/ingest/upload'), { method: 'POST', body: fd });
-	return res.json();
+export async function ingestFolder(folder, fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/ingest/folder'), {
+			method: 'POST',
+			headers: jsonHeaders,
+			body: JSON.stringify({ folder })
+		});
+		return res.json();
+	} catch {
+		return { ok: false, errors: [UNREACHABLE] };
+	}
+}
+
+export async function ingestZip(path, fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/ingest/zip'), {
+			method: 'POST',
+			headers: jsonHeaders,
+			body: JSON.stringify({ path })
+		});
+		return res.json();
+	} catch {
+		return { ok: false, errors: [UNREACHABLE] };
+	}
+}
+
+/**
+ * Upload an export archive over HTTP. Uses XMLHttpRequest (not fetch) because it
+ * is the only way to observe upload progress in the browser — `onProgress`
+ * receives a 0..1 fraction. `createXhr` is injectable for testing.
+ */
+export function ingestUpload(file, { onProgress, createXhr = () => new XMLHttpRequest() } = {}) {
+	return new Promise((resolve) => {
+		const xhr = createXhr();
+		xhr.open('POST', url('/api/ingest/upload'));
+		xhr.upload.onprogress = (e) => {
+			if (onProgress && e.lengthComputable) onProgress(e.loaded / e.total);
+		};
+		xhr.onload = () => {
+			try {
+				resolve(JSON.parse(xhr.responseText));
+			} catch {
+				resolve({ ok: false, errors: ['The server returned an unexpected response.'] });
+			}
+		};
+		xhr.onerror = () =>
+			resolve({ ok: false, errors: ['Upload failed — is the API server running?'] });
+		const fd = new FormData();
+		fd.append('file', file);
+		xhr.send(fd);
+	});
 }
 
 export async function toggle(albumFbid, photoFbid, fetchFn = fetch) {
@@ -50,6 +111,23 @@ export async function toggle(albumFbid, photoFbid, fetchFn = fetch) {
 
 export async function build(fetchFn = fetch) {
 	return (await fetchFn(url('/api/build'), { method: 'POST' })).json();
+}
+
+/**
+ * Ask the local server to open the OS file manager on a photo's file or an
+ * album's folder. Pass exactly one of `photoFbid` / `albumFbid`.
+ */
+export async function reveal({ photoFbid, albumFbid } = {}, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/reveal'), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ photo_fbid: photoFbid ?? null, album_fbid: albumFbid ?? null })
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		return { ok: false, error: data.detail ?? 'Could not open the file manager.' };
+	}
+	return { ok: true };
 }
 
 export { API_BASE };
