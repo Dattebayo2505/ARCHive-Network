@@ -11,6 +11,15 @@ def _photo(p: Photo, selected: bool | None = None) -> dict:
     return d
 
 
+def _archive_photo(p: Photo) -> dict:
+    return {
+        "fbid": p.fbid,
+        "caption": p.caption,
+        "archive_tag": p.archive_tag,
+        "exists": p.exists,
+    }
+
+
 def inventory_payload(
     export_name: str,
     inventory: ExportInventory,
@@ -22,6 +31,7 @@ def inventory_payload(
             "fb_album_id": a.fb_album_id,
             "name": a.name,
             "count_selected": selection.count(a.fb_album_id),
+            "max_per_album": None if a.uncapped else max_per_album,
             "photos": [
                 _photo(p, selected=selection.is_selected(a.fb_album_id, p.fbid))
                 for p in a.photos
@@ -34,4 +44,5 @@ def inventory_payload(
         "max_per_album": max_per_album,
         "albums": albums,
         "non_album": [_photo(p) for p in inventory.non_album_photos],
+        "archive": [_archive_photo(p) for p in inventory.archived_photos],
     }
