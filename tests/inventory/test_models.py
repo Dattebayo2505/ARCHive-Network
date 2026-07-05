@@ -25,3 +25,20 @@ def test_lookup_helpers():
     assert {p.fbid for p in inv.all_photos()} == {"p1", "p2"}
     assert inv.photo_by_fbid("p2").fbid == "p2"
     assert inv.photo_by_fbid("nope") is None
+
+
+def test_all_photos_includes_archived():
+    archived = _photo("z1", album_fbid="555")
+    inv = ExportInventory(
+        albums=[Album(fb_album_id="111", name="A", photos=[_photo("p1", "111")])],
+        non_album_photos=[_photo("p2")],
+        archived_photos=[archived],
+    )
+    assert {p.fbid for p in inv.all_photos()} == {"p1", "p2", "z1"}
+    assert inv.photo_by_fbid("z1").fbid == "z1"
+
+
+def test_photo_archive_defaults():
+    p = _photo("p1", album_fbid="111")
+    assert p.archived is False
+    assert p.archive_tag is None
