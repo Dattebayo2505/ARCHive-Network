@@ -5,6 +5,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..inventory.archive import is_special_album
 from ..inventory.parser import build_inventory, photo_fbid, resolve_uri
 
 DROP_JSON = {
@@ -23,16 +24,29 @@ class BuildResult:
     orphans: list[str]
 
 
-def _copy_media(uri: str, export_root: Path, dest: Path) -> bool:
-    src = resolve_uri(uri, export_root)
+def _rel_from_posts(uri: str) -> str:
+    idx = uri.find("posts/")
+    return uri[idx:] if idx != -1 else uri
+
+
+def _copy_media(photo, export_root: Path, dest: Path) -> bool:
+    src = resolve_uri(photo.original_uri, export_root)
     if not src.exists():
         return False
-    idx = uri.find("posts/")
-    rel = uri[idx:] if idx != -1 else uri
+    rel = photo.ready_uri or _rel_from_posts(photo.original_uri)
     target = dest / rel
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, target)
     return True
+
+
+def _album_photo_record(photo) -> dict:
+    rec: dict = {"uri": photo.ready_uri}
+    if photo.creation_at is not None:
+        rec["creation_timestamp"] = int(photo.creation_at.timestamp())
+    if photo.title:
+        rec["title"] = photo.title
+    return rec
 
 
 def build_ready_folder(export_root: Path, dest: Path, keep_fbids: set[str]) -> BuildResult:
@@ -44,26 +58,47 @@ def build_ready_folder(export_root: Path, dest: Path, keep_fbids: set[str]) -> B
 
     copied = 0
     orphans: list[str] = []
-
-    # Copy kept media (album + non-album), tracking orphans.
     for photo in inventory.all_photos():
         if photo.fbid not in keep_fbids:
             continue
-        if _copy_media(photo.original_uri, export_root, dest):
+        if _copy_media(photo, export_root, dest):
             copied += 1
         else:
             orphans.append(photo.original_uri)
 
     present_fbids = {
-        photo.fbid for photo in inventory.all_photos() if photo.fbid in keep_fbids and photo.exists
+        p.fbid for p in inventory.all_photos() if p.fbid in keep_fbids and p.exists
     }
 
-    # Rewrite album JSONs to kept photos; skip albums with nothing kept.
-    albums_written = 0
-    album_src_dir = export_root / "posts" / "album"
     album_dst_dir = dest / "posts" / "album"
+    albums_written = 0
+
+    # Derived caption-albums: synthesize a fresh album JSON per group, pointing at the
+    # regrouped media subdir.
+    for album in inventory.albums:
+        if album.media_slug is None:
+            continue
+        kept = [p for p in album.photos if p.fbid in keep_fbids and p.exists]
+        if not kept:
+            continue
+        album_dst_dir.mkdir(parents=True, exist_ok=True)
+        (album_dst_dir / f"{album.fb_album_id}.json").write_text(
+            json.dumps(
+                {"name": album.name, "photos": [_album_photo_record(p) for p in kept]},
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        albums_written += 1
+
+    # Original FB albums: filter to kept photos, but skip the special dumps — they are
+    # replaced by the derived caption-albums above.
+    album_src_dir = export_root / "posts" / "album"
     for album_path in sorted(album_src_dir.glob("*.json")):
         raw = json.loads(album_path.read_text(encoding="utf-8"))
+        if is_special_album(raw.get("name", "")):
+            continue
         kept = [p for p in raw.get("photos", []) if photo_fbid(p["uri"]) in keep_fbids]
         if not kept:
             continue
@@ -75,21 +110,26 @@ def build_ready_folder(export_root: Path, dest: Path, keep_fbids: set[str]) -> B
         )
         albums_written += 1
 
-    # Filter profile_posts to kept + present media.
+    # profile_posts: keep only present media, rewrite regrouped/loosened uris so the feed
+    # and album files agree on the path-derived fb_album_id, then drop media-less posts.
+    ready_uris = {p.fbid: p.ready_uri for p in inventory.all_photos() if p.ready_uri}
     posts_path = export_root / "posts" / "profile_posts_1.json"
     if posts_path.exists():
         posts = json.loads(posts_path.read_text(encoding="utf-8"))
         for post in posts:
             for att in post.get("attachments", []):
-                att["data"] = [
-                    d
-                    for d in att.get("data", [])
-                    if "media" in d and photo_fbid(d["media"]["uri"]) in present_fbids
-                ]
+                kept_data = []
+                for d in att.get("data", []):
+                    if "media" not in d:
+                        continue
+                    fbid = photo_fbid(d["media"]["uri"])
+                    if fbid not in present_fbids:
+                        continue
+                    if fbid in ready_uris:
+                        d["media"]["uri"] = ready_uris[fbid]
+                    kept_data.append(d)
+                att["data"] = kept_data
             post["attachments"] = [att for att in post.get("attachments", []) if att["data"]]
-        # A post with no surviving media (all archived / non-selected / orphaned) is
-        # dead metadata for the photo archive — drop it so the ready posts mirror the
-        # media that is actually present.
         posts = [post for post in posts if post.get("attachments")]
         (dest / "posts").mkdir(parents=True, exist_ok=True)
         (dest / "posts" / "profile_posts_1.json").write_text(

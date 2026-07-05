@@ -57,8 +57,8 @@ def test_build_excludes_archived_and_drops_empty_posts(archive_export_root: Path
     # Archived photos are never copied, even though present + in keep.
     assert not (dest / "posts" / "media" / "Mobileuploads_555" / "u01.jpg").exists()
     assert not (dest / "posts" / "media" / "Photos_666" / "p01.jpg").exists()
-    # Non-archived kept photos are copied.
-    assert (dest / "posts" / "media" / "Mobileuploads_555" / "u02.jpg").exists()
+    # Non-archived kept photos are copied (u02 is now unanchored → loose path).
+    assert (dest / "posts" / "media" / "u02.jpg").exists()
 
     posts = json.loads((dest / "posts" / "profile_posts_1.json").read_text(encoding="utf-8"))
     bodies = [d["post"] for post in posts for d in post.get("data", []) if "post" in d]
@@ -68,3 +68,44 @@ def test_build_excludes_archived_and_drops_empty_posts(archive_export_root: Path
     # Posts with surviving media remain.
     assert "Look at these cute dogs" in bodies  # u02 kept
     assert "UPDATE: schedule changed" in bodies  # a01 kept (non-special album)
+
+
+def test_build_writes_caption_albums(grouping_export_root: Path, tmp_path: Path):
+    from streamlinify.inventory.parser import build_inventory
+
+    dest = tmp_path / "ready"
+    inv = build_inventory(grouping_export_root)
+    keep = {p.fbid for p in inv.all_photos() if p.exists}  # keep all present (archived subtracted by builder)
+    build_ready_folder(grouping_export_root, dest, keep)
+
+    media = dest / "posts" / "media"
+    album = dest / "posts" / "album"
+
+    # derived group: media in a fresh <slug>_<id>/ subdir + a per-group album JSON
+    assert (media / "HEADLINEONE_g01" / "g01.jpg").exists()
+    assert (media / "HEADLINEONE_g01" / "g02.jpg").exists()
+    assert not (media / "Mobileuploads_777" / "g01.jpg").exists()  # not at original path
+    grp = json.loads((album / "g01.json").read_text(encoding="utf-8"))
+    assert grp["name"] == "HEADLINE ONE"
+    assert {Path(p["uri"]).stem for p in grp["photos"]} == {"g01", "g02"}
+    assert all("HEADLINEONE_g01/" in p["uri"] for p in grp["photos"])
+
+    # singleton + no-caption: loose media, no album subdir, no album JSON
+    assert (media / "s01.jpg").exists()
+    assert (media / "n01.jpg").exists()
+
+    # original special-album JSON is not carried over; normal album is
+    assert not (album / "0.json").exists()
+    assert (album / "1.json").exists()
+    assert (media / "AnimoFest_111" / "a01.jpg").exists()
+
+    # archived excluded
+    assert not (media / "Mobileuploads_777" / "t01.jpg").exists()
+
+    # feed uris rewritten to the new paths; fully-archived post dropped
+    posts = json.loads((dest / "posts" / "profile_posts_1.json").read_text(encoding="utf-8"))
+    uris = [d["media"]["uri"] for post in posts for att in post.get("attachments", []) for d in att.get("data", [])]
+    assert any("HEADLINEONE_g01/g01.jpg" in u for u in uris)
+    assert any(u.endswith("posts/media/s01.jpg") for u in uris)
+    bodies = [d["post"] for post in posts for d in post.get("data", []) if "post" in d]
+    assert "BREAKING: fire" not in bodies
