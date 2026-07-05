@@ -42,3 +42,11 @@ def test_photo_archive_defaults():
     p = _photo("p1", album_fbid="111")
     assert p.archived is False
     assert p.archive_tag is None
+
+
+def test_grouping_field_defaults():
+    p = _photo("p1", album_fbid="111")
+    assert p.ready_uri is None
+    a = Album(fb_album_id="111", name="A")
+    assert a.origin is None
+    assert a.media_slug is None
