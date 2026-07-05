@@ -24,4 +24,18 @@ describe('AlbumList', () => {
 		await fireEvent.click(screen.getByText('Archive'));
 		expect(onSelect).toHaveBeenCalledWith('__archive__');
 	});
+
+	it('renders an origin subheader for derived albums', () => {
+		const withOrigin = [
+			{ fb_album_id: '111', name: 'Animo Fest', count_selected: 0, max_per_album: 10, origin: null },
+			{ fb_album_id: 'g01', name: 'HEADLINE ONE', count_selected: 0, max_per_album: null, origin: 'Mobile uploads' },
+			{ fb_album_id: 'g03', name: 'HEADLINE TWO', count_selected: 0, max_per_album: null, origin: 'Mobile uploads' }
+		];
+		render(AlbumList, {
+			props: { albums: withOrigin, nonAlbumCount: 0, archiveCount: 0, activeId: '111', onSelect: vi.fn() }
+		});
+		expect(screen.getByText('Mobile uploads')).toBeInTheDocument();
+		expect(screen.getByText('HEADLINE ONE')).toBeInTheDocument();
+		expect(screen.getByText('HEADLINE TWO')).toBeInTheDocument();
+	});
 });

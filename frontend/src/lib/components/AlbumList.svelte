@@ -7,7 +7,12 @@
 		Albums <span class="font-normal text-surface-400">· {albums.length}</span>
 	</p>
 
-	{#each albums as a (a.fb_album_id)}
+	{#each albums as a, i (a.fb_album_id)}
+		{#if a.origin && a.origin !== albums[i - 1]?.origin}
+			<p class="px-2 pb-0.5 pt-2 text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400">
+				{a.origin}
+			</p>
+		{/if}
 		{@const capped = a.max_per_album != null}
 		{@const full = capped && a.count_selected >= a.max_per_album}
 		{@const active = a.fb_album_id === activeId}
