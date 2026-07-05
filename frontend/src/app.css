@@ -14,6 +14,11 @@
 html {
 	/* `only light` also opts out of the browser's Auto Dark Mode force-darkening. */
 	color-scheme: only light;
+	/* The gallery is a fixed-height app shell whose panes scroll internally; the
+	   document itself never scrolls, so suppress the overscroll rubber-band that
+	   would otherwise bounce the whole page when the wheel is over a non-scrolling
+	   region (e.g. the header). */
+	overscroll-behavior: none;
 }
 
 /* ------------------------------------------------------------------ *

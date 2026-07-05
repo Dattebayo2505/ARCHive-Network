@@ -130,10 +130,12 @@
 	}
 </script>
 
-<div class="grid gap-5 lg:grid-cols-[15rem_1fr]">
-	<!-- Left rail: album navigation + build (sticky so it follows the scroll) -->
-	<aside class="lg:sticky lg:top-[5.25rem] lg:self-start">
-		<div class="rounded-xl border border-surface-300 bg-surface-50 p-2 shadow-sm">
+<div class="grid gap-5 lg:h-full lg:min-h-0 lg:grid-cols-[15rem_1fr]">
+	<!-- Left rail: the album list scrolls on its own; build + counts stay pinned below it. -->
+	<aside class="flex flex-col lg:min-h-0">
+		<div
+			class="rounded-xl border border-surface-300 bg-surface-50 p-2 shadow-sm lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
+		>
 			<AlbumList
 				albums={inventory.albums}
 				nonAlbumCount={inventory.non_album.length}
@@ -145,7 +147,7 @@
 		</div>
 
 		<button
-			class="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary-700 px-4 py-3 font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-progress disabled:opacity-70"
+			class="mt-3 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-700 px-4 py-3 font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-progress disabled:opacity-70"
 			type="button"
 			onclick={runBuild}
 			disabled={building}
@@ -162,17 +164,16 @@
 				Build ready folder
 			{/if}
 		</button>
-		<p class="mt-2 px-1 text-center text-xs text-surface-500">
+		<p class="mt-2 shrink-0 px-1 text-center text-xs text-surface-500">
 			{totalSelected} selected · {inventory.non_album.length} auto-kept
 		</p>
 	</aside>
 
-	<!-- Right pane: active album OR the read-only archive -->
-	<section class="min-w-0">
+	<!-- Right pane: active album OR the read-only archive. Header stays put; only the
+	     photo grid below it scrolls (and only when the pointer is over the grid). -->
+	<section class="flex min-w-0 flex-col lg:min-h-0">
 		{#if showArchive}
-			<header
-				class="sticky top-[5.25rem] z-20 mb-4 bg-surface-100 pt-1 pb-3 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-24 before:bg-surface-100 before:content-['']"
-			>
+			<header class="mb-4 shrink-0 pt-1 pb-3">
 				<div class="flex min-w-0 items-baseline gap-3">
 					<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Archive</h1>
 					<p class="shrink-0 text-sm font-medium tabular-nums text-surface-500">
@@ -186,21 +187,20 @@
 			</header>
 
 			{#if archive.length}
-				<PhotoGrid
-					album={{ name: 'Archive', photos: archive }}
-					thumb={thumbUrl}
-					size={gridSize}
-					selectable={false}
-					onContextMenu={openArchiveMenu}
-				/>
+				<div class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
+					<PhotoGrid
+						album={{ name: 'Archive', photos: archive }}
+						thumb={thumbUrl}
+						size={gridSize}
+						selectable={false}
+						onContextMenu={openArchiveMenu}
+					/>
+				</div>
 			{/if}
 		{:else if activeAlbum}
-			<!-- Sticky toolbar: the album, its fill state, and the view + preview
-			     controls stay pinned under the app bar so they never scroll away.
-			     The ::before mask hides photos scrolling through the gap to the bar. -->
-			<header
-				class="sticky top-[5.25rem] z-20 mb-4 bg-surface-100 pt-1 pb-3 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-24 before:bg-surface-100 before:content-['']"
-			>
+			<!-- Toolbar: the album, its fill state, and the view + preview controls sit above
+			     the grid and never scroll — only the grid below scrolls. -->
+			<header class="mb-4 shrink-0 pt-1 pb-3">
 				<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
 					<div class="flex min-w-0 items-baseline gap-3">
 						<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">
@@ -247,14 +247,16 @@
 				</p>
 			</header>
 
-			<PhotoGrid
-				album={activeAlbum}
-				thumb={thumbUrl}
-				full={activeFull}
-				size={gridSize}
-				{onToggle}
-				onContextMenu={openPhotoMenu}
-			/>
+			<div class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
+				<PhotoGrid
+					album={activeAlbum}
+					thumb={thumbUrl}
+					full={activeFull}
+					size={gridSize}
+					{onToggle}
+					onContextMenu={openPhotoMenu}
+				/>
+			</div>
 		{:else}
 			<div
 				class="grid place-items-center rounded-xl border border-dashed border-surface-300 bg-surface-50 px-6 py-16 text-center"

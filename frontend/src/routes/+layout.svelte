@@ -11,7 +11,7 @@
 	let activeStep = $derived(steps.findIndex((s) => s.match(page.url.pathname)));
 </script>
 
-<div class="flex min-h-screen flex-col bg-surface-100">
+<div class="flex h-dvh flex-col bg-surface-100">
 	<header
 		class="sticky top-0 z-30 border-b border-primary-800/40 bg-primary-700 text-primary-50 shadow-sm"
 	>
@@ -61,7 +61,7 @@
 		</div>
 	</header>
 
-	<main class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+	<main class="mx-auto w-full min-h-0 max-w-7xl flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
 		{@render children()}
 	</main>
 
