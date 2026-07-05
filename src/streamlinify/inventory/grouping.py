@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import re
+from collections import OrderedDict
+
+from .models import Album, ExportInventory, Photo
 
 _NON_ALNUM = re.compile(r"[^A-Za-z0-9]+")
 
@@ -22,3 +25,52 @@ def media_slug(headline: str, synth_id: str) -> str:
     """
     alnum = _NON_ALNUM.sub("", headline)[:30] or "album"
     return f"{alnum}_{synth_id}"
+
+
+def derive_caption_albums(inventory: ExportInventory) -> None:
+    """Cluster the two uncapped dumps' photos by caption into real photo_albums.
+
+    For each `uncapped` album: photos sharing a non-empty caption form a derived album
+    (synthetic id = the group's first photo fbid, name = the caption headline). Groups
+    of one, and any no-caption photo, become unanchored — moved to `non_album_photos`
+    with a loose `ready_uri`. Non-uncapped albums pass through unchanged. Derived albums
+    are inserted where the parent was, contiguous, so the UI can subhead them.
+    """
+    new_albums: list[Album] = []
+    for album in inventory.albums:
+        if not album.uncapped:
+            new_albums.append(album)
+            continue
+
+        groups: "OrderedDict[str, list[Photo]]" = OrderedDict()
+        loose: list[Photo] = []
+        for photo in album.photos:
+            key = (photo.caption or "").strip()
+            if key:
+                groups.setdefault(key, []).append(photo)
+            else:
+                loose.append(photo)
+
+        for key, members in groups.items():
+            if len(members) < 2:
+                loose.extend(members)
+                continue
+            synth = members[0].fbid
+            headline = caption_headline(key)
+            slug = media_slug(headline, synth)
+            for photo in members:
+                photo.album_fbid = synth
+                photo.ready_uri = f"posts/media/{slug}/{photo.fbid}.jpg"
+            new_albums.append(
+                Album(
+                    fb_album_id=synth, name=headline, origin=album.name,
+                    uncapped=True, media_slug=slug, photos=members,
+                )
+            )
+
+        for photo in loose:
+            photo.album_fbid = None
+            photo.ready_uri = f"posts/media/{photo.fbid}.jpg"
+            inventory.non_album_photos.append(photo)
+
+    inventory.albums = new_albums
