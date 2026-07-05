@@ -37,6 +37,9 @@ def _copy_media(uri: str, export_root: Path, dest: Path) -> bool:
 
 def build_ready_folder(export_root: Path, dest: Path, keep_fbids: set[str]) -> BuildResult:
     inventory = build_inventory(export_root)
+    # Archived (news-caption) photos are set aside — never carried into the build,
+    # even if a stale selection.json still names one.
+    keep_fbids = keep_fbids - {p.fbid for p in inventory.archived_photos}
     dest.mkdir(parents=True, exist_ok=True)
 
     copied = 0
@@ -84,6 +87,10 @@ def build_ready_folder(export_root: Path, dest: Path, keep_fbids: set[str]) -> B
                     if "media" in d and photo_fbid(d["media"]["uri"]) in present_fbids
                 ]
             post["attachments"] = [att for att in post.get("attachments", []) if att["data"]]
+        # A post with no surviving media (all archived / non-selected / orphaned) is
+        # dead metadata for the photo archive — drop it so the ready posts mirror the
+        # media that is actually present.
+        posts = [post for post in posts if post.get("attachments")]
         (dest / "posts").mkdir(parents=True, exist_ok=True)
         (dest / "posts" / "profile_posts_1.json").write_text(
             json.dumps(posts, ensure_ascii=False, indent=2), encoding="utf-8"
