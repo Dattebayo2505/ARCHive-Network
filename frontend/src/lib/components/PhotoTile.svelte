@@ -24,8 +24,6 @@
 	class:ring-2={photo.selected}
 	class:!ring-primary-600={photo.selected}
 	class:cursor-not-allowed={!interactive}
-	class:opacity-55={blocked}
-	disabled={!interactive}
 	onclick={() => interactive && onToggle?.(photo)}
 	data-testid={`tile-${photo.fbid}`}
 	aria-pressed={photo.exists ? photo.selected : undefined}
