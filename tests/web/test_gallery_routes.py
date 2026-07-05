@@ -107,12 +107,11 @@ def test_toggle_then_cap(export_root: Path, tmp_path: Path, monkeypatch):
     assert capped.json()["error"] == "cap"
 
 
-def test_inventory_marks_special_albums_uncapped(archive_export_root, tmp_path, monkeypatch):
-    client = _loaded_client(archive_export_root, tmp_path, monkeypatch)
+def test_inventory_exposes_derived_uncapped_albums(grouping_export_root, tmp_path, monkeypatch):
+    client = _loaded_client(grouping_export_root, tmp_path, monkeypatch)
     body = client.get("/api/inventory").json()
 
-    caps = {a["name"]: a["max_per_album"] for a in body["albums"]}
-    assert caps["Mobile uploads"] is None
-    assert caps["Photos"] is None
-    assert caps["Animo Fest"] == 10
-    assert {p["fbid"] for p in body["archive"]} == {"u01", "p01"}
+    derived = [a for a in body["albums"] if a["origin"] == "Mobile uploads"]
+    assert {a["name"] for a in derived} == {"HEADLINE ONE", "HEADLINE TWO"}
+    assert all(a["max_per_album"] is None for a in derived)
+    assert {p["fbid"] for p in body["archive"]} == {"t01"}

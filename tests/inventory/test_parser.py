@@ -38,23 +38,29 @@ def test_build_inventory(export_root: Path):
     assert nonalbum["m01"].album_fbid is None
 
 
-def test_build_inventory_partitions_archive(archive_export_root: Path):
-    inv = build_inventory(archive_export_root)
+def test_build_inventory_groups_captions(grouping_export_root: Path):
+    inv = build_inventory(grouping_export_root)
     by_id = {a.fb_album_id: a for a in inv.albums}
 
-    # Special albums are uncapped and keep only their non-tagged photos.
-    assert by_id["555"].uncapped is True
-    assert by_id["666"].uncapped is True
-    assert {p.fbid for p in by_id["555"].photos} == {"u02", "u03"}
-    assert {p.fbid for p in by_id["666"].photos} == {"p02"}
+    # archive still runs first
+    assert {p.fbid for p in inv.archived_photos} == {"t01"}
 
-    # Tagged photos moved to archived_photos, with their tag recorded.
-    archived = {p.fbid: p for p in inv.archived_photos}
-    assert set(archived) == {"u01", "p01"}
-    assert archived["u01"].archived is True
-    assert archived["u01"].archive_tag == "BREAKING"
-    assert archived["p01"].archive_tag == "LOOK"
+    # special album replaced by its derived caption-albums
+    assert "777" not in by_id
+    assert by_id["g01"].name == "HEADLINE ONE"
+    assert by_id["g01"].origin == "Mobile uploads"
+    assert by_id["g01"].uncapped is True
+    assert by_id["g01"].media_slug == "HEADLINEONE_g01"
+    assert {p.fbid for p in by_id["g01"].photos} == {"g01", "g02"}
+    assert by_id["g01"].photos[0].ready_uri == "posts/media/HEADLINEONE_g01/g01.jpg"
+    assert {p.fbid for p in by_id["g03"].photos} == {"g03", "g04", "g05"}
 
-    # A tag caption in a NON-special album is left untouched (album stays capped).
+    # singleton + no-caption → unanchored non-album photos
+    na = {p.fbid: p for p in inv.non_album_photos}
+    assert set(na) == {"s01", "n01"}
+    assert na["s01"].album_fbid is None
+    assert na["s01"].ready_uri == "posts/media/s01.jpg"
+
+    # non-special album with the same caption stays capped and untouched
     assert by_id["111"].uncapped is False
     assert {p.fbid for p in by_id["111"].photos} == {"a01"}

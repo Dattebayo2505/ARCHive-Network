@@ -29,3 +29,28 @@ def test_archive_tag_rejects_non_tags():
     assert archive_tag(None) is None
     assert archive_tag("") is None
     assert archive_tag("   ") is None
+
+
+def test_partition_archive_sets_aside_tagged():
+    from streamlinify.inventory.archive import partition_archive
+    from streamlinify.inventory.models import Album, ExportInventory, Photo
+
+    def p(fbid, caption, album):
+        return Photo(fbid=fbid, original_uri="x", resolved_path="x", caption=caption, album_fbid=album)
+
+    inv = ExportInventory(
+        albums=[
+            Album(fb_album_id="555", name="Mobile uploads",
+                  photos=[p("u01", "BREAKING: x", "555"), p("u02", "hello", "555")]),
+            Album(fb_album_id="111", name="Animo Fest", photos=[p("a01", "BREAKING: y", "111")]),
+        ]
+    )
+    partition_archive(inv)
+
+    by_id = {a.fb_album_id: a for a in inv.albums}
+    assert by_id["555"].uncapped is True
+    assert {x.fbid for x in by_id["555"].photos} == {"u02"}
+    assert {x.fbid for x in inv.archived_photos} == {"u01"}
+    # tag caption in a non-special album is left alone
+    assert by_id["111"].uncapped is False
+    assert {x.fbid for x in by_id["111"].photos} == {"a01"}

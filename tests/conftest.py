@@ -79,6 +79,54 @@ def export_root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def grouping_export_root(tmp_path: Path) -> Path:
+    """Special album with a 2-photo group, a 3-photo group, a singleton, a no-caption
+    photo, and a news-tag photo (archived first); plus a normal album sharing a caption."""
+    root = tmp_path / "grouping_export"
+    media = root / "posts" / "media"
+    album_dir = root / "posts" / "album"
+    album_dir.mkdir(parents=True)
+
+    u_ids = ["g01", "g02", "g03", "g04", "g05", "s01", "n01", "t01"]
+    u_photos = [_photo_record("Mobileuploads_777", f, f.upper()) for f in u_ids]
+    (album_dir / "0.json").write_text(
+        json.dumps({"name": "Mobile uploads", "photos": u_photos}), encoding="utf-8"
+    )
+    for f in u_ids:
+        _img(media / "Mobileuploads_777" / f"{f}.jpg")
+
+    (album_dir / "1.json").write_text(
+        json.dumps({"name": "Animo Fest", "photos": [_photo_record("AnimoFest_111", "a01", "A1")]}),
+        encoding="utf-8",
+    )
+    _img(media / "AnimoFest_111" / "a01.jpg")
+
+    def att(*fbids):
+        return [{"data": [{"media": _photo_record("Mobileuploads_777", f, f.upper())}]} for f in fbids]
+
+    posts = [
+        {"data": [{"post": "HEADLINE ONE\n\nBody one."}], "attachments": att("g01", "g02")},
+        {"data": [{"post": "HEADLINE TWO\n\nBody two."}], "attachments": att("g03", "g04", "g05")},
+        {"data": [{"post": "Solo headline\n\nSolo body."}], "attachments": att("s01")},
+        {"data": [{"post": "BREAKING: fire"}], "attachments": att("t01")},
+        # a01 lives in a non-special album but shares HEADLINE ONE's caption
+        {"data": [{"post": "HEADLINE ONE\n\nBody one."}],
+         "attachments": [{"data": [{"media": _photo_record("AnimoFest_111", "a01", "A1")}]}]},
+    ]
+    (root / "posts" / "profile_posts_1.json").write_text(json.dumps(posts), encoding="utf-8")
+
+    for name in (
+        "videos.json",
+        "content_sharing_links_you_have_created.json",
+        "edits_you_made_to_posts.json",
+        "places_you_have_been_tagged_in.json",
+    ):
+        (root / "posts" / name).write_text("[]", encoding="utf-8")
+
+    return root
+
+
+@pytest.fixture
 def archive_export_root(tmp_path: Path) -> Path:
     """Export with the two special albums plus a normal one, and posts that supply
     matching + non-matching captions. Used only by archive-feature tests."""

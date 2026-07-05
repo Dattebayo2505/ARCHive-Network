@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from .archive import partition_archive
+from .grouping import derive_caption_albums
 from .models import Album, ExportInventory, Photo
 from .text import epoch_to_dt, fix_mojibake
 
@@ -117,4 +118,5 @@ def build_inventory(export_root: Path) -> ExportInventory:
 
     inventory = ExportInventory(albums=albums, non_album_photos=non_album)
     partition_archive(inventory)
+    derive_caption_albums(inventory)
     return inventory
