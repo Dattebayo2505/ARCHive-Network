@@ -2,7 +2,7 @@
 	import PhotoTile from './PhotoTile.svelte';
 	import { sizeMin } from '$lib/viewSizes.js';
 
-	let { album, thumb, full = false, size = 'm', onToggle, onContextMenu } = $props();
+	let { album, thumb, full = false, size = 'm', selectable = true, onToggle, onContextMenu } = $props();
 
 	let min = $derived(sizeMin(size));
 </script>
@@ -21,7 +21,7 @@
 				onContextMenu?.(photo, e);
 			}}
 		>
-			<PhotoTile {photo} src={photo.exists ? thumb(photo.fbid) : ''} {full} {onToggle} />
+			<PhotoTile {photo} src={photo.exists ? thumb(photo.fbid) : ''} {full} {selectable} {onToggle} />
 		</div>
 	{/each}
 </div>

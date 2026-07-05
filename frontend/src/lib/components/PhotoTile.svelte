@@ -26,7 +26,7 @@
 	class:cursor-not-allowed={!interactive}
 	class:opacity-55={blocked}
 	disabled={!interactive}
-	onclick={() => onToggle?.(photo)}
+	onclick={() => interactive && onToggle?.(photo)}
 	data-testid={`tile-${photo.fbid}`}
 	aria-pressed={photo.exists ? photo.selected : undefined}
 	aria-label={photo.caption || photo.fbid}
@@ -40,6 +40,14 @@
 			{src}
 			alt={photo.caption || photo.fbid}
 		/>
+
+		{#if photo.archive_tag}
+			<span
+				class="pointer-events-none absolute left-2 top-2 rounded bg-surface-900/75 px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-surface-50"
+			>
+				{photo.archive_tag}
+			</span>
+		{/if}
 
 		<!-- Selected: green wash + check badge (non-color cue = the check icon) -->
 		{#if photo.selected}

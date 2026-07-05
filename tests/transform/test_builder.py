@@ -46,3 +46,25 @@ def test_idempotent_rerun(export_root: Path, tmp_path: Path):
     build_ready_folder(export_root, dest, {"a01"})
     result = build_ready_folder(export_root, dest, {"a01"})
     assert result.copied == 1
+
+
+def test_build_excludes_archived_and_drops_empty_posts(archive_export_root: Path, tmp_path: Path):
+    dest = tmp_path / "ready"
+    # A stale keep set that even names the archived photos u01 / p01.
+    keep = {"u01", "u02", "u03", "p01", "p02", "a01"}
+    build_ready_folder(archive_export_root, dest, keep)
+
+    # Archived photos are never copied, even though present + in keep.
+    assert not (dest / "posts" / "media" / "Mobileuploads_555" / "u01.jpg").exists()
+    assert not (dest / "posts" / "media" / "Photos_666" / "p01.jpg").exists()
+    # Non-archived kept photos are copied.
+    assert (dest / "posts" / "media" / "Mobileuploads_555" / "u02.jpg").exists()
+
+    posts = json.loads((dest / "posts" / "profile_posts_1.json").read_text(encoding="utf-8"))
+    bodies = [d["post"] for post in posts for d in post.get("data", []) if "post" in d]
+    # Posts whose only media was archived are dropped entirely.
+    assert "BREAKING: Fire on campus" not in bodies
+    assert "LOOK: Long lines today" not in bodies
+    # Posts with surviving media remain.
+    assert "Look at these cute dogs" in bodies  # u02 kept
+    assert "UPDATE: schedule changed" in bodies  # a01 kept (non-special album)

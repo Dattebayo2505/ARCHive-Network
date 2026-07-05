@@ -26,4 +26,21 @@ describe('PhotoTile', () => {
 		});
 		expect(screen.getByTestId('tile-m02')).toBeDisabled();
 	});
+
+	it('is inert and shows its tag when not selectable (archive tile)', async () => {
+		const onToggle = vi.fn();
+		render(PhotoTile, {
+			props: {
+				photo: { fbid: 'u01', exists: true, caption: 'BREAKING: fire', archive_tag: 'BREAKING' },
+				src: '/x.jpg',
+				selectable: false,
+				onToggle
+			}
+		});
+		const tile = screen.getByTestId('tile-u01');
+		expect(tile).toBeDisabled();
+		await fireEvent.click(tile);
+		expect(onToggle).not.toHaveBeenCalled();
+		expect(screen.getByText('BREAKING')).toBeInTheDocument();
+	});
 });

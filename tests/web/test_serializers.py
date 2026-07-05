@@ -40,3 +40,34 @@ def test_payload_shape(tmp_path):
     assert album["photos"][1]["selected"] is False
     # non-album photos have no `selected` key (read-only, auto-kept)
     assert payload["non_album"][0] == {"fbid": "m01", "caption": "k", "exists": True}
+
+
+def test_payload_includes_archive_and_uncapped(tmp_path):
+    inv = ExportInventory(
+        albums=[
+            Album(
+                fb_album_id="555", name="Mobile uploads", uncapped=True,
+                photos=[Photo(fbid="u02", original_uri="p/u02.jpg", resolved_path="x",
+                              caption="Look at dogs", exists=True, album_fbid="555")],
+            ),
+            Album(
+                fb_album_id="111", name="Animo Fest",
+                photos=[Photo(fbid="a01", original_uri="p/a01.jpg", resolved_path="x",
+                              caption=None, exists=True, album_fbid="111")],
+            ),
+        ],
+        archived_photos=[
+            Photo(fbid="u01", original_uri="p/u01.jpg", resolved_path="x",
+                  caption="BREAKING: fire", exists=True, album_fbid="555",
+                  archived=True, archive_tag="BREAKING"),
+        ],
+    )
+    sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
+    payload = inventory_payload("e", inv, sel, 10)
+
+    caps = {a["name"]: a["max_per_album"] for a in payload["albums"]}
+    assert caps["Mobile uploads"] is None  # uncapped
+    assert caps["Animo Fest"] == 10  # capped
+    assert payload["archive"] == [
+        {"fbid": "u01", "caption": "BREAKING: fire", "archive_tag": "BREAKING", "exists": True}
+    ]

@@ -7,6 +7,7 @@
 		preview,
 		startIndex = 0,
 		full = false,
+		selectable = true,
 		onToggle,
 		onClose
 	} = $props();
@@ -161,7 +162,7 @@
 		</div>
 
 		<div class="ml-auto flex items-center gap-2">
-			{#if current?.exists}
+			{#if selectable && current?.exists}
 				<button
 					type="button"
 					class="flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300"

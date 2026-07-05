@@ -105,3 +105,14 @@ def test_toggle_then_cap(export_root: Path, tmp_path: Path, monkeypatch):
     capped = client.post("/api/toggle", json={"album_fbid": "111", "photo_fbid": "a11"})
     assert capped.status_code == 409
     assert capped.json()["error"] == "cap"
+
+
+def test_inventory_marks_special_albums_uncapped(archive_export_root, tmp_path, monkeypatch):
+    client = _loaded_client(archive_export_root, tmp_path, monkeypatch)
+    body = client.get("/api/inventory").json()
+
+    caps = {a["name"]: a["max_per_album"] for a in body["albums"]}
+    assert caps["Mobile uploads"] is None
+    assert caps["Photos"] is None
+    assert caps["Animo Fest"] == 10
+    assert {p["fbid"] for p in body["archive"]} == {"u01", "p01"}
