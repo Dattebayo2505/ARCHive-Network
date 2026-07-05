@@ -21,13 +21,17 @@ class SelectionPolicy(Protocol):
 class DefaultPolicy:
     """Named-album cap; non-album photos are auto-kept and not pickable (Decision B).
 
+    Albums in `uncapped_albums` (the "Mobile uploads" / "Photos" dumps) have no cap.
     To make non-album photos deselectable later, add a sibling policy whose
     `non_album_selectable()` returns True — no change to SelectionState needed.
     """
 
     max_per_album: int = settings.max_per_album
+    uncapped_albums: frozenset[str] = frozenset()
 
     def can_select(self, album_fbid: str, current_count: int) -> bool:
+        if album_fbid in self.uncapped_albums:
+            return True
         return current_count < self.max_per_album
 
     def non_album_selectable(self) -> bool:

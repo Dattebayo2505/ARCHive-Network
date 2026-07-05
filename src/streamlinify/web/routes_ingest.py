@@ -47,10 +47,14 @@ def _start_session(request: Request, export_root: Path) -> dict:
     if not report.ok:
         return {"ok": False, "errors": list(report.missing)}
     workspace = settings.workspace_dir
+    inventory = build_inventory(export_root)
+    uncapped = frozenset(a.fb_album_id for a in inventory.albums if a.uncapped)
     request.app.state.session = Session(
         export_root=export_root,
-        inventory=build_inventory(export_root),
-        selection=SelectionState(workspace / "selection.json", DefaultPolicy()),
+        inventory=inventory,
+        selection=SelectionState(
+            workspace / "selection.json", DefaultPolicy(uncapped_albums=uncapped)
+        ),
         thumbnails=ThumbnailService(workspace / "thumbs"),
     )
     return {"ok": True, "errors": [], "export_name": export_root.name}
