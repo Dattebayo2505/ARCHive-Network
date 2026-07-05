@@ -1,5 +1,5 @@
 <script>
-	let { albums, nonAlbumCount, maxPerAlbum, activeId, onSelect, onContextMenu } = $props();
+	let { albums, nonAlbumCount, archiveCount = 0, activeId, onSelect, onContextMenu } = $props();
 </script>
 
 <nav aria-label="Albums" class="flex flex-col gap-1">
@@ -8,7 +8,8 @@
 	</p>
 
 	{#each albums as a (a.fb_album_id)}
-		{@const full = a.count_selected >= maxPerAlbum}
+		{@const capped = a.max_per_album != null}
+		{@const full = capped && a.count_selected >= a.max_per_album}
 		{@const active = a.fb_album_id === activeId}
 		<button
 			type="button"
@@ -34,16 +35,42 @@
 				class:text-primary-900={!full && a.count_selected > 0}
 				class:bg-surface-200={a.count_selected === 0}
 				class:text-surface-600={a.count_selected === 0}
-				title={full ? 'Album is full' : `${a.count_selected} of ${maxPerAlbum} selected`}
+				title={capped
+					? full
+						? 'Album is full'
+						: `${a.count_selected} of ${a.max_per_album} selected`
+					: `${a.count_selected} selected · no limit`}
 			>
 				{#if full}
 					<svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2.5"
 						stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
 				{/if}
-				{a.count_selected}/{maxPerAlbum}
+				{#if capped}{a.count_selected}/{a.max_per_album}{:else}{a.count_selected}{/if}
 			</span>
 		</button>
 	{/each}
+
+	{#if archiveCount > 0}
+		{@const active = activeId === '__archive__'}
+		<div class="my-1 h-px bg-surface-300"></div>
+		<button
+			type="button"
+			class="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+			class:bg-primary-100={active}
+			class:text-primary-900={active}
+			class:font-semibold={active}
+			class:text-surface-700={!active}
+			class:hover:bg-surface-200={!active}
+			onclick={() => onSelect('__archive__')}
+			aria-current={active ? 'true' : undefined}
+			title="News-caption photos set aside — excluded from the build."
+		>
+			<svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor"
+				stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg>
+			<span class="truncate">Archive</span>
+			<span class="ml-auto shrink-0 rounded-full bg-surface-200 px-2 py-0.5 text-xs font-medium tabular-nums text-surface-600">{archiveCount}</span>
+		</button>
+	{/if}
 
 	<div class="my-1 h-px bg-surface-300"></div>
 
