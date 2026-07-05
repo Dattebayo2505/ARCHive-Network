@@ -71,3 +71,23 @@ def test_payload_includes_archive_and_uncapped(tmp_path):
     assert payload["archive"] == [
         {"fbid": "u01", "caption": "BREAKING: fire", "archive_tag": "BREAKING", "exists": True}
     ]
+
+
+def test_payload_includes_album_origin(tmp_path):
+    inv = ExportInventory(
+        albums=[
+            Album(
+                fb_album_id="g01", name="HEADLINE ONE", origin="Mobile uploads",
+                uncapped=True, media_slug="HEADLINEONE_g01",
+                photos=[Photo(fbid="g01", original_uri="x", resolved_path="x",
+                              caption="c", exists=True, album_fbid="g01")],
+            ),
+            Album(fb_album_id="111", name="Animo Fest", photos=[]),
+        ],
+    )
+    sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
+    payload = inventory_payload("e", inv, sel, 10)
+
+    origins = {a["name"]: a["origin"] for a in payload["albums"]}
+    assert origins["HEADLINE ONE"] == "Mobile uploads"
+    assert origins["Animo Fest"] is None
