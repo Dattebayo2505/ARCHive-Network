@@ -36,3 +36,25 @@ def test_build_inventory(export_root: Path):
     assert nonalbum["m01"].exists is True
     assert nonalbum["m02"].exists is False
     assert nonalbum["m01"].album_fbid is None
+
+
+def test_build_inventory_partitions_archive(archive_export_root: Path):
+    inv = build_inventory(archive_export_root)
+    by_id = {a.fb_album_id: a for a in inv.albums}
+
+    # Special albums are uncapped and keep only their non-tagged photos.
+    assert by_id["555"].uncapped is True
+    assert by_id["666"].uncapped is True
+    assert {p.fbid for p in by_id["555"].photos} == {"u02", "u03"}
+    assert {p.fbid for p in by_id["666"].photos} == {"p02"}
+
+    # Tagged photos moved to archived_photos, with their tag recorded.
+    archived = {p.fbid: p for p in inv.archived_photos}
+    assert set(archived) == {"u01", "p01"}
+    assert archived["u01"].archived is True
+    assert archived["u01"].archive_tag == "BREAKING"
+    assert archived["p01"].archive_tag == "LOOK"
+
+    # A tag caption in a NON-special album is left untouched (album stays capped).
+    assert by_id["111"].uncapped is False
+    assert {p.fbid for p in by_id["111"].photos} == {"a01"}

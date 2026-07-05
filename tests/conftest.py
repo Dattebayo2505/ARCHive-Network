@@ -76,3 +76,59 @@ def export_root(tmp_path: Path) -> Path:
         (root / "posts" / name).write_text("[]", encoding="utf-8")
 
     return root
+
+
+@pytest.fixture
+def archive_export_root(tmp_path: Path) -> Path:
+    """Export with the two special albums plus a normal one, and posts that supply
+    matching + non-matching captions. Used only by archive-feature tests."""
+    root = tmp_path / "archive_export"
+    media = root / "posts" / "media"
+    album_dir = root / "posts" / "album"
+    album_dir.mkdir(parents=True)
+
+    # Special album "Mobile uploads" (dir Mobileuploads_555): u01 tagged, u02 not, u03 no post
+    u_photos = [_photo_record("Mobileuploads_555", f"u0{n}", f"U{n}") for n in (1, 2, 3)]
+    (album_dir / "0.json").write_text(
+        json.dumps({"name": "Mobile uploads", "photos": u_photos}), encoding="utf-8"
+    )
+    for n in (1, 2, 3):
+        _img(media / "Mobileuploads_555" / f"u0{n}.jpg")
+
+    # Special album "Photos" (dir Photos_666): p01 tagged, p02 no post
+    p_photos = [_photo_record("Photos_666", f"p0{n}", f"P{n}") for n in (1, 2)]
+    (album_dir / "1.json").write_text(
+        json.dumps({"name": "Photos", "photos": p_photos}), encoding="utf-8"
+    )
+    for n in (1, 2):
+        _img(media / "Photos_666" / f"p0{n}.jpg")
+
+    # Normal capped album "Animo Fest" (dir AnimoFest_111): a01 has a tag caption but
+    # this album is NOT special, so the photo must stay put.
+    (album_dir / "2.json").write_text(
+        json.dumps({"name": "Animo Fest", "photos": [_photo_record("AnimoFest_111", "a01", "A1")]}),
+        encoding="utf-8",
+    )
+    _img(media / "AnimoFest_111" / "a01.jpg")
+
+    posts = [
+        {"data": [{"post": "BREAKING: Fire on campus"}],
+         "attachments": [{"data": [{"media": _photo_record("Mobileuploads_555", "u01", "U1")}]}]},
+        {"data": [{"post": "Look at these cute dogs"}],
+         "attachments": [{"data": [{"media": _photo_record("Mobileuploads_555", "u02", "U2")}]}]},
+        {"data": [{"post": "LOOK: Long lines today"}],
+         "attachments": [{"data": [{"media": _photo_record("Photos_666", "p01", "P1")}]}]},
+        {"data": [{"post": "UPDATE: schedule changed"}],
+         "attachments": [{"data": [{"media": _photo_record("AnimoFest_111", "a01", "A1")}]}]},
+    ]
+    (root / "posts" / "profile_posts_1.json").write_text(json.dumps(posts), encoding="utf-8")
+
+    for name in (
+        "videos.json",
+        "content_sharing_links_you_have_created.json",
+        "edits_you_made_to_posts.json",
+        "places_you_have_been_tagged_in.json",
+    ):
+        (root / "posts" / name).write_text("[]", encoding="utf-8")
+
+    return root

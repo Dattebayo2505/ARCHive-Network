@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .archive import partition_archive
 from .models import Album, ExportInventory, Photo
 from .text import epoch_to_dt, fix_mojibake
 
@@ -114,4 +115,6 @@ def build_inventory(export_root: Path) -> ExportInventory:
             )
         )
 
-    return ExportInventory(albums=albums, non_album_photos=non_album)
+    inventory = ExportInventory(albums=albums, non_album_photos=non_album)
+    partition_archive(inventory)
+    return inventory

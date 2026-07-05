@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from .models import ExportInventory, Photo
+
 # Albums the publication uses as photo dumps rather than themed sets. Matched by
 # normalized name (strip + casefold) because an album's fb id is not knowable ahead
 # of time. Update this set if Facebook renames these albums in a future export.
@@ -44,3 +46,26 @@ def archive_tag(caption: str | None) -> str | None:
             if not rest or not rest[0].isalpha():
                 return kw
     return None
+
+
+def partition_archive(inventory: ExportInventory) -> None:
+    """Move news-tagged photos out of the two special albums into `archived_photos`.
+
+    Mutates in place: each special album is marked `uncapped` and keeps only its
+    non-tagged photos; a tagged photo gets `archived=True` + its tag and moves to
+    `inventory.archived_photos`. Non-special albums are untouched. Order preserved.
+    """
+    for album in inventory.albums:
+        if not is_special_album(album.name):
+            continue
+        album.uncapped = True
+        kept: list[Photo] = []
+        for photo in album.photos:
+            tag = archive_tag(photo.caption)
+            if tag is None:
+                kept.append(photo)
+            else:
+                photo.archived = True
+                photo.archive_tag = tag
+                inventory.archived_photos.append(photo)
+        album.photos = kept
