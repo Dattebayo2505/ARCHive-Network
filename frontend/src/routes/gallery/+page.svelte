@@ -12,6 +12,8 @@
 	let { data } = $props();
 	let inventory = $state(data.inventory);
 	let activeId = $state(inventory.albums[0]?.fb_album_id ?? null);
+	let archive = $derived(inventory.archive ?? []);
+	let showArchive = $derived(activeId === '__archive__');
 	let buildResult = $state(null);
 	let building = $state(false);
 	let gridSize = $state(DEFAULT_SIZE);
@@ -32,8 +34,9 @@
 	}
 
 	let activeAlbum = $derived(inventory.albums.find((a) => a.fb_album_id === activeId) ?? null);
+	let activeCap = $derived(activeAlbum ? activeAlbum.max_per_album : null); // null = no limit
 	let activeFull = $derived(
-		activeAlbum ? activeAlbum.count_selected >= inventory.max_per_album : false
+		activeAlbum && activeCap != null ? activeAlbum.count_selected >= activeCap : false
 	);
 	let totalSelected = $derived(inventory.albums.reduce((n, a) => n + a.count_selected, 0));
 
@@ -90,6 +93,26 @@
 		};
 	}
 
+	// Right-click an archived photo → preview it (read-only) or open its file.
+	function openArchiveMenu(photo, e) {
+		const index = archive.findIndex((p) => p.fbid === photo.fbid);
+		menu = {
+			open: true,
+			x: e.clientX,
+			y: e.clientY,
+			items: [
+				{ label: 'Preview', icon: 'preview', onSelect: () => openPreviewAt(index) },
+				{
+					label: 'Show in File Explorer',
+					icon: 'folder',
+					disabled: !photo.exists,
+					hint: photo.exists ? undefined : 'missing',
+					onSelect: () => revealOnDisk({ photoFbid: photo.fbid })
+				}
+			]
+		};
+	}
+
 	// Right-click an album → open its media folder on disk.
 	function openAlbumMenu(album, e) {
 		menu = {
@@ -114,7 +137,7 @@
 			<AlbumList
 				albums={inventory.albums}
 				nonAlbumCount={inventory.non_album.length}
-				maxPerAlbum={inventory.max_per_album}
+				archiveCount={archive.length}
 				{activeId}
 				onSelect={(id) => (activeId = id)}
 				onContextMenu={openAlbumMenu}
@@ -144,9 +167,34 @@
 		</p>
 	</aside>
 
-	<!-- Right pane: active album -->
+	<!-- Right pane: active album OR the read-only archive -->
 	<section class="min-w-0">
-		{#if activeAlbum}
+		{#if showArchive}
+			<header
+				class="sticky top-[5.25rem] z-20 mb-4 bg-surface-100 pt-1 pb-3 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-24 before:bg-surface-100 before:content-['']"
+			>
+				<div class="flex min-w-0 items-baseline gap-3">
+					<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Archive</h1>
+					<p class="shrink-0 text-sm font-medium tabular-nums text-surface-500">
+						{archive.length} set aside
+					</p>
+				</div>
+				<p class="mt-2 text-sm text-surface-500">
+					Photos posted with a news caption (BREAKING, LOOK, …) from Mobile uploads &amp; Photos.
+					These are excluded from the build. Right-click to preview or open the file.
+				</p>
+			</header>
+
+			{#if archive.length}
+				<PhotoGrid
+					album={{ name: 'Archive', photos: archive }}
+					thumb={thumbUrl}
+					size={gridSize}
+					selectable={false}
+					onContextMenu={openArchiveMenu}
+				/>
+			{/if}
+		{:else if activeAlbum}
 			<!-- Sticky toolbar: the album, its fill state, and the view + preview
 			     controls stay pinned under the app bar so they never scroll away.
 			     The ::before mask hides photos scrolling through the gap to the bar. -->
@@ -163,7 +211,11 @@
 							class:text-warning-700={activeFull}
 							class:text-surface-500={!activeFull}
 						>
-							{activeAlbum.count_selected} / {inventory.max_per_album} selected
+							{#if activeCap != null}
+								{activeAlbum.count_selected} / {activeCap} selected
+							{:else}
+								{activeAlbum.count_selected} selected · no limit
+							{/if}
 						</p>
 					</div>
 					<ViewControls
@@ -173,21 +225,24 @@
 						previewDisabled={activeAlbum.photos.length === 0}
 					/>
 				</div>
-				<!-- Fill bar -->
-				<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-200">
-					<div
-						class="h-full rounded-full transition-[width] duration-300"
-						class:bg-warning-500={activeFull}
-						class:bg-primary-600={!activeFull}
-						style="width: {(activeAlbum.count_selected / inventory.max_per_album) * 100}%"
-					></div>
-				</div>
+				<!-- Fill bar (capped albums only) -->
+				{#if activeCap != null}
+					<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-200">
+						<div
+							class="h-full rounded-full transition-[width] duration-300"
+							class:bg-warning-500={activeFull}
+							class:bg-primary-600={!activeFull}
+							style="width: {(activeAlbum.count_selected / activeCap) * 100}%"
+						></div>
+					</div>
+				{/if}
 				<p class="mt-2 text-sm text-surface-500">
-					{#if activeFull}
+					{#if activeCap == null}
+						Click photos to keep as many as you want from this album. Right-click a photo for more.
+					{:else if activeFull}
 						This album is full. Remove a photo to choose a different one.
 					{:else}
-						Click photos to keep up to {inventory.max_per_album} from this album. Right-click a
-						photo for more.
+						Click photos to keep up to {activeCap} from this album. Right-click a photo for more.
 					{/if}
 				</p>
 			</header>
@@ -213,7 +268,17 @@
 	</section>
 </div>
 
-{#if previewOpen && activeAlbum && activeAlbum.photos.length}
+{#if previewOpen && showArchive && archive.length}
+	<PhotoPreview
+		album={{ name: 'Archive', photos: archive }}
+		thumb={thumbUrl}
+		preview={previewUrl}
+		selectable={false}
+		startIndex={previewStart}
+		onToggle={() => {}}
+		onClose={() => (previewOpen = false)}
+	/>
+{:else if previewOpen && activeAlbum && activeAlbum.photos.length}
 	<PhotoPreview
 		album={activeAlbum}
 		thumb={thumbUrl}
