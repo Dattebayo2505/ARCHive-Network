@@ -15,7 +15,7 @@
 	<header
 		class="sticky top-0 z-30 border-b border-primary-800/40 bg-primary-700 text-primary-50 shadow-sm"
 	>
-		<div class="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
+		<div class="mx-auto flex max-w-7xl items-center gap-3 px-3 py-2 sm:px-4">
 			<!-- Archers mark: a stylised bow + arrow -->
 			<span
 				class="grid size-9 shrink-0 place-items-center rounded-lg bg-primary-50/15"
@@ -61,13 +61,13 @@
 		</div>
 	</header>
 
-	<main class="mx-auto w-full min-h-0 max-w-7xl flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+	<main class="mx-auto w-full min-h-0 max-w-7xl flex-1 overflow-y-auto px-3 py-2 sm:px-0 sm:py-5">
 		{@render children()}
 	</main>
 
 	<footer class="border-t border-surface-300 bg-surface-50">
 		<div
-			class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 text-xs text-surface-600 sm:px-6"
+			class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-xs text-surface-600 sm:px-4"
 		>
 			<svg viewBox="0 0 24 24" class="size-3.5 shrink-0 text-primary-600" fill="none"
 				stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
