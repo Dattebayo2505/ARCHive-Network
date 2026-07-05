@@ -45,6 +45,20 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
   `dark` variant in `app.css` (Skeleton/Tailwind v4 default to `prefers-color-scheme`, which would
   auto-invert to dark). Don't reintroduce dark mode without a product decision.
 
+## Gallery UI patterns
+- The gallery page (`routes/gallery/+page.svelte`) uses a **3-column flex layout**: fixed-width left
+  rail (albums), `flex-1` center (photo grid), and a collapsible right rail (`SelectionPanel`).
+  The outer container is `flex` (not `grid`) so the third column can appear/disappear without
+  re-declaring grid tracks.
+- **SelectionPanel** (`lib/components/SelectionPanel.svelte`) shows selected photos for the
+  **current active album only** (not all albums). It is collapsible (toggle button in the toolbar)
+  and resizable via a drag handle on its left edge (pointer-based resize, 200–600px range).
+- Photo thumbnails in both PhotoGrid and SelectionPanel use **CSS `columns` masonry layout** with
+  natural aspect ratios: each `<img>` measures `naturalWidth`/`naturalHeight` on load and sets
+  `aspect-ratio` on its container. Tiles start as `1/1` squares and snap to the real ratio once
+  loaded. SelectionPanel derives its column width from `panelWidth` so thumbnails dynamically
+  resize when the panel is dragged.
+
 ## FB-export data rules (the parser depends on these)
 - Resolve media `uri` by taking the substring from `posts/` onward (strip the export-folder prefix).
 - Decode mojibake on all human text: `s.encode("latin-1").decode("utf-8")`, fall back to raw.

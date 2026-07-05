@@ -8,6 +8,7 @@
 	import PhotoPreview from '$lib/components/PhotoPreview.svelte';
 	import ContextMenu from '$lib/components/ContextMenu.svelte';
 	import BuildSummary from '$lib/components/BuildSummary.svelte';
+	import SelectionPanel from '$lib/components/SelectionPanel.svelte';
 
 	let { data } = $props();
 	let inventory = $state(data.inventory);
@@ -20,7 +21,29 @@
 	let previewOpen = $state(false);
 	let previewStart = $state(0);
 	let menu = $state({ open: false, x: 0, y: 0, items: [] });
+	let selectionOpen = $state(false);
+	let albumWidth = $state(240);
+	let albumDragging = $state(false);
 	const toaster = createToaster();
+
+	function startAlbumResize(e) {
+		e.preventDefault();
+		albumDragging = true;
+		const startX = e.clientX;
+		const startW = albumWidth;
+
+		function onMove(ev) {
+			const delta = ev.clientX - startX;
+			albumWidth = Math.max(140, Math.min(400, startW + delta));
+		}
+		function onUp() {
+			albumDragging = false;
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('pointerup', onUp);
+		}
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp);
+	}
 
 	// Remember the volunteer's chosen thumbnail density across visits.
 	$effect(() => {
@@ -50,6 +73,15 @@
 			});
 			return;
 		}
+		photo.selected = result.selected;
+		activeAlbum.count_selected = result.count;
+	}
+
+	/** Toggle a photo from the selection panel (always uses the active album). */
+	async function onPanelToggle(photo) {
+		if (!activeAlbum) return;
+		const result = await toggle(activeAlbum.fb_album_id, photo.fbid);
+		if (!result.ok && result.cap) return;
 		photo.selected = result.selected;
 		activeAlbum.count_selected = result.count;
 	}
@@ -130,9 +162,9 @@
 	}
 </script>
 
-<div class="grid gap-5 lg:h-full lg:min-h-0 lg:grid-cols-[15rem_1fr]">
+<div class="flex gap-5 lg:h-full lg:min-h-0">
 	<!-- Left rail: the album list scrolls on its own; build + counts stay pinned below it. -->
-	<aside class="flex flex-col lg:min-h-0">
+	<aside class="relative flex shrink-0 flex-col lg:min-h-0" style="width: {albumWidth}px;">
 		<div
 			class="rounded-xl border border-surface-300 bg-surface-50 p-2 shadow-sm lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
 		>
@@ -145,6 +177,12 @@
 				onContextMenu={openAlbumMenu}
 			/>
 		</div>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="album-resize-handle"
+			class:active={albumDragging}
+			onpointerdown={startAlbumResize}
+		></div>
 
 		<button
 			class="mt-3 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-700 px-4 py-3 font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-progress disabled:opacity-70"
@@ -171,7 +209,7 @@
 
 	<!-- Right pane: active album OR the read-only archive. Header stays put; only the
 	     photo grid below it scrolls (and only when the pointer is over the grid). -->
-	<section class="flex min-w-0 flex-col lg:min-h-0">
+	<section class="flex min-w-0 flex-1 flex-col lg:min-h-0">
 		{#if showArchive}
 			<header class="mb-4 shrink-0 pt-1 pb-3">
 				<div class="flex min-w-0 items-baseline gap-3">
@@ -218,12 +256,28 @@
 							{/if}
 						</p>
 					</div>
+					<div class="flex items-center gap-1">
 					<ViewControls
 						size={gridSize}
 						onSize={setSize}
 						onOpenPreview={() => openPreviewAt(0)}
 						previewDisabled={activeAlbum.photos.length === 0}
 					/>
+					<button
+						type="button"
+						class="ml-1 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+						class:bg-primary-100={selectionOpen}
+						class:text-primary-800={selectionOpen}
+						class:text-surface-600={!selectionOpen}
+						class:hover:bg-surface-200={!selectionOpen}
+						onclick={() => (selectionOpen = !selectionOpen)}
+						title={selectionOpen ? 'Hide selection panel' : 'Show selection panel'}
+						aria-pressed={selectionOpen}
+					>
+						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+						{totalSelected}
+					</button>
+				</div>
 				</div>
 				<!-- Fill bar (capped albums only) -->
 				{#if activeCap != null}
@@ -268,6 +322,14 @@
 			</div>
 		{/if}
 	</section>
+
+	<!-- Right rail: selection panel (collapsible + resizable) -->
+	<SelectionPanel
+		album={activeAlbum}
+		open={selectionOpen}
+		onClose={() => (selectionOpen = false)}
+		onToggle={onPanelToggle}
+	/>
 </div>
 
 {#if previewOpen && showArchive && archive.length}
@@ -305,3 +367,25 @@
 {/if}
 
 <Toaster {toaster}></Toaster>
+
+<style>
+	.album-resize-handle {
+		position: absolute;
+		right: -4px;
+		top: 0;
+		bottom: 0;
+		width: 8px;
+		cursor: col-resize;
+		z-index: 10;
+		border-radius: 4px;
+		transition: background-color 0.15s;
+	}
+
+	.album-resize-handle:hover {
+		background-color: rgba(27, 94, 32, 0.15);
+	}
+
+	.album-resize-handle.active {
+		background-color: rgba(27, 94, 32, 0.2);
+	}
+</style>
