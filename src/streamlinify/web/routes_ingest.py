@@ -88,13 +88,15 @@ def _maybe_adopt_legacy_state(state_dir: Path) -> None:
     marker.write_text("1", encoding="utf-8")
 
 
-def _start_session(request: Request, export_root: Path, *, managed: bool) -> dict:
+def _start_session(
+    request: Request, export_root: Path, *, managed: bool, source_name: str | None = None
+) -> dict:
     report = validate_export(export_root)
     if not report.ok:
         return {"ok": False, "errors": list(report.missing)}
 
     registry = request.app.state.registry
-    entry = registry.register(export_root, managed=managed, now=time.time())
+    entry = registry.register(export_root, managed=managed, now=time.time(), ws_id=source_name)
     state_dir = settings.workspace_dir / "state" / entry.id
     _maybe_adopt_legacy_state(state_dir)
 
@@ -159,7 +161,7 @@ def ingest_zip(request: Request, body: ZipRequest) -> dict:
             extract_zip(src, dest)
         except (zipfile.BadZipFile, ValueError, subprocess.CalledProcessError) as exc:
             raise HTTPException(status_code=400, detail=f"Could not unzip that archive: {exc}") from exc
-    result = _start_session(request, find_export_root(dest), managed=True)
+    result = _start_session(request, find_export_root(dest), managed=True, source_name=src.stem)
     result["deduped"] = deduped
     return result
 
@@ -178,4 +180,6 @@ def ingest_upload(request: Request, file: UploadFile = File(...)) -> dict:
             extract_zip(zip_path, dest)
     finally:
         zip_path.unlink(missing_ok=True)
-    return _start_session(request, find_export_root(dest), managed=True)
+    return _start_session(
+        request, find_export_root(dest), managed=True, source_name=Path(zip_path.name).stem
+    )

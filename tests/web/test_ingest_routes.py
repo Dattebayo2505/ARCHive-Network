@@ -30,6 +30,28 @@ def test_ingest_zip_ok(export_root: Path, tmp_path: Path, monkeypatch):
     assert status["loaded"] is True and status["display_name"] == "export"
 
 
+def test_ingest_zip_names_workspace_from_zip_filename(export_root, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # The extracted root folder is "export", but the zip carries the friendly name.
+    archive = tmp_path / "facebook-Test-2026-01-02-abc.zip"
+    _zip_tree(export_root, archive)
+
+    client = TestClient(create_app())
+    body = client.post("/api/ingest/zip", json={"path": str(archive)}).json()
+
+    assert body["workspace_id"] == "facebook-Test-2026-01-02-abc"
+    assert body["display_name"] == "Test Facebook Export | 2026-01-02"
+    assert body["export_name"] == "export"        # extracted root name is unchanged
+    # State dir is keyed by the zip-derived id, not the extracted folder name.
+    assert (tmp_path / "workspace" / "state" / "facebook-Test-2026-01-02-abc").is_dir()
+
+    # Reopening by that id must resolve to the same workspace (idempotent).
+    client.app.state.session = None
+    reopened = client.post("/api/workspaces/open", json={"id": "facebook-Test-2026-01-02-abc"})
+    assert reopened.status_code == 200
+    assert reopened.json()["workspace_id"] == "facebook-Test-2026-01-02-abc"
+
+
 def test_ingest_zip_rejects_non_zip(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     not_zip = tmp_path / "notes.txt"

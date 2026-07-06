@@ -49,7 +49,9 @@ def open_workspace(request: Request, body: OpenRequest) -> dict:
     root = Path(entry.export_root)
     if not root.exists():
         raise HTTPException(status_code=410, detail="Workspace files are missing")
-    return _start_session(request, root, managed=entry.managed)
+    # Reopen under the stored id (which may be zip-derived, not the folder name) so
+    # the registry entry and its state dir stay stable across sessions.
+    return _start_session(request, root, managed=entry.managed, source_name=entry.id)
 
 
 def _remove_tree(path: Path, attempts: int = 5) -> bool:

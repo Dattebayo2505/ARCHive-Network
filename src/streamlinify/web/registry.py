@@ -56,8 +56,13 @@ class WorkspaceRegistry:
     def get(self, ws_id: str) -> WorkspaceEntry | None:
         return self._entries.get(ws_id)
 
-    def register(self, export_root: Path, *, managed: bool, now: float) -> WorkspaceEntry:
-        ws_id = export_root.name
+    def register(
+        self, export_root: Path, *, managed: bool, now: float, ws_id: str | None = None
+    ) -> WorkspaceEntry:
+        # ``ws_id`` lets the caller name the workspace from something other than the
+        # export folder — e.g. the original zip filename, which carries the friendly
+        # ``facebook-<page>-<date>-<suffix>`` pattern the extracted root often lacks.
+        ws_id = ws_id or export_root.name
         entry = self._entries.get(ws_id)
         if entry is None:
             entry = WorkspaceEntry(
