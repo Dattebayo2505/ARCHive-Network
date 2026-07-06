@@ -180,14 +180,28 @@ export async function resetAlbumName(albumFbid, fetchFn = fetch) {
 export async function archiveAlbum(albumFbid, fetchFn = fetch) {
 	const res = await fetchFn(url('/api/album/archive'), {
 		method: 'POST',
-		headers: jsonHeaders,
+		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ album_fbid: albumFbid })
 	});
+	const data = await res.json();
 	if (!res.ok) {
-		const data = await res.json().catch(() => ({}));
 		return { ok: false, error: data.detail ?? 'Could not archive the album.' };
 	}
-	return { ok: true, ...(await res.json()) };
+	return data; // {ok, moved}
+}
+
+/** Restore an album from the archive back to normal albums. */
+export async function unarchiveAlbum(albumFbid, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/album/unarchive'), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ album_fbid: albumFbid })
+	});
+	const data = await res.json();
+	if (!res.ok) {
+		return { ok: false, error: data.detail ?? 'Could not unarchive the album.' };
+	}
+	return data; // {ok, moved}
 }
 
 export { API_BASE };

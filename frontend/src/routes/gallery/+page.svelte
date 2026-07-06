@@ -1,6 +1,6 @@
 <script>
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
-	import { build, reveal, thumbUrl, previewUrl, toggle, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum } from '$lib/api.js';
+	import { build, reveal, thumbUrl, previewUrl, toggle, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum } from '$lib/api.js';
 	import { seedMissingThumbnails, thumbnailMissing } from '$lib/videoThumbs.js';
 	import { DEFAULT_SIZE, SIZE_STORAGE_KEY, VIEW_SIZES } from '$lib/viewSizes.js';
 	import AlbumList from '$lib/components/AlbumList.svelte';
@@ -33,6 +33,7 @@
 	let previewStart = $state(0);
 	let menu = $state({ open: false, x: 0, y: 0, items: [] });
 	let archiveConfirm = $state({ open: false, album: null });
+	let unarchiveConfirm = $state({ open: false, album: null });
 	let resetConfirm = $state({ open: false, album: null });
 	let selectionOpen = $state(false);
 	let albumWidth = $state(240);
@@ -81,7 +82,9 @@
 		localStorage.setItem(SIZE_STORAGE_KEY, id);
 	}
 
-	let activeAlbum = $derived(inventory.albums.find((a) => a.fb_album_id === activeId) ?? null);
+	let allAlbumsList = $derived([...inventory.albums, ...(inventory.archived_albums ?? [])]);
+	let activeAlbum = $derived(allAlbumsList.find((a) => a.fb_album_id === activeId) ?? null);
+	let isActiveArchived = $derived(inventory.archived_albums?.some(a => a.fb_album_id === activeId) ?? false);
 	let activeCap = $derived(activeAlbum ? activeAlbum.max_per_album : null); // null = no limit
 	let activeFull = $derived(
 		activeAlbum && activeCap != null ? activeAlbum.count_selected >= activeCap : false
@@ -199,36 +202,47 @@
 
 	// Right-click an album → rename, archive, or open its media folder on disk.
 	function openAlbumMenu(album, e) {
+		const isArchived = inventory.archived_albums?.some(a => a.fb_album_id === album.fb_album_id);
 		menu = {
 			open: true,
 			x: e.clientX,
 			y: e.clientY,
 			items: [
-				{
-					label: 'Rename',
-					icon: 'rename',
-					subItems: [
-						{
-							label: 'Reset to default name',
-							disabled: !album.original_name || album.original_name === album.name,
-							onSelect: () => {
-								if (album.original_name && album.original_name !== album.name) {
-									resetConfirm = { open: true, album };
+				...(!isArchived ? [
+					{
+						label: 'Rename',
+						icon: 'rename',
+						subItems: [
+							{
+								label: 'Reset to default name',
+								disabled: !album.original_name || album.original_name === album.name,
+								onSelect: () => {
+									if (album.original_name && album.original_name !== album.name) {
+										resetConfirm = { open: true, album };
+									}
 								}
 							}
+						],
+						onSelect: () => {
+							editingAlbumId = album.fb_album_id;
 						}
-					],
-					onSelect: () => {
-						editingAlbumId = album.fb_album_id;
+					},
+					{
+						label: 'Add to Archive',
+						icon: 'archive',
+						onSelect: () => {
+							archiveConfirm = { open: true, album };
+						}
 					}
-				},
-				{
-					label: 'Add to Archive',
-					icon: 'archive',
-					onSelect: () => {
-						archiveConfirm = { open: true, album };
+				] : [
+					{
+						label: 'Unarchive',
+						icon: 'archive',
+						onSelect: () => {
+							unarchiveConfirm = { open: true, album };
+						}
 					}
-				},
+				]),
 				{
 					label: 'Show in File Explorer',
 					icon: 'folder',
@@ -247,6 +261,7 @@
 		>
 			<AlbumList
 				albums={inventory.albums}
+				archivedAlbums={inventory.archived_albums}
 				nonAlbumCount={inventory.non_album.length}
 				archiveCount={archive.length}
 				videosCount={videos.length}
@@ -426,6 +441,7 @@
 					size={gridSize}
 					{onToggle}
 					onContextMenu={openPhotoMenu}
+					selectable={!isActiveArchived}
 				/>
 			</div>
 		{:else}
@@ -465,6 +481,7 @@
 		thumb={thumbUrl}
 		preview={previewUrl}
 		full={activeFull}
+		selectable={!isActiveArchived}
 		startIndex={previewStart}
 		{onToggle}
 		onClose={() => (previewOpen = false)}
@@ -506,13 +523,10 @@
 		if (!album) return;
 		const result = await archiveAlbum(album.fb_album_id);
 		if (result.ok) {
-			for (const photo of album.photos) {
-				photo.archived = true;
-				inventory.archive = [...(inventory.archive ?? []), photo];
-			}
 			inventory.albums = inventory.albums.filter(
 				(a) => a.fb_album_id !== album.fb_album_id
 			);
+			inventory.archived_albums = [...(inventory.archived_albums ?? []), album];
 			activeId = inventory.albums[0]?.fb_album_id ?? '__archive__';
 			toaster.success({
 				title: 'Album archived',
@@ -520,6 +534,36 @@
 			});
 		} else {
 			toaster.error({ title: 'Archive failed', description: result.error });
+		}
+	}}
+/>
+
+<ConfirmDialog
+	open={unarchiveConfirm.open}
+	title="Unarchive album"
+	message={unarchiveConfirm.album
+		? `Are you sure you wish to unarchive the album "${unarchiveConfirm.album.name}"? It will be included in the build again.`
+		: ''}
+	confirmLabel="Yes"
+	cancelLabel="No"
+	onCancel={() => (unarchiveConfirm = { open: false, album: null })}
+	onConfirm={async () => {
+		const album = unarchiveConfirm.album;
+		unarchiveConfirm = { open: false, album: null };
+		if (!album) return;
+		const result = await unarchiveAlbum(album.fb_album_id);
+		if (result.ok) {
+			inventory.archived_albums = inventory.archived_albums.filter(
+				(a) => a.fb_album_id !== album.fb_album_id
+			);
+			inventory.albums = [...inventory.albums, album];
+			activeId = album.fb_album_id;
+			toaster.success({
+				title: 'Album unarchived',
+				description: `${result.moved} photo(s) restored.`
+			});
+		} else {
+			toaster.error({ title: 'Unarchive failed', description: result.error });
 		}
 	}}
 />

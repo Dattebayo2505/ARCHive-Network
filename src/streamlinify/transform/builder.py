@@ -60,9 +60,10 @@ def build_ready_folder(
         for album in inventory.albums:
             if album.fb_album_id in renames:
                 album.name = renames[album.fb_album_id]
-    # Archived (news-caption) photos are set aside — never carried into the build,
-    # even if a stale selection.json still names one.
+    # Archived (news-caption) photos and manually archived albums are set aside — never
+    # carried into the build, even if a stale selection.json still names one.
     keep_fbids = keep_fbids - {p.fbid for p in inventory.archived_photos}
+    keep_fbids = keep_fbids - {p.fbid for a in inventory.archived_albums for p in a.photos}
     dest.mkdir(parents=True, exist_ok=True)
 
     copied = 0

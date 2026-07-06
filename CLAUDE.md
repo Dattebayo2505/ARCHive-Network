@@ -77,6 +77,7 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
 - **Never glob `posts/media/`** (~875 MB) — drive off the JSON, then verify the specific file exists.
 - Named `album/*.json` get the ≤10 cap; everything else is "non-album" (kept, currently read-only —
   `selection/policy.py` isolates this rule so it can change later).
+- **Archived Albums**: Archived albums are stored intact in `inventory.archived_albums` rather than flattened. The builder actively excludes any photos within these albums. On the frontend, they render directly below the Archive section using Svelte 5 `{#snippet}`s and are visually read-only (unselectable, no hover state, but retain full opacity).
 - Videos (`videos.json` → `videos_v2`; `posts/media/videos/*.mp4`) ship with **no thumbnails**.
   Detect by extension (`.mp4/.mov/.webm`), split into `inventory.videos`, and replace with a
   still in the build (feed uri rewritten `.mp4`→`.jpg`); the `.mp4` is never copied.

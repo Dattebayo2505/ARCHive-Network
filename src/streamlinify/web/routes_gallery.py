@@ -177,7 +177,7 @@ def reset_album(request: Request, body: RenameAlbumRequest):
 
 @router.post("/api/album/archive")
 def archive_album(request: Request, body: ArchiveAlbumRequest):
-    """Move every photo in an album to the archive, then remove the album."""
+    """Move an album to the archive list."""
     session = _session(request)
     inv = session.inventory
     album = next(
@@ -186,14 +186,33 @@ def archive_album(request: Request, body: ArchiveAlbumRequest):
     )
     if album is None:
         raise HTTPException(status_code=404, detail="No such album")
-    moved = 0
-    for photo in album.photos:
-        photo.archived = True
-        inv.archived_photos.append(photo)
-        moved += 1
+    
+    # We no longer set photo.archived = True here, they just move with the album
+    # to inv.archived_albums which is excluded from builder.
+    
+    inv.archived_albums.append(album)
+    
     # Clear any selections for this album.
     sel = session.selection._selected.pop(body.album_fbid, None)
     if sel is not None:
         session.selection._save()
     inv.albums = [a for a in inv.albums if a.fb_album_id != body.album_fbid]
-    return {"ok": True, "moved": moved}
+    return {"ok": True, "moved": len(album.photos)}
+
+
+@router.post("/api/album/unarchive")
+def unarchive_album(request: Request, body: ArchiveAlbumRequest):
+    """Restore an album from the archive list back to albums."""
+    session = _session(request)
+    inv = session.inventory
+    album = next(
+        (a for a in inv.archived_albums if a.fb_album_id == body.album_fbid),
+        None,
+    )
+    if album is None:
+        raise HTTPException(status_code=404, detail="No such archived album")
+    
+    inv.albums.append(album)
+    inv.archived_albums = [a for a in inv.archived_albums if a.fb_album_id != body.album_fbid]
+    
+    return {"ok": True, "moved": len(album.photos)}
