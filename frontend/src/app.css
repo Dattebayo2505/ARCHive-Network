@@ -5,7 +5,7 @@
 
 @source '../node_modules/@skeletonlabs/skeleton-svelte/dist';
 
-/* Streamlinify is a deliberately light, paper-calm tool: photos read best on a
+/* ARCHive Network is a deliberately light, paper-calm tool: photos read best on a
  * neutral light surface and rotating volunteers get one predictable look.
  * Redefine Tailwind's `dark` variant to be class-based (default is the
  * prefers-color-scheme media query) so Skeleton never auto-inverts to dark. */
@@ -22,7 +22,7 @@ html {
 }
 
 /* ------------------------------------------------------------------ *
- * Archers — DLSU-green theme for Streamlinify.
+ * Archers — DLSU-green theme for ARCHive Network.
  * A calm, confident product palette: deep La Salle green carries the
  * identity (header + primary actions), green-tinted cool neutrals carry
  * the surfaces, and attention colors (amber "full", red "error") are
@@ -43,10 +43,17 @@ html {
 	--base-font-style: normal;
 	--base-letter-spacing: 0em;
 
+	/* Display / brand face — Montserrat (geometric) carries the wordmark, every
+	   heading, and the tracked uppercase rail labels; Inter stays the body/UI
+	   workhorse so small, dense state (badges, album rows, paths) reads clean. */
+	--font-display:
+		'Montserrat', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+		sans-serif;
+
 	--heading-font-color: var(--color-surface-900);
 	--heading-font-color-dark: var(--color-surface-50);
-	--heading-font-family: inherit;
-	--heading-font-weight: 650;
+	--heading-font-family: var(--font-display);
+	--heading-font-weight: 600;
 	--heading-font-style: normal;
 	--heading-letter-spacing: -0.011em;
 
@@ -253,6 +260,21 @@ html {
 	--color-surface-contrast-800: var(--color-surface-contrast-light);
 	--color-surface-contrast-900: var(--color-surface-contrast-light);
 	--color-surface-contrast-950: var(--color-surface-contrast-light);
+}
+
+/* Brand display face — Montserrat. Applied to every heading tag directly
+   (Skeleton v3 only styles its `.h*` classes, not bare <h1>–<h6>, so the
+   theme's --heading-font-family alone doesn't reach utility-styled headings)
+   and to the .font-display utility for the wordmark + tracked rail labels.
+   Unlayered so it wins over Tailwind/Skeleton's layered base rules. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-display {
+	font-family: var(--font-display);
 }
 
 /* Respect reduced-motion globally for any transitions/animations we add. */

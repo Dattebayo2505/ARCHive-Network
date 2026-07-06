@@ -59,7 +59,7 @@
 			</span>
 
 			<div class="min-w-0 leading-tight">
-				<p class="truncate text-base font-semibold tracking-tight sm:text-lg">ARCHive Network</p>
+				<p class="font-display truncate text-base font-semibold tracking-tight sm:text-lg">ARCHive Network</p>
 				<p class="truncate text-xs text-primary-100/80">
 					{displayName || 'From profile archives to production-ready assets'}
 				</p>

@@ -155,7 +155,7 @@
 {/snippet}
 
 <nav aria-label="Albums" class="flex flex-col gap-1">
-	<p class="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-surface-500">
+	<p class="font-display px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-surface-500">
 		Albums <span class="font-normal text-surface-400">· {albums.length}</span>
 	</p>
 
@@ -169,7 +169,7 @@
 				onclick={() => toggleGroup(groupName)}
 				aria-expanded={!collapsedGroups.has(groupName)}
 			>
-				<span class="text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400 group-hover:text-surface-600 transition-colors">
+				<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400 group-hover:text-surface-600 transition-colors">
 					{groupName}
 				</span>
 				<svg viewBox="0 0 24 24" class="size-3.5 text-surface-400 transition-transform duration-200" class:-rotate-90={collapsedGroups.has(groupName)} fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -235,7 +235,7 @@
 			onclick={() => toggleGroup(groupName)}
 			aria-expanded={!collapsedGroups.has(groupName)}
 		>
-			<span class="text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400 group-hover:text-surface-600 transition-colors">
+			<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400 group-hover:text-surface-600 transition-colors">
 				{groupName}
 			</span>
 			<svg viewBox="0 0 24 24" class="size-3.5 text-surface-400 transition-transform duration-200" class:-rotate-90={collapsedGroups.has(groupName)} fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

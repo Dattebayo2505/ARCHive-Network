@@ -16,14 +16,24 @@ understand what a screen is asking of them.
 
 ## Product Purpose
 
-ARCHive Network curates a weekly Facebook export into a filtered, ready-to-upload folder. The flow
-is three logical screens — **ingest** (drop the export), **gallery** (pick ≤10 photos per named
-album; non-album photos are auto-kept), **build** (write the filtered mirror to
-`workspace/ready/<export-name>/`). The original export is **read-only and never modified** — that
-guarantee is the product's core promise. Curation only; S3 upload and the database load are
-downstream phases. Success looks like a volunteer opening the tool cold, understanding each step
-without help, confidently making their selections, and walking away sure that the right photos
-were copied and nothing original was touched.
+ARCHive Network curates a weekly Facebook export into a filtered, ready-to-upload folder —
+*"from profile archives to production-ready assets."* The flow is three logical stages:
+
+- **Ingest** — the landing screen is a **workspace picker**: open a saved week or start a new one
+  by dropping the `.zip` export, browsing to an already-unzipped folder, or pasting a known path.
+  Each week's export is its own named **workspace**, so a volunteer can juggle or hand off several.
+- **Gallery** — pick **≤10 photos per named album** (the cap is enforced server-side); non-album
+  photos are **auto-kept**. Albums can be **renamed** for the output; whole albums can be
+  **archived** (excluded from the build) and shown read-only; **videos** are their own category,
+  auto-kept with a client-captured still standing in for each clip.
+- **Build** — write the filtered mirror to `workspace/ready/<export-name>/` and confirm exactly
+  what was copied and where.
+
+The original export is **read-only and never modified** — that guarantee is the product's core
+promise. Curation only; S3 upload and the database load are downstream phases. Success looks like a
+volunteer opening the tool cold, understanding each step without help, confidently making their
+selections, and walking away sure that the right photos were copied and nothing original was
+touched.
 
 ## Brand Personality
 
@@ -40,9 +50,9 @@ album am I even looking at?".
   attention-grabbing motion. This is a work tool, not a pitch.
 - **Not a toy or consumer app.** No mascots, candy colors, playful gimmicks, or novelty that
   undercuts the "your originals are safe" trust this tool trades on.
-- **Not raw, default-Skeleton scaffolding.** The current state (untuned `cerberus` theme,
-  undecorated tiles, bare forms) reads as a half-finished prototype; the shipped product should
-  feel deliberately designed.
+- **Not raw, default-Skeleton scaffolding.** The prototype this grew from (untuned `cerberus`
+  theme, undecorated tiles, bare forms) read as half-finished. The shipped product feels
+  deliberately designed, and must never drift back.
 - **Not a cramped enterprise admin panel.** Avoid the dense-gray dashboard reflex — tiny text,
   busy toolbars, clutter. Breathing room is part of "calm."
 
@@ -57,8 +67,9 @@ album am I even looking at?".
 3. **Quiet by default, loud only at the limit.** Surfaces stay calm and neutral; the rare moments
    that need attention (an album hitting the ≤10 cap, an ingest error, the build result) are where
    color and emphasis are spent. Don't spend that emphasis on chrome.
-4. **State you can trust at a glance.** Which album is active, how full it is, what's selected,
-   what's auto-kept, what's missing — each should be legible without hunting or counting.
+4. **State you can trust at a glance.** Which workspace (week) is open, which album is active, how
+   full it is, what's selected, what's auto-kept, what's archived, what's missing — each should be
+   legible without hunting or counting.
 5. **Green is identity, not decoration.** DLSU green signals "this is the Archers Network tool"
    and anchors primary actions. It is not a theme to drench the page in.
 
