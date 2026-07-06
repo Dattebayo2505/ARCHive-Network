@@ -16,6 +16,7 @@ from ..inventory.parser import build_inventory
 from ..selection.policy import DefaultPolicy
 from ..selection.state import SelectionState
 from ..thumbnails.service import ThumbnailService
+from ..thumbnails.video_store import VideoThumbnailStore
 from .session import Session
 
 router = APIRouter()
@@ -56,6 +57,7 @@ def _start_session(request: Request, export_root: Path) -> dict:
             workspace / "selection.json", DefaultPolicy(uncapped_albums=uncapped)
         ),
         thumbnails=ThumbnailService(workspace / "thumbs"),
+        video_thumbs=VideoThumbnailStore(workspace / "thumbs" / "videos"),
     )
     return {"ok": True, "errors": [], "export_name": export_root.name}
 

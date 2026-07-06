@@ -6,6 +6,7 @@ from pathlib import Path
 from ..inventory.models import ExportInventory
 from ..selection.state import SelectionState
 from ..thumbnails.service import ThumbnailService
+from ..thumbnails.video_store import VideoThumbnailStore
 
 
 @dataclass
@@ -14,3 +15,4 @@ class Session:
     inventory: ExportInventory
     selection: SelectionState
     thumbnails: ThumbnailService
+    video_thumbs: VideoThumbnailStore

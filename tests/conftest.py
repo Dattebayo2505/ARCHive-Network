@@ -79,6 +79,50 @@ def export_root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def video_export_root(tmp_path: Path) -> Path:
+    """A minimal export with one named album plus one video (mp4 on disk,
+    referenced from profile_posts and listed in videos.json)."""
+    root = tmp_path / "video_export"
+    media = root / "posts" / "media"
+    album_dir = root / "posts" / "album"
+    album_dir.mkdir(parents=True)
+
+    (album_dir / "0.json").write_text(
+        json.dumps({"name": "Animo Fest", "photos": [_photo_record("AnimoFest_111", "a01", "Photo 1")]}),
+        encoding="utf-8",
+    )
+    _img(media / "AnimoFest_111" / "a01.jpg")
+
+    vid_uri = f"{PREFIX}/posts/media/videos/v01.mp4"
+    (media / "videos").mkdir(parents=True)
+    (media / "videos" / "v01.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42FAKEBYTES")
+
+    posts = [
+        {
+            "data": [{"post": "Watch this clip #ARCH"}],
+            "attachments": [{"data": [{"media": {"uri": vid_uri, "creation_timestamp": 1_700_000_500, "title": ""}}]}],
+        },
+        {
+            "data": [{"post": "Great game"}],
+            "attachments": [{"data": [{"media": _photo_record("AnimoFest_111", "a01", "Photo 1")}]}],
+        },
+    ]
+    (root / "posts" / "profile_posts_1.json").write_text(json.dumps(posts), encoding="utf-8")
+    (root / "posts" / "videos.json").write_text(
+        json.dumps({"videos_v2": [{"uri": vid_uri, "creation_timestamp": 1_700_000_500, "title": "", "description": "Watch this clip"}]}),
+        encoding="utf-8",
+    )
+    for name in (
+        "content_sharing_links_you_have_created.json",
+        "edits_you_made_to_posts.json",
+        "places_you_have_been_tagged_in.json",
+    ):
+        (root / "posts" / name).write_text("[]", encoding="utf-8")
+
+    return root
+
+
+@pytest.fixture
 def grouping_export_root(tmp_path: Path) -> Path:
     """Special album with a 2-photo group, a 3-photo group, a singleton, a no-caption
     photo, and a news-tag photo (archived first); plus a normal album sharing a caption."""

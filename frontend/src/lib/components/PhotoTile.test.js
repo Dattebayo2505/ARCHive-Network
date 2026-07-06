@@ -43,4 +43,22 @@ describe('PhotoTile', () => {
 		expect(onToggle).not.toHaveBeenCalled();
 		expect(screen.getByText('BREAKING')).toBeInTheDocument();
 	});
+
+	it('renders a video tile with a play badge, no checkmark, and opens on click', async () => {
+		const onToggle = vi.fn();
+		render(PhotoTile, {
+			props: {
+				photo: { fbid: 'v01', exists: true, caption: 'clip' },
+				src: '/api/video/v01/thumbnail',
+				video: true,
+				selectable: false,
+				onToggle
+			}
+		});
+		const tile = screen.getByTestId('tile-v01');
+		expect(tile).not.toBeDisabled();
+		expect(screen.getByTestId('video-badge-v01')).toBeInTheDocument();
+		await fireEvent.click(tile);
+		expect(onToggle).toHaveBeenCalledOnce();
+	});
 });

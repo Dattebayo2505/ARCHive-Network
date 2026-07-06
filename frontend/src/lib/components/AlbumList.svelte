@@ -1,5 +1,5 @@
 <script>
-	let { albums, nonAlbumCount, archiveCount = 0, activeId, onSelect, onContextMenu } = $props();
+	let { albums, nonAlbumCount, archiveCount = 0, videosCount = 0, activeId, onSelect, onContextMenu } = $props();
 </script>
 
 <nav aria-label="Albums" class="flex flex-col gap-1">
@@ -64,6 +64,28 @@
 			{/if}
 		</div>
 	{/each}
+
+	{#if videosCount > 0}
+		{@const active = activeId === '__videos__'}
+		<div class="my-1 h-px bg-surface-300"></div>
+		<button
+			type="button"
+			class="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+			class:bg-primary-100={active}
+			class:text-primary-900={active}
+			class:font-semibold={active}
+			class:text-surface-700={!active}
+			class:hover:bg-surface-200={!active}
+			onclick={() => onSelect('__videos__')}
+			aria-current={active ? 'true' : undefined}
+			title="Videos are always kept — pick a still frame to represent each one."
+		>
+			<svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor"
+				stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="14" height="14" rx="2" /><path d="m16 10 6-3v10l-6-3z" /></svg>
+			<span class="truncate">Videos</span>
+			<span class="ml-auto shrink-0 rounded-full bg-surface-200 px-2 py-0.5 text-xs font-medium tabular-nums text-surface-600">{videosCount}</span>
+		</button>
+	{/if}
 
 	{#if archiveCount > 0}
 		{@const active = activeId === '__archive__'}

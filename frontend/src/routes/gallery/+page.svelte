@@ -1,11 +1,13 @@
 <script>
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
-	import { build, reveal, thumbUrl, previewUrl, toggle } from '$lib/api.js';
+	import { build, reveal, thumbUrl, previewUrl, toggle, videoThumbUrl, videoUrl } from '$lib/api.js';
+	import { seedMissingThumbnails, thumbnailMissing } from '$lib/videoThumbs.js';
 	import { DEFAULT_SIZE, SIZE_STORAGE_KEY, VIEW_SIZES } from '$lib/viewSizes.js';
 	import AlbumList from '$lib/components/AlbumList.svelte';
 	import PhotoGrid from '$lib/components/PhotoGrid.svelte';
 	import ViewControls from '$lib/components/ViewControls.svelte';
 	import PhotoPreview from '$lib/components/PhotoPreview.svelte';
+	import VideoPreview from '$lib/components/VideoPreview.svelte';
 	import ContextMenu from '$lib/components/ContextMenu.svelte';
 	import BuildSummary from '$lib/components/BuildSummary.svelte';
 	import SelectionPanel from '$lib/components/SelectionPanel.svelte';
@@ -15,6 +17,14 @@
 	let activeId = $state(inventory.albums[0]?.fb_album_id ?? null);
 	let archive = $derived(inventory.archive ?? []);
 	let showArchive = $derived(activeId === '__archive__');
+	let videos = $derived(inventory.videos ?? []);
+	let showVideos = $derived(activeId === '__videos__');
+	let videoPreview = $state(null); // the video obj being picked, or null
+	// Cache-bust key per video so a freshly-seeded/chosen still reloads in the grid.
+	let thumbVersion = $state({});
+	function videoTileSrc(fbid) {
+		return `${videoThumbUrl(fbid)}?v=${thumbVersion[fbid] ?? 0}`;
+	}
 	let buildResult = $state(null);
 	let building = $state(false);
 	let gridSize = $state(DEFAULT_SIZE);
@@ -49,6 +59,17 @@
 	$effect(() => {
 		const saved = localStorage.getItem(SIZE_STORAGE_KEY);
 		if (saved && VIEW_SIZES.some((s) => s.id === saved)) gridSize = saved;
+	});
+
+	// On load, give every video a default first-frame still so the grid shows real
+	// frames and every video is build-ready. Sequential + throttled via the util.
+	$effect(() => {
+		if (!videos.length) return;
+		seedMissingThumbnails(videos, {
+			videoSrc: videoUrl,
+			needsSeed: (fbid) => thumbnailMissing(fbid),
+			onSeeded: (fbid) => (thumbVersion = { ...thumbVersion, [fbid]: Date.now() })
+		});
 	});
 
 	function setSize(id) {
@@ -125,6 +146,33 @@
 		};
 	}
 
+	function openVideoPreview(video) {
+		videoPreview = video;
+	}
+
+	function onVideoChosen(fbid) {
+		thumbVersion = { ...thumbVersion, [fbid]: Date.now() };
+	}
+
+	// Right-click a video → choose its thumbnail (replaces "Preview") or open its file.
+	function openVideoMenu(video, e) {
+		menu = {
+			open: true,
+			x: e.clientX,
+			y: e.clientY,
+			items: [
+				{ label: 'Choose Thumbnail', icon: 'preview', onSelect: () => openVideoPreview(video) },
+				{
+					label: 'Show in File Explorer',
+					icon: 'folder',
+					disabled: !video.exists,
+					hint: video.exists ? undefined : 'missing',
+					onSelect: () => revealOnDisk({ photoFbid: video.fbid })
+				}
+			]
+		};
+	}
+
 	// Right-click an archived photo → preview it (read-only) or open its file.
 	function openArchiveMenu(photo, e) {
 		const index = archive.findIndex((p) => p.fbid === photo.fbid);
@@ -172,6 +220,7 @@
 				albums={inventory.albums}
 				nonAlbumCount={inventory.non_album.length}
 				archiveCount={archive.length}
+				videosCount={videos.length}
 				{activeId}
 				onSelect={(id) => (activeId = id)}
 				onContextMenu={openAlbumMenu}
@@ -232,6 +281,33 @@
 						size={gridSize}
 						selectable={false}
 						onContextMenu={openArchiveMenu}
+					/>
+				</div>
+			{/if}
+		{:else if showVideos}
+			<header class="mb-4 shrink-0 pt-1 pb-3">
+				<div class="flex min-w-0 items-baseline gap-3">
+					<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Videos</h1>
+					<p class="shrink-0 text-sm font-medium tabular-nums text-surface-500">
+						{videos.length} · always kept
+					</p>
+				</div>
+				<p class="mt-2 text-sm text-surface-500">
+					Videos aren’t imported — a still frame replaces each one. Click a video to play it and
+					choose the frame, or right-click for “Choose Thumbnail”. A first frame is picked by default.
+				</p>
+			</header>
+
+			{#if videos.length}
+				<div class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
+					<PhotoGrid
+						album={{ name: 'Videos', photos: videos }}
+						thumb={videoTileSrc}
+						size={gridSize}
+						selectable={false}
+						video
+						onToggle={openVideoPreview}
+						onContextMenu={openVideoMenu}
 					/>
 				</div>
 			{/if}
@@ -351,6 +427,14 @@
 		startIndex={previewStart}
 		{onToggle}
 		onClose={() => (previewOpen = false)}
+	/>
+{/if}
+
+{#if videoPreview}
+	<VideoPreview
+		video={videoPreview}
+		onThumbnailChosen={onVideoChosen}
+		onClose={() => (videoPreview = null)}
 	/>
 {/if}
 

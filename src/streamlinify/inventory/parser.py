@@ -9,6 +9,13 @@ from .models import Album, ExportInventory, Photo
 from .text import epoch_to_dt, fix_mojibake
 
 
+_VIDEO_EXTS = {".mp4", ".mov", ".webm"}
+
+
+def is_video_uri(uri: str) -> bool:
+    return Path(uri).suffix.lower() in _VIDEO_EXTS
+
+
 def resolve_uri(uri: str, export_root: Path) -> Path:
     idx = uri.find("posts/")
     rel = uri[idx:] if idx != -1 else uri
@@ -93,8 +100,10 @@ def build_inventory(export_root: Path) -> ExportInventory:
             )
         )
 
-    # Non-album photos = post media whose fbid is not in any album file (dedup by fbid).
+    # Non-album media = post media whose fbid is not in any album file (dedup by fbid).
+    # Videos are split off into their own category (auto-kept, thumbnail-replaced).
     non_album: list[Photo] = []
+    videos: list[Photo] = []
     seen: set[str] = set()
     for r in post_records:
         fbid = photo_fbid(r["uri"])
@@ -103,20 +112,20 @@ def build_inventory(export_root: Path) -> ExportInventory:
         seen.add(fbid)
         resolved = resolve_uri(r["uri"], export_root)
         ts = r.get("creation_timestamp")
-        non_album.append(
-            Photo(
-                fbid=fbid,
-                original_uri=r["uri"],
-                resolved_path=resolved,
-                title=r["title"],
-                caption=r["caption"] or None,
-                creation_at=epoch_to_dt(ts) if ts else None,
-                album_fbid=None,
-                exists=resolved.exists(),
-            )
+        photo = Photo(
+            fbid=fbid,
+            original_uri=r["uri"],
+            resolved_path=resolved,
+            title=r["title"],
+            caption=r["caption"] or None,
+            creation_at=epoch_to_dt(ts) if ts else None,
+            album_fbid=None,
+            exists=resolved.exists(),
+            is_video=is_video_uri(r["uri"]),
         )
+        (videos if photo.is_video else non_album).append(photo)
 
-    inventory = ExportInventory(albums=albums, non_album_photos=non_album)
+    inventory = ExportInventory(albums=albums, non_album_photos=non_album, videos=videos)
     partition_archive(inventory)
     derive_caption_albums(inventory)
     return inventory

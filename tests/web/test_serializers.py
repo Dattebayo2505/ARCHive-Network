@@ -73,6 +73,21 @@ def test_payload_includes_archive_and_uncapped(tmp_path):
     ]
 
 
+def test_payload_includes_videos(tmp_path):
+    inv = ExportInventory(
+        videos=[
+            Photo(fbid="v01", original_uri="posts/media/videos/v01.mp4", resolved_path="x",
+                  caption="Watch this clip", exists=True, is_video=True),
+        ],
+    )
+    sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
+    payload = inventory_payload("e", inv, sel, 10)
+
+    assert payload["videos"] == [{"fbid": "v01", "caption": "Watch this clip", "exists": True}]
+    # videos are auto-kept — no `selected` key
+    assert "selected" not in payload["videos"][0]
+
+
 def test_payload_includes_album_origin(tmp_path):
     inv = ExportInventory(
         albums=[

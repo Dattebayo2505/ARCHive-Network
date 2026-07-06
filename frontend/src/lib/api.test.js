@@ -8,13 +8,34 @@ import {
 	ingestZip,
 	previewUrl,
 	reveal,
+	saveVideoThumbnail,
 	thumbUrl,
-	toggle
+	toggle,
+	videoThumbUrl,
+	videoUrl
 } from './api.js';
 
 describe('thumbUrl', () => {
 	it('builds an absolute thumb URL', () => {
 		expect(thumbUrl('a01')).toMatch(/\/api\/thumb\/a01$/);
+	});
+});
+
+describe('video api', () => {
+	it('builds video + thumbnail urls', () => {
+		expect(videoUrl('v01')).toMatch(/\/api\/video\/v01$/);
+		expect(videoThumbUrl('v01')).toMatch(/\/api\/video\/v01\/thumbnail$/);
+	});
+
+	it('POSTs the captured blob as image/jpeg', async () => {
+		const fetchFn = vi.fn().mockResolvedValue({ ok: true });
+		const blob = new Blob(['x'], { type: 'image/jpeg' });
+		const res = await saveVideoThumbnail('v01', blob, fetchFn);
+		expect(res).toEqual({ ok: true });
+		const [, opts] = fetchFn.mock.calls[0];
+		expect(opts.method).toBe('POST');
+		expect(opts.headers['content-type']).toBe('image/jpeg');
+		expect(opts.body).toBe(blob);
 	});
 });
 

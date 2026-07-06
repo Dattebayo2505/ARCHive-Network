@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..inventory.archive import is_special_album
@@ -22,6 +22,8 @@ class BuildResult:
     copied: int
     albums_written: int
     orphans: list[str]
+    videos_built: int = 0
+    skipped_videos: list[str] = field(default_factory=list)
 
 
 def _rel_from_posts(uri: str) -> str:
@@ -49,7 +51,9 @@ def _album_photo_record(photo) -> dict:
     return rec
 
 
-def build_ready_folder(export_root: Path, dest: Path, keep_fbids: set[str]) -> BuildResult:
+def build_ready_folder(
+    export_root: Path, dest: Path, keep_fbids: set[str], video_thumb_dir: Path | None = None
+) -> BuildResult:
     inventory = build_inventory(export_root)
     # Archived (news-caption) photos are set aside — never carried into the build,
     # even if a stale selection.json still names one.
@@ -69,6 +73,24 @@ def build_ready_folder(export_root: Path, dest: Path, keep_fbids: set[str]) -> B
     present_fbids = {
         p.fbid for p in inventory.all_photos() if p.fbid in keep_fbids and p.exists
     }
+
+    # Videos: never copy the .mp4. Copy the chosen still into the video's slot as a
+    # .jpg and remember the rewritten uri so the feed points at the image. A video
+    # with no chosen still is skipped and reported (the .mp4 is never a fallback).
+    video_ready: dict[str, str] = {}
+    skipped_videos: list[str] = []
+    videos_built = 0
+    for video in inventory.videos:
+        still = (video_thumb_dir / f"{video.fbid}.jpg") if video_thumb_dir else None
+        if still is None or not still.exists():
+            skipped_videos.append(video.original_uri)
+            continue
+        rel = _rel_from_posts(video.original_uri).rsplit(".", 1)[0] + ".jpg"
+        target = dest / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(still, target)
+        video_ready[video.fbid] = rel
+        videos_built += 1
 
     album_dst_dir = dest / "posts" / "album"
     albums_written = 0
@@ -123,6 +145,10 @@ def build_ready_folder(export_root: Path, dest: Path, keep_fbids: set[str]) -> B
                     if "media" not in d:
                         continue
                     fbid = photo_fbid(d["media"]["uri"])
+                    if fbid in video_ready:
+                        d["media"]["uri"] = video_ready[fbid]
+                        kept_data.append(d)
+                        continue
                     if fbid not in present_fbids:
                         continue
                     if fbid in ready_uris:
@@ -136,4 +162,11 @@ def build_ready_folder(export_root: Path, dest: Path, keep_fbids: set[str]) -> B
             json.dumps(posts, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
-    return BuildResult(ready_root=dest, copied=copied, albums_written=albums_written, orphans=orphans)
+    return BuildResult(
+        ready_root=dest,
+        copied=copied,
+        albums_written=albums_written,
+        orphans=orphans,
+        videos_built=videos_built,
+        skipped_videos=skipped_videos,
+    )

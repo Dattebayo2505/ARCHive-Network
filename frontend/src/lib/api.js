@@ -130,4 +130,22 @@ export async function reveal({ photoFbid, albumFbid } = {}, fetchFn = fetch) {
 	return { ok: true };
 }
 
+export function videoUrl(fbid) {
+	return url(`/api/video/${encodeURIComponent(fbid)}`);
+}
+
+export function videoThumbUrl(fbid) {
+	return url(`/api/video/${encodeURIComponent(fbid)}/thumbnail`);
+}
+
+/** POST a captured frame (Blob) as the chosen still for a video. */
+export async function saveVideoThumbnail(fbid, blob, fetchFn = fetch) {
+	const res = await fetchFn(url(`/api/video/${encodeURIComponent(fbid)}/thumbnail`), {
+		method: 'POST',
+		headers: { 'content-type': 'image/jpeg' },
+		body: blob
+	});
+	return { ok: res.ok };
+}
+
 export { API_BASE };

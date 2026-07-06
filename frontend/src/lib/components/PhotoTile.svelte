@@ -1,10 +1,12 @@
 <script>
-	let { photo, src = '', selectable = true, full = false, onToggle } = $props();
+	let { photo, src = '', selectable = true, full = false, video = false, onToggle } = $props();
 
 	// A tile the user can't act on right now: the album is full and this one
 	// isn't already selected. Selected tiles stay clickable so they can be removed.
-	let blocked = $derived(full && !photo.selected);
-	let interactive = $derived(selectable && photo.exists && !blocked);
+	let blocked = $derived(!video && full && !photo.selected);
+	// Videos are always kept — the tile is clickable (opens the picker), not toggleable.
+	let interactive = $derived(video ? photo.exists : selectable && photo.exists && !blocked);
+	let imgError = $state(false);
 
 	// Shape the tile to the photo's real proportions. The cached thumbnail is already
 	// scaled to the original aspect ratio (PIL fits the longest side), so the loaded
@@ -24,6 +26,7 @@
 	class:ring-2={photo.selected}
 	class:!ring-primary-600={photo.selected}
 	class:cursor-not-allowed={!interactive}
+	disabled={!interactive}
 	onclick={() => interactive && onToggle?.(photo)}
 	data-testid={`tile-${photo.fbid}`}
 	aria-pressed={photo.exists ? photo.selected : undefined}
@@ -31,13 +34,20 @@
 	title={photo.caption || photo.fbid}
 >
 	{#if photo.exists}
-		<img
-			class="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-			loading="lazy"
-			onload={measure}
-			{src}
-			alt={photo.caption || photo.fbid}
-		/>
+		{#if !imgError}
+			<img
+				class="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+				loading="lazy"
+				onload={measure}
+				onerror={() => (imgError = true)}
+				{src}
+				alt={photo.caption || photo.fbid}
+			/>
+		{:else}
+			<span class="grid size-full place-items-center bg-surface-200 text-surface-400">
+				<svg viewBox="0 0 24 24" class="size-8" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+			</span>
+		{/if}
 
 		{#if photo.archive_tag}
 			<span
@@ -48,7 +58,17 @@
 		{/if}
 
 		<!-- Selected: green wash + check badge (non-color cue = the check icon) -->
-		{#if photo.selected}
+		{#if video}
+			<span
+				data-testid={`video-badge-${photo.fbid}`}
+				class="pointer-events-none absolute inset-0 grid place-items-center"
+				aria-hidden="true"
+			>
+				<span class="grid size-11 place-items-center rounded-full bg-surface-950/55 text-surface-50 shadow-lg transition-transform group-hover:scale-110">
+					<svg viewBox="0 0 24 24" class="size-6" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+				</span>
+			</span>
+		{:else if photo.selected}
 			<span class="pointer-events-none absolute inset-0 bg-primary-700/15"></span>
 			<span
 				class="pointer-events-none absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-primary-700 text-primary-50 shadow"

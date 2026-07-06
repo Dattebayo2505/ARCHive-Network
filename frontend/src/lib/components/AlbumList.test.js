@@ -25,6 +25,17 @@ describe('AlbumList', () => {
 		expect(onSelect).toHaveBeenCalledWith('__archive__');
 	});
 
+	it('shows a Videos entry and selects it', async () => {
+		const onSelect = vi.fn();
+		render(AlbumList, {
+			props: { albums: [], nonAlbumCount: 0, videosCount: 3, activeId: null, onSelect, onContextMenu: vi.fn() }
+		});
+		const btn = screen.getByRole('button', { name: /videos/i });
+		expect(btn).toBeInTheDocument();
+		await fireEvent.click(btn);
+		expect(onSelect).toHaveBeenCalledWith('__videos__');
+	});
+
 	it('renders an origin subheader for derived albums', () => {
 		const withOrigin = [
 			{ fb_album_id: '111', name: 'Animo Fest', count_selected: 0, max_per_album: 10, origin: null },

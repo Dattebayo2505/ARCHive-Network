@@ -20,8 +20,10 @@ def create_app() -> FastAPI:
     from .web.routes_build import router as build_router
     from .web.routes_gallery import router as gallery_router
     from .web.routes_ingest import router as ingest_router
+    from .web.routes_video import router as video_router
 
     app.include_router(ingest_router)
     app.include_router(gallery_router)
+    app.include_router(video_router)
     app.include_router(build_router)
     return app

@@ -12,6 +12,7 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
 - `cd frontend && npm install && npm run dev` — run the SvelteKit UI (http://localhost:5173)
 - `cd frontend && npm run build && node build` — production UI server (http://localhost:3000)
 - `cd frontend && npm run test` — frontend Vitest unit tests
+- `cd frontend && npm run test -- <path>` — run a single frontend test file
 
 ## Environment gotchas (Windows)
 - Bare `python` is a broken uv shim — always use `uv run`.
@@ -58,6 +59,11 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
   `aspect-ratio` on its container. Tiles start as `1/1` squares and snap to the real ratio once
   loaded. SelectionPanel derives its column width from `panelWidth` so thumbnails dynamically
   resize when the panel is dragged.
+- **Videos** are a distinct gallery category (`inventory.videos`, `activeId === '__videos__'`),
+  never imported: a client-captured still (canvas → `POST /api/video/{fbid}/thumbnail`) replaces
+  each in the build, and all are auto-kept. **Gotcha:** set `<video>.crossOrigin` *before* `src`
+  or the frame canvas taints and `toBlob` returns **null** (Chrome signals taint via a null
+  callback, not a throw). Gate capture on `loadeddata` — an unbuffered frame is 0×0 → null too.
 
 ## FB-export data rules (the parser depends on these)
 - Resolve media `uri` by taking the substring from `posts/` onward (strip the export-folder prefix).
@@ -66,10 +72,16 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
 - **Never glob `posts/media/`** (~875 MB) — drive off the JSON, then verify the specific file exists.
 - Named `album/*.json` get the ≤10 cap; everything else is "non-album" (kept, currently read-only —
   `selection/policy.py` isolates this rule so it can change later).
+- Videos (`videos.json` → `videos_v2`; `posts/media/videos/*.mp4`) ship with **no thumbnails**.
+  Detect by extension (`.mp4/.mov/.webm`), split into `inventory.videos`, and replace with a
+  still in the build (feed uri rewritten `.mp4`→`.jpg`); the `.mp4` is never copied.
 
 ## Testing
 - TDD. `pytest`, one test file per module, against the **synthetic fixture** (`tests/conftest.py`
   `export_root`) — never the real export. Web routes tested via FastAPI `TestClient`.
+- Frontend tests use the plain `svelte()` plugin (`vitest.config.js`), **not** sveltekit — so
+  `$lib` is aliased there and a `ResizeObserver` stub lives in `vitest-setup.js` (needed for
+  `bind:clientWidth/Height`). Keep both, or component tests break.
 
 ## Output contract
 - Build writes a filtered mirror to `workspace/ready/<export-name>/` (gitignored). The original

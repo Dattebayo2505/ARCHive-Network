@@ -45,5 +45,6 @@ def inventory_payload(
         "max_per_album": max_per_album,
         "albums": albums,
         "non_album": [_photo(p) for p in inventory.non_album_photos],
+        "videos": [_photo(v) for v in inventory.videos],
         "archive": [_archive_photo(p) for p in inventory.archived_photos],
     }
