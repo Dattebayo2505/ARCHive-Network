@@ -191,7 +191,8 @@ def archive_album(request: Request, body: ArchiveAlbumRequest):
     # to inv.archived_albums which is excluded from builder.
     
     inv.archived_albums.append(album)
-    
+    session.archive.add(body.album_fbid)
+
     # Clear any selections for this album.
     sel = session.selection._selected.pop(body.album_fbid, None)
     if sel is not None:
@@ -214,5 +215,6 @@ def unarchive_album(request: Request, body: ArchiveAlbumRequest):
     
     inv.albums.append(album)
     inv.archived_albums = [a for a in inv.archived_albums if a.fb_album_id != body.album_fbid]
-    
+    session.archive.remove(body.album_fbid)
+
     return {"ok": True, "moved": len(album.photos)}

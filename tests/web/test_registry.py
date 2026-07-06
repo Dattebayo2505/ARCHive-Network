@@ -20,8 +20,10 @@ def test_register_is_idempotent_on_id_and_sets_last_active(tmp_path: Path):
 
 def test_list_sorted_by_last_opened_desc(tmp_path: Path):
     reg = WorkspaceRegistry(tmp_path / "workspaces.json")
-    a = tmp_path / "facebook-A-2026-01-01-x"; a.mkdir()
-    b = tmp_path / "facebook-B-2026-02-02-y"; b.mkdir()
+    a = tmp_path / "facebook-A-2026-01-01-x"
+    a.mkdir()
+    b = tmp_path / "facebook-B-2026-02-02-y"
+    b.mkdir()
     reg.register(a, managed=True, now=100.0)
     reg.register(b, managed=True, now=300.0)
 
@@ -30,7 +32,8 @@ def test_list_sorted_by_last_opened_desc(tmp_path: Path):
 
 def test_remove_drops_entry_and_clears_last_active(tmp_path: Path):
     reg = WorkspaceRegistry(tmp_path / "workspaces.json")
-    a = tmp_path / "facebook-A-2026-01-01-x"; a.mkdir()
+    a = tmp_path / "facebook-A-2026-01-01-x"
+    a.mkdir()
     reg.register(a, managed=True, now=100.0)
 
     removed = reg.remove(a.name)
@@ -41,7 +44,8 @@ def test_remove_drops_entry_and_clears_last_active(tmp_path: Path):
 
 def test_persists_across_instances(tmp_path: Path):
     path = tmp_path / "workspaces.json"
-    a = tmp_path / "facebook-A-2026-01-01-x"; a.mkdir()
+    a = tmp_path / "facebook-A-2026-01-01-x"
+    a.mkdir()
     WorkspaceRegistry(path).register(a, managed=False, now=100.0)
 
     reloaded = WorkspaceRegistry(path)
