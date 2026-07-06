@@ -34,12 +34,14 @@ def derive_caption_albums(inventory: ExportInventory) -> None:
     (synthetic id = the group's first photo fbid, name = the caption headline). Groups
     of one, and any no-caption photo, become unanchored — moved to `non_album_photos`
     with a loose `ready_uri`. Non-uncapped albums pass through unchanged. Derived albums
-    are inserted where the parent was, contiguous, so the UI can subhead them.
+    are appended at the end of the album list so that their subheadings do not swallow
+    regular albums in the UI.
     """
-    new_albums: list[Album] = []
+    normal_albums: list[Album] = []
+    derived_albums: list[Album] = []
     for album in inventory.albums:
         if not album.uncapped:
-            new_albums.append(album)
+            normal_albums.append(album)
             continue
 
         groups: "OrderedDict[str, list[Photo]]" = OrderedDict()
@@ -61,7 +63,7 @@ def derive_caption_albums(inventory: ExportInventory) -> None:
             for photo in members:
                 photo.album_fbid = synth
                 photo.ready_uri = f"posts/media/{slug}/{photo.fbid}.jpg"
-            new_albums.append(
+            derived_albums.append(
                 Album(
                     fb_album_id=synth, name=headline, origin=album.name,
                     uncapped=True, media_slug=slug, photos=members,
@@ -73,4 +75,4 @@ def derive_caption_albums(inventory: ExportInventory) -> None:
             photo.ready_uri = f"posts/media/{photo.fbid}.jpg"
             inventory.non_album_photos.append(photo)
 
-    inventory.albums = new_albums
+    inventory.albums = normal_albums + derived_albums
