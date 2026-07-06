@@ -62,9 +62,9 @@
 		scrollRaf = requestAnimationFrame(step);
 	}
 
-	// Centre the current thumbnail. Called from every navigation path (arrows,
-	// filmstrip clicks, open) rather than a reactive effect so the strip always
-	// tracks the selection.
+	// Align the current thumbnail to the left edge of the filmstrip. Called from
+	// every navigation path (arrows, filmstrip clicks, open) rather than a reactive
+	// effect so the strip always tracks the selection.
 	function scrollCurrent(smooth = true) {
 		const el = container?.querySelectorAll('[data-strip]')[index];
 		const sc = el?.parentElement;
@@ -72,7 +72,8 @@
 		// Delta from live rects → works regardless of offsetParent (the dialog is fixed).
 		const elBox = el.getBoundingClientRect();
 		const scBox = sc.getBoundingClientRect();
-		const target = sc.scrollLeft + (elBox.left - scBox.left) - (sc.clientWidth - el.clientWidth) / 2;
+		const pad = 8; // small inset so it doesn't flush against the edge
+		const target = sc.scrollLeft + (elBox.left - scBox.left) - pad;
 		const clamped = Math.max(0, Math.min(target, sc.scrollWidth - sc.clientWidth));
 		if (smooth) animateScroll(sc, clamped);
 		else sc.scrollLeft = clamped;
