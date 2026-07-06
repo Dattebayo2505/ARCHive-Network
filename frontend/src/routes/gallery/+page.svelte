@@ -278,6 +278,17 @@
 <div class="flex gap-5 lg:h-full lg:min-h-0">
 	<!-- Left rail: the album list scrolls on its own; build + counts stay pinned below it. -->
 	<aside class="relative flex shrink-0 flex-col lg:min-h-0" style="width: {albumWidth}px;">
+		<div class="mb-2 flex shrink-0 items-center justify-between gap-2 px-1">
+			<p class="min-w-0 truncate text-sm font-medium text-surface-700" title={data.displayName}>
+				{data.displayName}
+			</p>
+			<a
+				href="/?switch=1"
+				class="shrink-0 rounded-lg border border-surface-300 bg-surface-50 px-2.5 py-1 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+			>
+				Switch
+			</a>
+		</div>
 		<div
 			class="rounded-xl border border-surface-300 bg-surface-50 p-2 shadow-sm lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
 		>
