@@ -1,7 +1,9 @@
 <script>
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { ingestFolder, ingestUpload, ingestZip } from '$lib/api.js';
+	import { ingestFolder, ingestUpload, ingestZip, listWorkspaces, openWorkspace, removeWorkspace } from '$lib/api.js';
 	import FolderPicker from '$lib/components/FolderPicker.svelte';
+	import WorkspaceList from '$lib/components/WorkspaceList.svelte';
 
 	let busy = $state(false);
 	let busyLabel = $state('');
@@ -11,6 +13,8 @@
 	let pickerOpen = $state(false);
 	let typedPath = $state('');
 	let fileInput;
+	let workspaces = $state([]);
+	let resolving = $state(true); // true while deciding auto-resume vs. show list
 
 	async function handle(promise, label) {
 		busy = true;
@@ -61,9 +65,57 @@
 		if (!p || busy) return;
 		handle(ingestFolder(p), 'Reading folder…');
 	}
+
+	onMount(async () => {
+		const switching = new URLSearchParams(window.location.search).get('switch') === '1';
+		const data = await listWorkspaces();
+		workspaces = data.workspaces ?? [];
+		if (!switching && data.last_active) {
+			const result = await openWorkspace(data.last_active);
+			if (result.ok) {
+				await goto('/gallery');
+				return;
+			}
+		}
+		resolving = false;
+	});
+
+	async function openWs(id) {
+		busy = true;
+		busyLabel = 'Opening workspace…';
+		const result = await openWorkspace(id);
+		busy = false;
+		if (result.ok) await goto('/gallery');
+		else errors = [result.error ?? 'Could not open that workspace.'];
+	}
+
+	async function removeWs(id, deleteFiles) {
+		const result = await removeWorkspace(id, deleteFiles);
+		if (result.ok) {
+			workspaces = workspaces.filter((w) => w.id !== id);
+		} else {
+			errors = [result.error ?? 'Could not remove that workspace.'];
+		}
+	}
 </script>
 
 <section class="mx-auto max-w-2xl">
+	{#if resolving}
+		<div class="flex items-center justify-center py-16" aria-live="polite">
+			<span class="size-8 animate-spin rounded-full border-[3px] border-primary-200 border-t-primary-600" aria-hidden="true"></span>
+		</div>
+	{:else}
+		{#if workspaces.length}
+			<div class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold tracking-tight text-surface-900">Your workspaces</h2>
+				<WorkspaceList {workspaces} onOpen={openWs} onRemove={removeWs} />
+			</div>
+			<div class="my-6 flex items-center gap-3 text-xs font-medium tracking-wide text-surface-400">
+				<span class="h-px flex-1 bg-surface-300"></span>
+				OR ADD A NEW EXPORT
+				<span class="h-px flex-1 bg-surface-300"></span>
+			</div>
+		{/if}
 	<div class="mb-6">
 		<h1 class="text-2xl font-semibold tracking-tight text-surface-900 text-balance">
 			Load this week’s export
@@ -236,6 +288,7 @@
 			</button>
 		</form>
 	</div>
+	{/if}
 </section>
 
 <FolderPicker
