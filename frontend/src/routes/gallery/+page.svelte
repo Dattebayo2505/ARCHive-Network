@@ -708,7 +708,18 @@
 			inventory.archived_albums = inventory.archived_albums.filter(
 				(a) => a.fb_album_id !== album.fb_album_id
 			);
-			inventory.albums = [...inventory.albums, album];
+			const newAlbums = [...inventory.albums];
+			const origin = album.origin || 'Main Albums';
+			let insertIdx = newAlbums.findIndex(a => (a.origin || 'Main Albums') === origin);
+			if (insertIdx !== -1) {
+				while (insertIdx < newAlbums.length && (newAlbums[insertIdx].origin || 'Main Albums') === origin) {
+					insertIdx++;
+				}
+				newAlbums.splice(insertIdx, 0, album);
+			} else {
+				newAlbums.push(album);
+			}
+			inventory.albums = newAlbums;
 			activeId = album.fb_album_id;
 			toaster.success({
 				title: 'Album unarchived',

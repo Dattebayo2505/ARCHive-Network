@@ -78,7 +78,7 @@
 	}
 </script>
 
-{#snippet albumItem(a, i)}
+{#snippet albumItem(a, i, isArchived = false)}
 	{@const capped = a.max_per_album != null}
 	{@const full = capped && a.count_selected >= a.max_per_album}
 	{@const active = a.fb_album_id === activeId}
@@ -103,6 +103,7 @@
 			aria-current={active ? 'true' : undefined}
 		>
 			<span class="truncate" class:opacity-0={editing}>{a.name}</span>
+			{#if !isArchived}
 			<span
 				class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
 				class:opacity-0={editing}
@@ -124,6 +125,7 @@
 				{/if}
 				{#if capped}{a.count_selected}/{a.max_per_album}{:else}{a.count_selected}{/if}
 			</span>
+			{/if}
 		</button>
 		{#if editing}
 			<div
@@ -140,20 +142,9 @@
 					onblur={() => commitRename(a)}
 					aria-label="Rename album"
 				/>
-				<span
-					class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
-					class:bg-warning-200={full}
-					class:text-warning-900={full}
-					class:bg-primary-200={!full && a.count_selected > 0}
-					class:text-primary-900={!full && a.count_selected > 0}
-					class:bg-surface-200={a.count_selected === 0}
-					class:text-surface-600={a.count_selected === 0}
-				>
-					{#if capped}{a.count_selected}/{a.max_per_album}{:else}{a.count_selected}{/if}
-				</span>
 			</div>
 		{/if}
-		{#if capped}
+		{#if capped && !isArchived}
 			<div
 				class="absolute bottom-0 left-0 h-[3px] transition-[width] duration-300"
 				style="width: {progressPct}%; background-color: #1b5e20;"
@@ -253,7 +244,7 @@
 		</button>
 		{#if !collapsedGroups.has(groupName)}
 			{#each archivedAlbums as a, i (a.fb_album_id)}
-				{@render albumItem(a, i)}
+				{@render albumItem(a, i, true)}
 			{/each}
 		{/if}
 	{/if}
