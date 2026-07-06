@@ -1,3 +1,4 @@
+import json as _json
 import zipfile
 from pathlib import Path
 
@@ -22,8 +23,11 @@ def test_ingest_zip_ok(export_root: Path, tmp_path: Path, monkeypatch):
     resp = client.post("/api/ingest/zip", json={"path": str(archive)})
 
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True, "errors": [], "export_name": "export"}
-    assert client.get("/api/session").json() == {"loaded": True, "export_name": "export"}
+    body = resp.json()
+    assert body["ok"] is True and body["export_name"] == "export"
+    assert body["workspace_id"] == "export" and body["deduped"] is False
+    status = client.get("/api/session").json()
+    assert status["loaded"] is True and status["display_name"] == "export"
 
 
 def test_ingest_zip_rejects_non_zip(tmp_path: Path, monkeypatch):
@@ -68,10 +72,11 @@ def test_ingest_upload_extracts_and_removes_archive(
         resp = client.post("/api/ingest/upload", files={"file": ("export.zip", fh, "application/zip")})
 
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True, "errors": [], "export_name": "export"}
+    body = resp.json()
+    assert body["ok"] is True and body["export_name"] == "export"
     import_dir = tmp_path / "workspace" / "import"
-    # The tree is extracted…
-    assert (import_dir / "unzipped" / "export" / "posts").is_dir()
+    # The tree is extracted under workspace/imports/<stem>/…
+    assert (tmp_path / "workspace" / "imports" / "export").is_dir()
     # …and the uploaded archive is not left sitting alongside it.
     assert not (import_dir / "export.zip").exists()
     assert list(import_dir.glob("*.zip")) == []
@@ -82,8 +87,10 @@ def test_ingest_folder_ok(export_root: Path, tmp_path: Path, monkeypatch):
     client = TestClient(create_app())
     resp = client.post("/api/ingest/folder", json={"folder": str(export_root)})
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True, "errors": [], "export_name": "export"}
-    assert client.get("/api/session").json() == {"loaded": True, "export_name": "export"}
+    body = resp.json()
+    assert body["ok"] is True and body["export_name"] == "export"
+    status = client.get("/api/session").json()
+    assert status["loaded"] is True and status["display_name"] == "export"
 
 
 def test_ingest_folder_invalid(tmp_path: Path, monkeypatch):
@@ -99,3 +106,67 @@ def test_ingest_folder_invalid(tmp_path: Path, monkeypatch):
 def test_session_empty_by_default():
     client = TestClient(create_app())
     assert client.get("/api/session").json() == {"loaded": False, "export_name": None}
+
+
+def test_ingest_folder_writes_per_workspace_state(export_root, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_app())
+
+    resp = client.post("/api/ingest/folder", json={"folder": str(export_root)})
+    body = resp.json()
+
+    assert body["ok"] is True
+    assert body["workspace_id"] == "export"
+    assert body["display_name"] == "export"          # no date -> raw name
+    # Per-workspace state dir is created under workspace/state/<id>/
+    state_dir = tmp_path / "workspace" / "state" / "export"
+    assert state_dir.is_dir()
+    # The registry file exists and records this workspace.
+    reg = _json.loads((tmp_path / "workspace" / "workspaces.json").read_text())
+    assert reg["last_active"] == "export"
+    assert any(w["id"] == "export" for w in reg["workspaces"])
+
+
+def test_two_exports_keep_separate_selection(export_root, video_export_root, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_app())
+
+    client.post("/api/ingest/folder", json={"folder": str(export_root)})
+    client.post("/api/toggle", json={"album_fbid": "111", "photo_fbid": "a01"})
+
+    # Switch to the other export by ingesting it; first export's selection must not leak.
+    client.post("/api/ingest/folder", json={"folder": str(video_export_root)})
+    sel_a = tmp_path / "workspace" / "state" / "export" / "selection.json"
+    sel_b = tmp_path / "workspace" / "state" / "video_export" / "selection.json"
+    assert sel_a.exists()                    # first workspace kept its own file
+    assert not sel_b.exists() or _json.loads(sel_b.read_text()) == {}
+
+
+def test_session_status_includes_display_name(export_root, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_app())
+    client.post("/api/ingest/folder", json={"folder": str(export_root)})
+
+    status = client.get("/api/session").json()
+    assert status == {
+        "loaded": True,
+        "export_name": "export",
+        "workspace_id": "export",
+        "display_name": "export",
+    }
+
+
+def test_legacy_flat_state_adopted_into_first_workspace(export_root, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    (ws / "renames.json").write_text(_json.dumps({"111": "My Custom Name"}), encoding="utf-8")
+
+    client = TestClient(create_app())
+    client.post("/api/ingest/folder", json={"folder": str(export_root)})
+
+    moved = ws / "state" / "export" / "renames.json"
+    assert moved.exists()
+    assert _json.loads(moved.read_text()) == {"111": "My Custom Name"}
+    assert not (ws / "renames.json").exists()        # moved, not copied
+    assert (ws / ".migrated").exists()

@@ -4,11 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+from .web.registry import WorkspaceRegistry
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Streamlinify")
     app.state.session = None
+    app.state.registry = WorkspaceRegistry(settings.workspace_dir / "workspaces.json")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
