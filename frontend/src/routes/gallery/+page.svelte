@@ -14,8 +14,8 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
 	let { data } = $props();
-	let inventory = $state(data.inventory);
-	let activeId = $state(inventory.albums[0]?.fb_album_id ?? null);
+	let inventory = $state(data.inventory || {});
+	let activeId = $state(inventory.albums?.[0]?.fb_album_id ?? null);
 	let archive = $derived(inventory.archive ?? []);
 	let showArchive = $derived(activeId === '__archive__');
 	let videos = $derived(inventory.videos ?? []);
@@ -82,14 +82,14 @@
 		localStorage.setItem(SIZE_STORAGE_KEY, id);
 	}
 
-	let allAlbumsList = $derived([...inventory.albums, ...(inventory.archived_albums ?? [])]);
+	let allAlbumsList = $derived([...(inventory.albums ?? []), ...(inventory.archived_albums ?? [])]);
 	let activeAlbum = $derived(allAlbumsList.find((a) => a.fb_album_id === activeId) ?? null);
 	let isActiveArchived = $derived(inventory.archived_albums?.some(a => a.fb_album_id === activeId) ?? false);
 	let activeCap = $derived(activeAlbum ? activeAlbum.max_per_album : null); // null = no limit
 	let activeFull = $derived(
 		activeAlbum && activeCap != null ? activeAlbum.count_selected >= activeCap : false
 	);
-	let totalSelected = $derived(inventory.albums.reduce((n, a) => n + a.count_selected, 0));
+	let totalSelected = $derived((inventory.albums ?? []).reduce((n, a) => n + a.count_selected, 0));
 
 	async function onToggle(photo) {
 		if (!activeAlbum) return;
@@ -450,7 +450,7 @@
 			>
 				<p class="font-medium text-surface-700">No named albums in this export</p>
 				<p class="mt-1 text-sm text-surface-500">
-					All {inventory.non_album.length} photos are non-album and will be kept automatically.
+					All {inventory.non_album?.length ?? 0} photos are non-album and will be kept automatically.
 				</p>
 			</div>
 		{/if}

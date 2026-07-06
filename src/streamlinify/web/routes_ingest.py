@@ -52,7 +52,7 @@ def _start_session(request: Request, export_root: Path) -> dict:
     workspace = settings.workspace_dir
     inventory = build_inventory(export_root)
     renames = RenameState(workspace / "renames.json")
-    for album in inventory.albums:
+    for album in inventory.albums + inventory.archived_albums:
         album.original_name = album.name
         if album.fb_album_id in renames._renames:
             album.name = renames._renames[album.fb_album_id]
