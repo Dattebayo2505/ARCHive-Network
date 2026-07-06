@@ -34,7 +34,7 @@ def inventory_payload(
             "description": a.description,
             "origin": a.origin,
             "count_selected": selection.count(a.fb_album_id),
-            "max_per_album": None if a.uncapped else max_per_album,
+            "max_per_album": min(max_per_album, len(a.photos)),
             "photos": [
                 _photo(p, selected=selection.is_selected(a.fb_album_id, p.fbid))
                 for p in a.photos
@@ -50,7 +50,7 @@ def inventory_payload(
             "description": a.description,
             "origin": a.origin,
             "count_selected": selection.count(a.fb_album_id),
-            "max_per_album": None if a.uncapped else max_per_album,
+            "max_per_album": min(max_per_album, len(a.photos)),
             "photos": [
                 _photo(p, selected=selection.is_selected(a.fb_album_id, p.fbid))
                 for p in a.photos

@@ -66,8 +66,8 @@ def test_payload_includes_archive_and_uncapped(tmp_path):
     payload = inventory_payload("e", inv, sel, 10)
 
     caps = {a["name"]: a["max_per_album"] for a in payload["albums"]}
-    assert caps["Mobile uploads"] is None  # uncapped
-    assert caps["Animo Fest"] == 10  # capped
+    assert caps["Mobile uploads"] == 1
+    assert caps["Animo Fest"] == 1  # capped
     assert payload["archive"] == [
         {"fbid": "u01", "caption": "BREAKING: fire", "archive_tag": "BREAKING", "exists": True}
     ]

@@ -113,5 +113,5 @@ def test_inventory_exposes_derived_uncapped_albums(grouping_export_root, tmp_pat
 
     derived = [a for a in body["albums"] if a["origin"] == "Mobile uploads"]
     assert {a["name"] for a in derived} == {"HEADLINE ONE", "HEADLINE TWO"}
-    assert all(a["max_per_album"] is None for a in derived)
+    assert {a["name"]: a["max_per_album"] for a in derived} == {"HEADLINE ONE": 2, "HEADLINE TWO": 3}
     assert {p["fbid"] for p in body["archive"]} == {"t01"}

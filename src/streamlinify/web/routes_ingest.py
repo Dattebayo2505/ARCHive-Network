@@ -57,12 +57,11 @@ def _start_session(request: Request, export_root: Path) -> dict:
         if album.fb_album_id in renames._renames:
             album.name = renames._renames[album.fb_album_id]
 
-    uncapped = frozenset(a.fb_album_id for a in inventory.albums if a.uncapped)
     request.app.state.session = Session(
         export_root=export_root,
         inventory=inventory,
         selection=SelectionState(
-            workspace / "selection.json", DefaultPolicy(uncapped_albums=uncapped)
+            workspace / "selection.json", DefaultPolicy()
         ),
         thumbnails=ThumbnailService(workspace / "thumbs"),
         video_thumbs=VideoThumbnailStore(workspace / "thumbs" / "videos"),
