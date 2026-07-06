@@ -13,6 +13,8 @@ class Photo(BaseModel):
     title: str | None = None
     caption: str | None = None
     creation_at: datetime | None = None
+    post_timestamp: datetime | None = None
+    taken_timestamp: datetime | None = None
     album_fbid: str | None = None
     exists: bool = True  # False when the referenced file is missing on disk (orphan)
     archived: bool = False  # True when set aside by a news-caption tag
@@ -34,6 +36,7 @@ class Album(BaseModel):
     uncapped: bool = False  # True for the special dump albums (no per-album cap)
     origin: str | None = None  # parent dump name for a derived caption-album (UI subheader)
     media_slug: str | None = None  # derived album's media subdir "<slug>_<id>"; None for FB albums
+    post_timestamp: datetime | None = None
 
 
 class ExportInventory(BaseModel):

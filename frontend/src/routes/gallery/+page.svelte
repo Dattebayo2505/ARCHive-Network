@@ -42,6 +42,20 @@
 	let descExpanded = $state(false);
 	const toaster = createToaster();
 
+	function formatFBDate(isoString) {
+		if (!isoString) return '';
+		const date = new Date(isoString);
+		return new Intl.DateTimeFormat('en-US', {
+			timeZone: 'Asia/Manila',
+			month: 'long',
+			day: 'numeric',
+			year: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit',
+			hour12: true
+		}).format(date).replace('\u202f', ' '); // standardize space for AM/PM
+	}
+
 	$effect(() => {
 		// track activeId to reset description expansion when switching albums
 		if (activeId !== undefined) {
@@ -429,6 +443,11 @@
 							style="width: {(activeAlbum.count_selected / activeCap) * 100}%"
 						></div>
 					</div>
+				{/if}
+				{#if activeAlbum.post_timestamp}
+					<p class="mt-2 text-xs font-medium text-surface-500 uppercase tracking-wide">
+						Date posted on FB: {formatFBDate(activeAlbum.post_timestamp)}
+					</p>
 				{/if}
 				{#if activeAlbum.description}
 					{@const isLongDesc = activeAlbum.description.length > 120 || activeAlbum.description.split('\n').length > 2}

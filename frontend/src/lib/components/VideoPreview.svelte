@@ -57,6 +57,20 @@
 		document.body.style.overflow = '';
 		opener?.focus?.();
 	});
+
+	function formatFBDate(isoString) {
+		if (!isoString) return '';
+		const date = new Date(isoString);
+		return new Intl.DateTimeFormat('en-US', {
+			timeZone: 'Asia/Manila',
+			month: 'long',
+			day: 'numeric',
+			year: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit',
+			hour12: true
+		}).format(date).replace('\u202f', ' ');
+	}
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -73,7 +87,9 @@
 			<p class="truncate text-sm font-medium" title={video.caption || video.fbid}>
 				{video.caption || video.fbid}
 			</p>
-			<p class="text-xs text-surface-300">Play, then choose the frame to keep · this video is always kept</p>
+			<p class="text-xs text-surface-300">
+				Play, then choose the frame to keep · this video is always kept{#if video?.taken_timestamp || video?.creation_at} | {formatFBDate(video?.taken_timestamp || video?.creation_at)}{/if}
+			</p>
 		</div>
 		<div class="ml-auto flex items-center gap-2">
 			<button

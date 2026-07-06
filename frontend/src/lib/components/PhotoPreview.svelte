@@ -139,6 +139,20 @@
 		document.body.style.overflow = '';
 		opener?.focus?.();
 	});
+
+	function formatFBDate(isoString) {
+		if (!isoString) return '';
+		const date = new Date(isoString);
+		return new Intl.DateTimeFormat('en-US', {
+			timeZone: 'Asia/Manila',
+			month: 'long',
+			day: 'numeric',
+			year: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit',
+			hour12: true
+		}).format(date).replace('\u202f', ' ');
+	}
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -158,7 +172,7 @@
 				{current?.caption || current?.fbid}
 			</p>
 			<p class="text-xs text-surface-300 tabular-nums">
-				{index + 1} of {photos.length} · {album.name}
+				{index + 1} of {photos.length} · {album.name}{#if current?.taken_timestamp || current?.creation_at} | {formatFBDate(current?.taken_timestamp || current?.creation_at)}{/if}
 			</p>
 		</div>
 
