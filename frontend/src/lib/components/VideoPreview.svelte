@@ -126,7 +126,7 @@
 			bind:this={videoEl}
 			bind:clientHeight={videoH}
 			bind:clientWidth={videoW}
-			class="max-h-full max-w-[70%] rounded-lg shadow-2xl"
+			class="max-h-full max-w-[55%] rounded-lg shadow-2xl"
 			controls
 			onloadeddata={() => (ready = true)}
 		></video>
