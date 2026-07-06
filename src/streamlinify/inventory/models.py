@@ -17,6 +17,7 @@ class Photo(BaseModel):
     taken_timestamp: datetime | None = None
     album_fbid: str | None = None
     exists: bool = True  # False when the referenced file is missing on disk (orphan)
+    file_size_bytes: int = 0
     archived: bool = False  # True when set aside by a news-caption tag
     archive_tag: str | None = None  # the matched keyword, e.g. "BREAKING"
     is_video: bool = False  # True when the media is a video (mp4/mov/webm), not a photo

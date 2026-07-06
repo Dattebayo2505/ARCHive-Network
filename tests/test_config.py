@@ -3,7 +3,7 @@ from streamlinify.config import Settings, settings
 
 def test_defaults():
     assert settings.max_per_album == 10
-    assert settings.thumb_size == 256
+    assert settings.thumb_size == 512
 
 
 def test_env_override(monkeypatch):

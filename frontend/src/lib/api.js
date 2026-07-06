@@ -5,7 +5,7 @@ const url = (path) => `${API_BASE}${path}`;
 const jsonHeaders = { 'content-type': 'application/json' };
 
 export function thumbUrl(fbid) {
-	return url(`/api/thumb/${encodeURIComponent(fbid)}`);
+	return url(`/api/thumb/${encodeURIComponent(fbid)}?v=512`);
 }
 
 export function previewUrl(fbid) {

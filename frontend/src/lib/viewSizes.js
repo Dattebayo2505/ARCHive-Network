@@ -3,11 +3,11 @@
 // floor fed to `repeat(auto-fill, minmax(<min>, 1fr))`; `m` matches the long-standing
 // default so nothing shifts for a volunteer who never touches the control.
 export const VIEW_SIZES = [
-	{ id: 'xs', label: 'XS', name: 'Extra small', min: '5rem' },
-	{ id: 's', label: 'S', name: 'Small', min: '6.5rem' },
-	{ id: 'm', label: 'M', name: 'Medium', min: '8.5rem' },
-	{ id: 'l', label: 'L', name: 'Large', min: '11rem' },
-	{ id: 'xl', label: 'XL', name: 'Extra large', min: '14rem' }
+	{ id: 'xs', label: 'XS', name: 'Extra small', min: '6.5rem' },
+	{ id: 's', label: 'S', name: 'Small', min: '8.5rem' },
+	{ id: 'm', label: 'M', name: 'Medium', min: '11rem' },
+	{ id: 'l', label: 'L', name: 'Large', min: '14rem' },
+	{ id: 'xl', label: 'XL', name: 'Extra large', min: '18rem' }
 ];
 
 export const DEFAULT_SIZE = 'm';

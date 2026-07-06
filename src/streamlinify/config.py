@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # Must be a zip-capable build (7za.exe / 7z.exe) — the reduced 7zr.exe cannot read zips.
     seven_zip_exe: Path = _PROJECT_ROOT / "vendor" / "7za.exe"
     max_per_album: int = 10
-    thumb_size: int = 256
+    thumb_size: int = 512
     preview_size: int = 1280
     host: str = "127.0.0.1"
     port: int = 8000

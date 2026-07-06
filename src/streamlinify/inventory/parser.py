@@ -113,6 +113,7 @@ def build_inventory(export_root: Path) -> ExportInventory:
                     taken_timestamp=epoch_to_dt(taken_ts) if taken_ts else None,
                     album_fbid=album_id,
                     exists=resolved.exists(),
+                    file_size_bytes=resolved.stat().st_size if resolved.exists() else 0,
                 )
             )
             album_fbids.add(fbid)
@@ -156,6 +157,7 @@ def build_inventory(export_root: Path) -> ExportInventory:
             taken_timestamp=epoch_to_dt(r.get("taken_timestamp")) if r.get("taken_timestamp") else None,
             album_fbid=None,
             exists=resolved.exists(),
+            file_size_bytes=resolved.stat().st_size if resolved.exists() else 0,
             is_video=is_video_uri(r["uri"]),
         )
         (videos if photo.is_video else non_album).append(photo)

@@ -17,10 +17,10 @@ describe('VIEW_SIZES', () => {
 
 describe('sizeMin', () => {
 	it('returns the track floor for a known id', () => {
-		expect(sizeMin('xl')).toBe('14rem');
+		expect(sizeMin('xl')).toBe('18rem');
 	});
 
 	it('falls back to the medium floor for an unknown id', () => {
-		expect(sizeMin('bogus')).toBe('8.5rem');
+		expect(sizeMin('bogus')).toBe('11rem');
 	});
 });

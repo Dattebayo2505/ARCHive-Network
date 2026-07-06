@@ -17,7 +17,7 @@ import {
 
 describe('thumbUrl', () => {
 	it('builds an absolute thumb URL', () => {
-		expect(thumbUrl('a01')).toMatch(/\/api\/thumb\/a01$/);
+		expect(thumbUrl('a01')).toMatch(/\/api\/thumb\/a01\?v=512$/);
 	});
 });
 

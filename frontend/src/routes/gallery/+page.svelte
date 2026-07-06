@@ -126,6 +126,9 @@
 		activeAlbum && activeCap != null ? activeAlbum.count_selected >= activeCap : false
 	);
 	let totalSelected = $derived((inventory.albums ?? []).reduce((n, a) => n + a.count_selected, 0));
+	let totalSelectedMB = $derived(
+		((inventory.albums ?? []).flatMap((a) => (a.photos ?? []).filter((p) => p.selected)).reduce((sum, p) => sum + (p.file_size_bytes || 0), 0) / (1024 * 1024)).toFixed(2)
+	);
 
 	async function onToggle(photo) {
 		if (!activeAlbum) return;
@@ -344,8 +347,11 @@
 				onpointerdown={startAlbumResize}
 			></div>
 
+			<div class="mt-3 flex flex-col px-1 text-center text-xs font-medium text-surface-600">
+				{totalSelected} pages | {totalSelectedMB}MB
+			</div>
 			<button
-				class="mt-3 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-700 px-4 py-3 font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-progress disabled:opacity-70"
+				class="mt-2 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-700 px-4 py-3 font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-progress disabled:opacity-70"
 				type="button"
 				onclick={runBuild}
 				disabled={building}
@@ -363,7 +369,7 @@
 				{/if}
 			</button>
 			<p class="mt-2 shrink-0 px-1 text-center text-xs text-surface-500">
-				{totalSelected} selected · {inventory.non_album.length} auto-kept
+				{inventory.non_album.length} auto-kept
 			</p>
 		</aside>
 	{:else}
@@ -538,7 +544,7 @@
 					/>
 					<button
 						type="button"
-						class="ml-1 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+						class="ml-1 inline-flex items-center justify-center rounded-lg p-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
 						class:bg-primary-100={selectionOpen}
 						class:text-primary-800={selectionOpen}
 						class:text-surface-600={!selectionOpen}
@@ -547,8 +553,7 @@
 						title={selectionOpen ? 'Hide selection panel' : 'Show selection panel'}
 						aria-pressed={selectionOpen}
 					>
-						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-						{totalSelected}
+						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 22H4a2 2 0 0 1-2-2V6"/><path d="m22 13-1.296-1.296a2.41 2.41 0 0 0-3.408 0L11 18"/><circle cx="12" cy="8" r="2"/><rect width="16" height="16" x="6" y="2" rx="2"/></svg>
 					</button>
 				</div>
 				</div>

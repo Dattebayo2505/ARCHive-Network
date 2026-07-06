@@ -12,6 +12,7 @@ def _photo(p: Photo, selected: bool | None = None) -> dict:
         "creation_at": p.creation_at.isoformat() if p.creation_at else None,
         "post_timestamp": p.post_timestamp.isoformat() if p.post_timestamp else None,
         "taken_timestamp": p.taken_timestamp.isoformat() if p.taken_timestamp else None,
+        "file_size_bytes": p.file_size_bytes,
     }
     if selected is not None:
         d["selected"] = selected
@@ -27,6 +28,7 @@ def _archive_photo(p: Photo) -> dict:
         "creation_at": p.creation_at.isoformat() if p.creation_at else None,
         "post_timestamp": p.post_timestamp.isoformat() if p.post_timestamp else None,
         "taken_timestamp": p.taken_timestamp.isoformat() if p.taken_timestamp else None,
+        "file_size_bytes": p.file_size_bytes,
     }
 
 
