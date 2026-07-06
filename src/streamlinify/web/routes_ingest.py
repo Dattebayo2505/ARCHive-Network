@@ -13,6 +13,8 @@ from ..ingest.browse import list_directory
 from ..ingest.unzip import extract_zip
 from ..ingest.validate import find_export_root, validate_export
 from ..inventory.parser import build_inventory
+from ..inventory.models import ExportInventory
+from ..inventory.renames import RenameState
 from ..selection.policy import DefaultPolicy
 from ..selection.state import SelectionState
 from ..thumbnails.service import ThumbnailService
@@ -49,6 +51,12 @@ def _start_session(request: Request, export_root: Path) -> dict:
         return {"ok": False, "errors": list(report.missing)}
     workspace = settings.workspace_dir
     inventory = build_inventory(export_root)
+    renames = RenameState(workspace / "renames.json")
+    for album in inventory.albums:
+        album.original_name = album.name
+        if album.fb_album_id in renames._renames:
+            album.name = renames._renames[album.fb_album_id]
+
     uncapped = frozenset(a.fb_album_id for a in inventory.albums if a.uncapped)
     request.app.state.session = Session(
         export_root=export_root,
@@ -58,6 +66,7 @@ def _start_session(request: Request, export_root: Path) -> dict:
         ),
         thumbnails=ThumbnailService(workspace / "thumbs"),
         video_thumbs=VideoThumbnailStore(workspace / "thumbs" / "videos"),
+        renames=renames,
     )
     return {"ok": True, "errors": [], "export_name": export_root.name}
 

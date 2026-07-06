@@ -1,5 +1,69 @@
 <script>
-	let { albums, nonAlbumCount, archiveCount = 0, videosCount = 0, activeId, onSelect, onContextMenu } = $props();
+	import { tick } from 'svelte';
+
+	let {
+		albums, nonAlbumCount, archiveCount = 0, videosCount = 0,
+		activeId, onSelect, onContextMenu,
+		editingId = null, onRename, onCancelRename, onStartRename
+	} = $props();
+
+	let editValue = $state('');
+	let inputEl = $state();
+	let rowEls = $state({});
+	let editPos = $state({ top: 0, left: 0, width: 0 });
+
+	// When editingId changes to a valid album, seed the input value and auto-focus.
+	$effect(() => {
+		if (editingId) {
+			const album = albums.find((a) => a.fb_album_id === editingId);
+			if (album) {
+				editValue = album.name;
+				tick().then(() => {
+					const el = rowEls[editingId];
+					if (el) {
+						const rect = el.getBoundingClientRect();
+						editPos = { top: rect.top, left: rect.left, width: rect.width };
+					}
+					inputEl?.focus();
+					inputEl?.select();
+				});
+			}
+			
+			const onScroll = () => {
+				const current = albums.find((a) => a.fb_album_id === editingId);
+				if (current) commitRename(current);
+			};
+			window.addEventListener('scroll', onScroll, true);
+			window.addEventListener('resize', onScroll);
+			return () => {
+				window.removeEventListener('scroll', onScroll, true);
+				window.removeEventListener('resize', onScroll);
+			};
+		}
+	});
+
+	function commitRename(album) {
+		const trimmed = editValue.trim();
+		if (trimmed && trimmed !== album.name) {
+			onRename?.(album, trimmed);
+		} else {
+			onCancelRename?.();
+		}
+	}
+
+	function cancelRename() {
+		onCancelRename?.();
+	}
+
+	function onInputKeydown(e, album) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			commitRename(album);
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			cancelRename();
+		}
+	}
 </script>
 
 <nav aria-label="Albums" class="flex flex-col gap-1">
@@ -16,26 +80,30 @@
 		{@const capped = a.max_per_album != null}
 		{@const full = capped && a.count_selected >= a.max_per_album}
 		{@const active = a.fb_album_id === activeId}
+		{@const editing = a.fb_album_id === editingId}
 		{@const progressPct = capped ? Math.min((a.count_selected / a.max_per_album) * 100, 100) : 0}
 		<div class="relative overflow-hidden rounded-lg">
 			<button
+				bind:this={rowEls[a.fb_album_id]}
 				type="button"
 				class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-				class:bg-primary-100={active}
-				class:text-primary-900={active}
-				class:font-semibold={active}
-				class:text-surface-700={!active}
-				class:hover:bg-surface-200={!active}
+				class:bg-primary-100={active || editing}
+				class:text-primary-900={active || editing}
+				class:font-semibold={active || editing}
+				class:text-surface-700={!active && !editing}
+				class:hover:bg-surface-200={!active && !editing}
 				onclick={() => onSelect(a.fb_album_id)}
+				ondblclick={() => onStartRename?.(a.fb_album_id)}
 				oncontextmenu={(e) => {
 					e.preventDefault();
 					onContextMenu?.(a, e);
 				}}
 				aria-current={active ? 'true' : undefined}
 			>
-				<span class="truncate">{a.name}</span>
+				<span class="truncate" class:opacity-0={editing}>{a.name}</span>
 				<span
 					class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
+					class:opacity-0={editing}
 					class:bg-warning-200={full}
 					class:text-warning-900={full}
 					class:bg-primary-200={!full && a.count_selected > 0}
@@ -55,6 +123,34 @@
 					{#if capped}{a.count_selected}/{a.max_per_album}{:else}{a.count_selected}{/if}
 				</span>
 			</button>
+			{#if editing}
+				<div
+					class="fixed z-[100] flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs bg-primary-100 text-primary-900 shadow-xl border border-primary-700"
+					style="top: {editPos.top}px; left: {editPos.left}px; min-width: {editPos.width}px; max-width: 90vw;"
+				>
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						bind:this={inputEl}
+						bind:value={editValue}
+						type="text"
+						class="album-rename-input"
+						onkeydown={(e) => onInputKeydown(e, a)}
+						onblur={() => commitRename(a)}
+						aria-label="Rename album"
+					/>
+					<span
+						class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
+						class:bg-warning-200={full}
+						class:text-warning-900={full}
+						class:bg-primary-200={!full && a.count_selected > 0}
+						class:text-primary-900={!full && a.count_selected > 0}
+						class:bg-surface-200={a.count_selected === 0}
+						class:text-surface-600={a.count_selected === 0}
+					>
+						{#if capped}{a.count_selected}/{a.max_per_album}{:else}{a.count_selected}{/if}
+					</span>
+				</div>
+			{/if}
 			{#if capped}
 				<div
 					class="absolute bottom-0 left-0 h-[3px] transition-[width] duration-300"
@@ -121,3 +217,20 @@
 		<span class="ml-auto shrink-0 tabular-nums text-surface-400">{nonAlbumCount}</span>
 	</div>
 </nav>
+
+<style>
+	.album-rename-input {
+		flex: 1;
+		min-width: 0;
+		background: transparent;
+		border: none;
+		border-radius: 0;
+		outline: none;
+		font: inherit;
+		font-size: inherit;
+		line-height: inherit;
+		color: inherit;
+		padding: 0;
+		field-sizing: content;
+	}
+</style>

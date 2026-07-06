@@ -147,10 +147,32 @@ def rename_album(request: Request, body: RenameAlbumRequest):
     if album is None:
         raise HTTPException(status_code=404, detail="No such album")
     new_name = body.name.strip()
-    if not new_name:
-        raise HTTPException(status_code=400, detail="Album name cannot be empty")
+    if len(new_name) < 5:
+        raise HTTPException(status_code=400, detail="Album name must be at least 5 characters long.")
+        
+    for a in session.inventory.albums:
+        if a.fb_album_id != album.fb_album_id and a.name.lower() == new_name.lower():
+            raise HTTPException(status_code=409, detail=f'An album named "{new_name}" already exists')
     album.name = new_name
+    session.renames.set_name(album.fb_album_id, new_name)
     return {"ok": True, "name": new_name}
+
+
+@router.post("/api/album/reset")
+def reset_album(request: Request, body: RenameAlbumRequest):
+    """Reset an album's name back to its original name."""
+    session = _session(request)
+    album = next(
+        (a for a in session.inventory.albums if a.fb_album_id == body.album_fbid),
+        None,
+    )
+    if album is None:
+        raise HTTPException(status_code=404, detail="No such album")
+    
+    if album.original_name:
+        album.name = album.original_name
+    session.renames.remove_name(album.fb_album_id)
+    return {"ok": True, "name": album.name}
 
 
 @router.post("/api/album/archive")

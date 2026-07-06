@@ -31,6 +31,7 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
   `inventory/` (models, text, parser), `thumbnails/`, `selection/` (policy + state),
   `transform/` (builder + report), `web/` (thin JSON routers + serializers).
 - Business logic lives in the modules; `web/` routers stay thin. `app.py` = `create_app()` factory only.
+- State like custom album names is persisted in `workspace/renames.json` (via `renames.py`) and overrides the default FB names in the live `inventory`.
 - UI is a separate **SvelteKit** app in `frontend/` (Svelte 5, Skeleton v3 on Tailwind v4,
   `adapter-node`) talking to FastAPI over a JSON API. `web/` routers are now a thin **JSON API**
   under `/api` (+ `/api/thumb/{fbid}` images) with CORS; no server-rendered HTML. The ≤10/album cap
@@ -64,6 +65,10 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
   each in the build, and all are auto-kept. **Gotcha:** set `<video>.crossOrigin` *before* `src`
   or the frame canvas taints and `toBlob` returns **null** (Chrome signals taint via a null
   callback, not a throw). Gate capture on `loadeddata` — an unbuffered frame is 0×0 → null too.
+- **Context Menus & Overlays**: Right-clicking albums opens `ContextMenu.svelte`, which natively
+  supports nested submenus via CSS `group-hover` (with an invisible padding bridge to prevent hover gaps). 
+  Inline editing (like Rename) uses `position: fixed` overlays with `field-sizing: content` so the input 
+  expands naturally and breaks out of the sidebar constraints without being clipped.
 
 ## FB-export data rules (the parser depends on these)
 - Resolve media `uri` by taking the substring from `posts/` onward (strip the export-folder prefix).
@@ -86,3 +91,4 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
 ## Output contract
 - Build writes a filtered mirror to `workspace/ready/<export-name>/` (gitignored). The original
   export is **read-only**, never modified.
+- Custom renames (from `renames.json`) are substituted directly into the output JSON files inside `posts/album/` during the build phase, completely replacing the original Facebook dump names on disk in the ready folder.

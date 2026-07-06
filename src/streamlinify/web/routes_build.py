@@ -21,7 +21,9 @@ def build(request: Request) -> dict:
 
     ready_root = settings.workspace_dir / "ready"
     dest = ready_root / session.export_root.name
-    result = build_ready_folder(session.export_root, dest, keep, session.video_thumbs.dir)
+    result = build_ready_folder(
+        session.export_root, dest, keep, session.video_thumbs.dir, session.renames._renames
+    )
 
     # Streamlinify owns the local desktop, so pop the OS file manager open on the
     # workspace/ready/ folder — the volunteer's next step is to grab the build. A

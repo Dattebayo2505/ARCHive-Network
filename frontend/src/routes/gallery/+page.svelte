@@ -1,6 +1,6 @@
 <script>
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
-	import { build, reveal, thumbUrl, previewUrl, toggle, videoThumbUrl, videoUrl, renameAlbum, archiveAlbum } from '$lib/api.js';
+	import { build, reveal, thumbUrl, previewUrl, toggle, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum } from '$lib/api.js';
 	import { seedMissingThumbnails, thumbnailMissing } from '$lib/videoThumbs.js';
 	import { DEFAULT_SIZE, SIZE_STORAGE_KEY, VIEW_SIZES } from '$lib/viewSizes.js';
 	import AlbumList from '$lib/components/AlbumList.svelte';
@@ -33,9 +33,11 @@
 	let previewStart = $state(0);
 	let menu = $state({ open: false, x: 0, y: 0, items: [] });
 	let archiveConfirm = $state({ open: false, album: null });
+	let resetConfirm = $state({ open: false, album: null });
 	let selectionOpen = $state(false);
 	let albumWidth = $state(240);
 	let albumDragging = $state(false);
+	let editingAlbumId = $state(null);
 	const toaster = createToaster();
 
 	function startAlbumResize(e) {
@@ -205,15 +207,19 @@
 				{
 					label: 'Rename',
 					icon: 'rename',
-					onSelect: async () => {
-						const newName = window.prompt('Rename album:', album.name);
-						if (newName == null || newName.trim() === '' || newName.trim() === album.name) return;
-						const result = await renameAlbum(album.fb_album_id, newName.trim());
-						if (result.ok) {
-							album.name = result.name;
-						} else {
-							toaster.error({ title: 'Rename failed', description: result.error });
+					subItems: [
+						{
+							label: 'Reset to default name',
+							disabled: !album.original_name || album.original_name === album.name,
+							onSelect: () => {
+								if (album.original_name && album.original_name !== album.name) {
+									resetConfirm = { open: true, album };
+								}
+							}
 						}
+					],
+					onSelect: () => {
+						editingAlbumId = album.fb_album_id;
 					}
 				},
 				{
@@ -245,8 +251,20 @@
 				archiveCount={archive.length}
 				videosCount={videos.length}
 				{activeId}
-				onSelect={(id) => (activeId = id)}
+				editingId={editingAlbumId}
+				onSelect={(id) => { activeId = id; editingAlbumId = null; }}
 				onContextMenu={openAlbumMenu}
+				onRename={async (album, newName) => {
+					const result = await renameAlbum(album.fb_album_id, newName);
+					if (result.ok) {
+						album.name = result.name;
+					} else {
+						toaster.error({ title: 'Rename failed', description: result.error });
+					}
+					editingAlbumId = null;
+				}}
+				onCancelRename={() => (editingAlbumId = null)}
+				onStartRename={(id) => (editingAlbumId = id)}
 			/>
 		</div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -502,6 +520,29 @@
 			});
 		} else {
 			toaster.error({ title: 'Archive failed', description: result.error });
+		}
+	}}
+/>
+
+<ConfirmDialog
+	open={resetConfirm.open}
+	title="Reset album name"
+	message={resetConfirm.album
+		? `Are you sure you want to reset "${resetConfirm.album.name}" to its original default name "${resetConfirm.album.original_name}"?`
+		: ''}
+	confirmLabel="Yes, reset it"
+	cancelLabel="Cancel"
+	onCancel={() => (resetConfirm = { open: false, album: null })}
+	onConfirm={async () => {
+		const album = resetConfirm.album;
+		resetConfirm = { open: false, album: null };
+		if (!album) return;
+		const result = await resetAlbumName(album.fb_album_id);
+		if (result.ok) {
+			album.name = result.name;
+			toaster.success({ title: 'Name reset', description: `Album is now named "${result.name}"` });
+		} else {
+			toaster.error({ title: 'Reset failed', description: result.error });
 		}
 	}}
 />

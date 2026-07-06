@@ -73,23 +73,25 @@
 		}
 	}
 
-	// Anything that moves content out from under the menu dismisses it.
-	function onPointerDown(e) {
-		if (menuEl && !menuEl.contains(e.target)) close();
-	}
-
 	$effect(() => {
 		if (open) {
 			place();
-			window.addEventListener('pointerdown', onPointerDown, true);
-			window.addEventListener('scroll', close, true);
+			const onDown = (e) => {
+				if (menuEl && !menuEl.contains(e.target)) close();
+			};
+			const onScroll = (e) => {
+				if (menuEl && menuEl.contains(e.target)) return;
+				close();
+			};
+			
+			window.addEventListener('pointerdown', onDown, true);
+			window.addEventListener('scroll', onScroll, true);
 			window.addEventListener('resize', close);
-			window.addEventListener('blur', close);
+			
 			return () => {
-				window.removeEventListener('pointerdown', onPointerDown, true);
-				window.removeEventListener('scroll', close, true);
+				window.removeEventListener('pointerdown', onDown, true);
+				window.removeEventListener('scroll', onScroll, true);
 				window.removeEventListener('resize', close);
-				window.removeEventListener('blur', close);
 			};
 		}
 	});
@@ -107,36 +109,74 @@
 		style="left: {pos.left}px; top: {pos.top}px;"
 	>
 		{#each items as item, i (item.label)}
-			<button
-				bind:this={itemEls[i]}
-				type="button"
-				role="menuitem"
-				tabindex="-1"
-				disabled={item.disabled}
-				class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-surface-800 transition-colors hover:bg-primary-100 focus-visible:bg-primary-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-surface-400 disabled:hover:bg-transparent"
-				onclick={() => activate(item)}
-				onkeydown={(e) => onKey(e, i)}
-			>
-				<span class="grid size-4 shrink-0 place-items-center text-surface-500" aria-hidden="true">
-					{#if item.icon === 'preview'}
-						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
-							stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6" /><path d="M9 21H3v-6" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" /></svg>
-					{:else if item.icon === 'folder'}
-						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.85"
-							stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-7.5l-2-2H4a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1Z" /></svg>
-					{:else if item.icon === 'rename'}
-						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
-							stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
-					{:else if item.icon === 'archive'}
-						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
-							stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg>
+			{#if item.subItems}
+				<div class="group/submenu relative">
+					<button
+						bind:this={itemEls[i]}
+						type="button"
+						role="menuitem"
+						tabindex="-1"
+						disabled={item.disabled}
+						class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-surface-800 transition-colors hover:bg-primary-100 focus-visible:bg-primary-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-surface-400 disabled:hover:bg-transparent"
+						onclick={() => activate(item)}
+						onkeydown={(e) => onKey(e, i)}
+					>
+						<span class="grid size-4 shrink-0 place-items-center text-surface-500" aria-hidden="true">
+							{#if item.icon === 'rename'}
+								<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
+									stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+							{/if}
+						</span>
+						<span class="flex-1 truncate">{item.label}</span>
+						<svg viewBox="0 0 24 24" class="size-4 shrink-0 text-surface-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+					</button>
+					<div class="absolute left-full top-0 hidden min-w-[12rem] rounded-lg border border-surface-300 bg-surface-50 p-1 shadow-[0_12px_32px_oklch(0.16_0.006_172/0.18)] group-hover/submenu:block before:absolute before:inset-y-0 before:-left-2 before:w-2">
+						{#each item.subItems as sub}
+							<button
+								type="button"
+								role="menuitem"
+								tabindex="-1"
+								disabled={sub.disabled}
+								class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-surface-800 transition-colors hover:bg-primary-100 focus-visible:bg-primary-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-surface-400 disabled:hover:bg-transparent"
+								onclick={() => activate(sub)}
+							>
+								<span class="flex-1 truncate">{sub.label}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			{:else}
+				<button
+					bind:this={itemEls[i]}
+					type="button"
+					role="menuitem"
+					tabindex="-1"
+					disabled={item.disabled}
+					class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-surface-800 transition-colors hover:bg-primary-100 focus-visible:bg-primary-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-surface-400 disabled:hover:bg-transparent"
+					onclick={() => activate(item)}
+					onkeydown={(e) => onKey(e, i)}
+				>
+					<span class="grid size-4 shrink-0 place-items-center text-surface-500" aria-hidden="true">
+						{#if item.icon === 'preview'}
+							<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
+								stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6" /><path d="M9 21H3v-6" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" /></svg>
+						{:else if item.icon === 'folder'}
+							<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.85"
+								stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-7.5l-2-2H4a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1Z" /></svg>
+						{:else if item.icon === 'rename'}
+							<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
+								stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+						{:else if item.icon === 'archive'}
+							<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
+								stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg>
+						{/if}
+					</span>
+					<span class="flex-1 truncate">{item.label}</span>
+					{#if item.hint}
+						<span class="shrink-0 text-xs text-surface-400">{item.hint}</span>
 					{/if}
-				</span>
-				<span class="flex-1 truncate">{item.label}</span>
-				{#if item.hint}
-					<span class="shrink-0 text-xs text-surface-400">{item.hint}</span>
-				{/if}
-			</button>
+				</button>
+			{/if}
 		{/each}
 	</div>
 {/if}

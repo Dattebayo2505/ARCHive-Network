@@ -52,9 +52,14 @@ def _album_photo_record(photo) -> dict:
 
 
 def build_ready_folder(
-    export_root: Path, dest: Path, keep_fbids: set[str], video_thumb_dir: Path | None = None
+    export_root: Path, dest: Path, keep_fbids: set[str], video_thumb_dir: Path | None = None,
+    renames: dict[str, str] | None = None
 ) -> BuildResult:
     inventory = build_inventory(export_root)
+    if renames:
+        for album in inventory.albums:
+            if album.fb_album_id in renames:
+                album.name = renames[album.fb_album_id]
     # Archived (news-caption) photos are set aside — never carried into the build,
     # even if a stale selection.json still names one.
     keep_fbids = keep_fbids - {p.fbid for p in inventory.archived_photos}
@@ -126,6 +131,8 @@ def build_ready_folder(
             continue
         album_dst_dir.mkdir(parents=True, exist_ok=True)
         out = dict(raw)
+        if renames and album_path.stem in renames:
+            out["name"] = renames[album_path.stem]
         out["photos"] = kept
         (album_dst_dir / album_path.name).write_text(
             json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8"

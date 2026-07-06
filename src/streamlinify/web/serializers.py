@@ -30,6 +30,7 @@ def inventory_payload(
         {
             "fb_album_id": a.fb_album_id,
             "name": a.name,
+            "original_name": a.original_name,
             "origin": a.origin,
             "count_selected": selection.count(a.fb_album_id),
             "max_per_album": None if a.uncapped else max_per_album,

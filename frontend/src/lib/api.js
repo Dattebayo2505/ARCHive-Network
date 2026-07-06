@@ -162,6 +162,20 @@ export async function renameAlbum(albumFbid, name, fetchFn = fetch) {
 	return { ok: true, ...(await res.json()) };
 }
 
+/** Reset an album's name back to its original name. */
+export async function resetAlbumName(albumFbid, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/album/reset'), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ album_fbid: albumFbid, name: "" }) // name is required by the Pydantic model
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		return { ok: false, error: data.detail ?? 'Could not reset the album name.' };
+	}
+	return { ok: true, ...(await res.json()) };
+}
+
 /** Move every photo in an album to the archive, then remove the album. */
 export async function archiveAlbum(albumFbid, fetchFn = fetch) {
 	const res = await fetchFn(url('/api/album/archive'), {
