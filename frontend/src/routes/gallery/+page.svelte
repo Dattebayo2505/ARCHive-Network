@@ -379,7 +379,7 @@
 				<svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13 17 5-5-5-5" /><path d="m6 17 5-5-5-5" /></svg>
 			</button>
 
-			<div class="rail-divider"></div>
+			<div class="rail-divider" style="height: 1px; background: var(--color-surface-300, #d4d4d4);"></div>
 
 			<!-- Regular albums with group dividers -->
 			{#each inventory.albums as a, i (a.fb_album_id)}
@@ -869,8 +869,8 @@
 
 	.rail-divider {
 		width: 100%;
-		height: 1px;
-		background: var(--color-surface-300, #d4d4d4);
+		height: 3px;
+		background: var(--color-surface-400, #a3a3a3);
 		flex-shrink: 0;
 		margin: 0.125rem 0;
 	}
