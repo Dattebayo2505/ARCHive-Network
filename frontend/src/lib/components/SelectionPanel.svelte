@@ -1,7 +1,7 @@
 <script>
 	import { thumbUrl } from '$lib/api.js';
 
-	let { album = null, open = false, onClose, onToggle } = $props();
+	let { album = null, open = false, onClose, onToggle, onDblClick } = $props();
 
 	// --- Resizing via drag handle ---
 	let panelWidth = $state(280);
@@ -94,6 +94,10 @@
 								style="aspect-ratio: {ratios[photo.fbid] || '1 / 1'};"
 								title={photo.caption || photo.fbid}
 								onclick={() => onToggle?.(photo)}
+								ondblclick={(e) => {
+									e.preventDefault();
+									onDblClick?.(photo, e);
+								}}
 							>
 								{#if photo.exists}
 									<img

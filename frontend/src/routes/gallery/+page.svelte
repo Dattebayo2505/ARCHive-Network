@@ -474,6 +474,10 @@
 						size={gridSize}
 						selectable={false}
 						onContextMenu={openArchiveMenu}
+						onDblClick={(photo) => {
+							const index = archive.findIndex((p) => p.fbid === photo.fbid);
+							if (index !== -1) openPreviewAt(index);
+						}}
 					/>
 				</div>
 			{/if}
@@ -593,6 +597,10 @@
 					size={gridSize}
 					{onToggle}
 					onContextMenu={openPhotoMenu}
+					onDblClick={(photo) => {
+						const index = activeAlbum.photos.findIndex((p) => p.fbid === photo.fbid);
+						if (index !== -1) openPreviewAt(index);
+					}}
 					selectable={!isActiveArchived}
 				/>
 			</div>
@@ -614,6 +622,10 @@
 		open={selectionOpen}
 		onClose={() => (selectionOpen = false)}
 		onToggle={onPanelToggle}
+		onDblClick={(photo) => {
+			const index = activeAlbum.photos.findIndex((p) => p.fbid === photo.fbid);
+			if (index !== -1) openPreviewAt(index);
+		}}
 	/>
 </div>
 
