@@ -25,13 +25,16 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
   only reads 7z/xz/lzma, **not zip**. Override the path via `STREAMLINIFY_SEVEN_ZIP_EXE`.
 - Frontend needs Node 20+. From `frontend/`: `npm install` once, then `npm run dev`. The UI reads
   `VITE_API_BASE` (default `http://127.0.0.1:8000`); both servers must run together.
+- A `ConnectionResetError [WinError 10054]` / `_call_connection_lost` traceback during
+  video-thumbnail capture is **benign** Proactor asyncio noise — the browser aborts the `206`
+  range stream after grabbing frame 1; the request still completes `200`. Not a bug.
 
 ## Architecture (modularize per functionality)
 - `src/streamlinify/` package, src layout. One module = one job: `ingest/` (unzip+validate),
   `inventory/` (models, text, parser), `thumbnails/`, `selection/` (policy + state),
   `transform/` (builder + report), `web/` (thin JSON routers + serializers).
 - Business logic lives in the modules; `web/` routers stay thin. `app.py` = `create_app()` factory only.
-- State like custom album names is persisted in `workspace/renames.json` (via `renames.py`) and overrides the default FB names in the live `inventory`.
+- Per-workspace state lives under `workspace/state/<id>/` (`selection.json`, `renames.json`, `archive.json`, thumb caches); the registry of known workspaces is `workspace/workspaces.json` (`web/registry.py`). Custom album names (via `renames.py`) override the default FB names in the live `inventory`. Zip/upload workspaces are named from the **zip filename**, not the extracted folder.
 - UI is a separate **SvelteKit** app in `frontend/` (Svelte 5, Skeleton v3 on Tailwind v4,
   `adapter-node`) talking to FastAPI over a JSON API. `web/` routers are now a thin **JSON API**
   under `/api` (+ `/api/thumb/{fbid}` images) with CORS; no server-rendered HTML. The ≤10/album cap
@@ -88,8 +91,12 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
 - Frontend tests use the plain `svelte()` plugin (`vitest.config.js`), **not** sveltekit — so
   `$lib` is aliased there and a `ResizeObserver` stub lives in `vitest-setup.js` (needed for
   `bind:clientWidth/Height`). Keep both, or component tests break.
+- **Known-red on `main`:** 3 serializer tests (`test_payload_shape`,
+  `test_payload_includes_archive_and_uncapped`, `test_payload_includes_videos`) assert the
+  pre-timestamp payload shape (before `cebf333` added post/taken timestamps). Not regressions —
+  a clean `pytest -q` is 3-failed until someone owns those tests.
 
 ## Output contract
 - Build writes a filtered mirror to `workspace/ready/<export-name>/` (gitignored). The original
   export is **read-only**, never modified.
-- Custom renames (from `renames.json`) are substituted directly into the output JSON files inside `posts/album/` during the build phase, completely replacing the original Facebook dump names on disk in the ready folder.
+- Custom renames (from the workspace's `state/<id>/renames.json`) are substituted directly into the output JSON files inside `posts/album/` during the build phase, completely replacing the original Facebook dump names on disk in the ready folder.
