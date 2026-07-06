@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -115,3 +116,34 @@ def test_inventory_exposes_derived_uncapped_albums(grouping_export_root, tmp_pat
     assert {a["name"] for a in derived} == {"HEADLINE ONE", "HEADLINE TWO"}
     assert {a["name"]: a["max_per_album"] for a in derived} == {"HEADLINE ONE": 2, "HEADLINE TWO": 3}
     assert {p["fbid"] for p in body["archive"]} == {"t01"}
+
+
+def test_archive_persists_and_restores_on_reopen(export_root, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_app())
+    client.post("/api/ingest/folder", json={"folder": str(export_root)})
+
+    # Archive album 111 (Animo Fest).
+    resp = client.post("/api/album/archive", json={"album_fbid": "111"})
+    assert resp.status_code == 200
+
+    archive_file = tmp_path / "workspace" / "state" / "export" / "archive.json"
+    assert json.loads(archive_file.read_text()) == ["111"]
+
+    # Reopen the workspace: album 111 must come back as archived, not as a normal album.
+    client.app.state.session = None
+    client.post("/api/workspaces/open", json={"id": "export"})
+    inv = client.get("/api/inventory").json()
+    assert all(a["fb_album_id"] != "111" for a in inv["albums"])
+    assert any(a["fb_album_id"] == "111" for a in inv["archived_albums"])
+
+
+def test_unarchive_updates_persisted_state(export_root, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_app())
+    client.post("/api/ingest/folder", json={"folder": str(export_root)})
+    client.post("/api/album/archive", json={"album_fbid": "111"})
+    client.post("/api/album/unarchive", json={"album_fbid": "111"})
+
+    archive_file = tmp_path / "workspace" / "state" / "export" / "archive.json"
+    assert json.loads(archive_file.read_text()) == []

@@ -4,11 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+from .web.registry import WorkspaceRegistry
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Streamlinify")
     app.state.session = None
+    app.state.registry = WorkspaceRegistry(settings.workspace_dir / "workspaces.json")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -21,8 +23,10 @@ def create_app() -> FastAPI:
     from .web.routes_gallery import router as gallery_router
     from .web.routes_ingest import router as ingest_router
     from .web.routes_video import router as video_router
+    from .web.routes_workspaces import router as workspaces_router
 
     app.include_router(ingest_router)
+    app.include_router(workspaces_router)
     app.include_router(gallery_router)
     app.include_router(video_router)
     app.include_router(build_router)

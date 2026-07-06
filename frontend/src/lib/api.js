@@ -204,4 +204,51 @@ export async function unarchiveAlbum(albumFbid, fetchFn = fetch) {
 	return data; // {ok, moved}
 }
 
+/** List every known workspace, newest-opened first, plus the last-active id. */
+export async function listWorkspaces(fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/workspaces'));
+		if (!res.ok) return { workspaces: [], last_active: null };
+		return res.json();
+	} catch {
+		return { workspaces: [], last_active: null };
+	}
+}
+
+/** Open a workspace by id, rebuilding its session (restores its saved state). */
+export async function openWorkspace(id, fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/workspaces/open'), {
+			method: 'POST',
+			headers: jsonHeaders,
+			body: JSON.stringify({ id })
+		});
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({}));
+			return { ok: false, error: data.detail ?? 'Could not open that workspace.' };
+		}
+		return res.json();
+	} catch {
+		return { ok: false, error: UNREACHABLE };
+	}
+}
+
+/** Remove a workspace from the list; optionally delete its files (managed only). */
+export async function removeWorkspace(id, deleteFiles, fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/workspaces/remove'), {
+			method: 'POST',
+			headers: jsonHeaders,
+			body: JSON.stringify({ id, delete_files: deleteFiles })
+		});
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({}));
+			return { ok: false, error: data.detail ?? 'Could not remove that workspace.' };
+		}
+		return res.json();
+	} catch {
+		return { ok: false, error: UNREACHABLE };
+	}
+}
+
 export { API_BASE };
