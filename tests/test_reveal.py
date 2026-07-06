@@ -39,10 +39,17 @@ def test_command_opens_containing_dir_on_linux(tmp_path: Path):
 def test_reveal_path_runs_command(tmp_path: Path, monkeypatch):
     f = tmp_path / "photo.jpg"
     f.write_bytes(b"x")
-    calls: list[list[str]] = []
+    calls = []
     monkeypatch.setattr(reveal.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
     reveal.reveal_path(f)
-    assert calls and calls[0] == reveal.reveal_command(f)
+    assert calls
+    if reveal.sys.platform.startswith("win"):
+        # On Windows, reveal_path builds a hand-quoted string for /select,
+        # because explorer.exe needs quotes only around the path after the
+        # comma — not around the whole /select,path argument.
+        assert calls[0] == f'explorer /select,"{f}"'
+    else:
+        assert calls[0] == reveal.reveal_command(f)
 
 
 def test_reveal_path_missing_raises(tmp_path: Path):

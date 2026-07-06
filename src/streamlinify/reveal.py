@@ -43,9 +43,16 @@ def reveal_path(path: Path) -> None:
     path = Path(path)
     if not path.exists():
         raise RevealError(f"Path does not exist: {path}")
-    cmd = reveal_command(path)
     try:
         # explorer.exe exits non-zero even on success, so we never check the code.
-        subprocess.run(cmd, check=False)
+        if sys.platform.startswith("win") and not path.is_dir():
+            # explorer.exe /select, requires non-standard quoting: the
+            # /select, flag must stay unquoted and only the path after the
+            # comma gets quoted.  Both subprocess with a list (adds quotes
+            # around the whole arg) and list2cmdline produce the wrong form
+            # — causing explorer to silently fall back to %USERPROFILE%\Documents.
+            subprocess.run(f'explorer /select,"{path}"', check=False)
+        else:
+            subprocess.run(reveal_command(path), check=False)
     except OSError as exc:
         raise RevealError(str(exc)) from exc
