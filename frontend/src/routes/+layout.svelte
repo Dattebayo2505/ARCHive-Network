@@ -59,9 +59,9 @@
 			</span>
 
 			<div class="min-w-0 leading-tight">
-				<p class="truncate text-base font-semibold tracking-tight sm:text-lg">Streamlinify</p>
+				<p class="truncate text-base font-semibold tracking-tight sm:text-lg">ARCHive Network</p>
 				<p class="truncate text-xs text-primary-100/80">
-					{displayName || 'Archers Network · weekly export curation'}
+					{displayName || 'From profile archives to production-ready assets'}
 				</p>
 			</div>
 
@@ -107,7 +107,7 @@
 				<path d="M7 11V7a5 5 0 0 1 10 0v4" />
 			</svg>
 			<span>Your export is <strong class="font-semibold text-surface-700">read-only</strong> —
-				Streamlinify only writes a filtered copy to <code
+				ARCHive Network only writes a filtered copy to <code
 					class="rounded bg-surface-200 px-1 py-0.5 font-mono text-[0.7rem] text-surface-800"
 					>workspace/ready/</code
 				>.</span>

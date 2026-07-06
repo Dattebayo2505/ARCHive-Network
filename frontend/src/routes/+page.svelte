@@ -122,7 +122,7 @@
 		</h1>
 		<p class="mt-1.5 text-surface-600">
 			Drop the Facebook <em class="not-italic font-medium text-surface-700">Download Your
-				Information</em> archive, or point Streamlinify at the unzipped folder. Nothing is changed
+				Information</em> archive, or point ARCHive Network at the unzipped folder. Nothing is changed
 			until you build.
 		</p>
 	</div>

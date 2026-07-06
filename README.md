@@ -1,4 +1,4 @@
-# Streamlinify — Archers Network FB Export Curation Tool
+# ARCHive Network — Archers Network FB Export Curation Tool
 
 Local FastAPI tool that turns a weekly Facebook export into a curated,
 filtered "ready-to-upload" folder. See the design + plan in `docs/superpowers/`.

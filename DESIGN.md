@@ -1,5 +1,5 @@
 ---
-name: Streamlinify
+name: ARCHive Network
 description: Calm, confident DLSU-green curation tool for the Archers Network weekly FB export
 colors:
   primary-green: "oklch(0.56 0.13 159)"
@@ -88,7 +88,7 @@ components:
     padding: "0.125rem 0.5rem"
 ---
 
-# Design System: Streamlinify
+# Design System: ARCHive Network
 
 ## 1. Overview
 

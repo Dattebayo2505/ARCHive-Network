@@ -16,7 +16,7 @@ understand what a screen is asking of them.
 
 ## Product Purpose
 
-Streamlinify curates a weekly Facebook export into a filtered, ready-to-upload folder. The flow
+ARCHive Network curates a weekly Facebook export into a filtered, ready-to-upload folder. The flow
 is three logical screens — **ingest** (drop the export), **gallery** (pick ≤10 photos per named
 album; non-album photos are auto-kept), **build** (write the filtered mirror to
 `workspace/ready/<export-name>/`). The original export is **read-only and never modified** — that
