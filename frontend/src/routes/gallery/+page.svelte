@@ -1,6 +1,6 @@
 <script>
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
-	import { build, reveal, thumbUrl, previewUrl, toggle, videoThumbUrl, videoUrl } from '$lib/api.js';
+	import { build, reveal, thumbUrl, previewUrl, toggle, videoThumbUrl, videoUrl, renameAlbum, archiveAlbum } from '$lib/api.js';
 	import { seedMissingThumbnails, thumbnailMissing } from '$lib/videoThumbs.js';
 	import { DEFAULT_SIZE, SIZE_STORAGE_KEY, VIEW_SIZES } from '$lib/viewSizes.js';
 	import AlbumList from '$lib/components/AlbumList.svelte';
@@ -11,6 +11,7 @@
 	import ContextMenu from '$lib/components/ContextMenu.svelte';
 	import BuildSummary from '$lib/components/BuildSummary.svelte';
 	import SelectionPanel from '$lib/components/SelectionPanel.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
 	let { data } = $props();
 	let inventory = $state(data.inventory);
@@ -31,6 +32,7 @@
 	let previewOpen = $state(false);
 	let previewStart = $state(0);
 	let menu = $state({ open: false, x: 0, y: 0, items: [] });
+	let archiveConfirm = $state({ open: false, album: null });
 	let selectionOpen = $state(false);
 	let albumWidth = $state(240);
 	let albumDragging = $state(false);
@@ -193,13 +195,34 @@
 		};
 	}
 
-	// Right-click an album → open its media folder on disk.
+	// Right-click an album → rename, archive, or open its media folder on disk.
 	function openAlbumMenu(album, e) {
 		menu = {
 			open: true,
 			x: e.clientX,
 			y: e.clientY,
 			items: [
+				{
+					label: 'Rename',
+					icon: 'rename',
+					onSelect: async () => {
+						const newName = window.prompt('Rename album:', album.name);
+						if (newName == null || newName.trim() === '' || newName.trim() === album.name) return;
+						const result = await renameAlbum(album.fb_album_id, newName.trim());
+						if (result.ok) {
+							album.name = result.name;
+						} else {
+							toaster.error({ title: 'Rename failed', description: result.error });
+						}
+					}
+				},
+				{
+					label: 'Add to Archive',
+					icon: 'archive',
+					onSelect: () => {
+						archiveConfirm = { open: true, album };
+					}
+				},
 				{
 					label: 'Show in File Explorer',
 					icon: 'folder',
@@ -449,6 +472,39 @@
 {#if buildResult}
 	<BuildSummary result={buildResult} onClose={() => (buildResult = null)} />
 {/if}
+
+<ConfirmDialog
+	open={archiveConfirm.open}
+	title="Archive album"
+	message={archiveConfirm.album
+		? `Are you sure you wish to archive the album "${archiveConfirm.album.name}"? All ${archiveConfirm.album.photos.length} photo(s) will be excluded from the build.`
+		: ''}
+	confirmLabel="Yes"
+	cancelLabel="No"
+	onCancel={() => (archiveConfirm = { open: false, album: null })}
+	onConfirm={async () => {
+		const album = archiveConfirm.album;
+		archiveConfirm = { open: false, album: null };
+		if (!album) return;
+		const result = await archiveAlbum(album.fb_album_id);
+		if (result.ok) {
+			for (const photo of album.photos) {
+				photo.archived = true;
+				inventory.archive = [...(inventory.archive ?? []), photo];
+			}
+			inventory.albums = inventory.albums.filter(
+				(a) => a.fb_album_id !== album.fb_album_id
+			);
+			activeId = inventory.albums[0]?.fb_album_id ?? '__archive__';
+			toaster.success({
+				title: 'Album archived',
+				description: `${result.moved} photo(s) moved to the archive.`
+			});
+		} else {
+			toaster.error({ title: 'Archive failed', description: result.error });
+		}
+	}}
+/>
 
 <Toaster {toaster}></Toaster>
 

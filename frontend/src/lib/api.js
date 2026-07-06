@@ -148,4 +148,32 @@ export async function saveVideoThumbnail(fbid, blob, fetchFn = fetch) {
 	return { ok: res.ok };
 }
 
+/** Rename an album (display name only — the export on disk is untouched). */
+export async function renameAlbum(albumFbid, name, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/album/rename'), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ album_fbid: albumFbid, name })
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		return { ok: false, error: data.detail ?? 'Could not rename the album.' };
+	}
+	return { ok: true, ...(await res.json()) };
+}
+
+/** Move every photo in an album to the archive, then remove the album. */
+export async function archiveAlbum(albumFbid, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/album/archive'), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ album_fbid: albumFbid })
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		return { ok: false, error: data.detail ?? 'Could not archive the album.' };
+	}
+	return { ok: true, ...(await res.json()) };
+}
+
 export { API_BASE };

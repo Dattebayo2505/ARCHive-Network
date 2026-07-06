@@ -20,6 +20,15 @@ class ToggleRequest(BaseModel):
     photo_fbid: str
 
 
+class RenameAlbumRequest(BaseModel):
+    album_fbid: str
+    name: str
+
+
+class ArchiveAlbumRequest(BaseModel):
+    album_fbid: str
+
+
 class RevealRequest(BaseModel):
     photo_fbid: str | None = None
     album_fbid: str | None = None
@@ -125,3 +134,44 @@ def toggle(request: Request, body: ToggleRequest):
             status_code=409,
         )
     return {"selected": selected, "count": session.selection.count(body.album_fbid)}
+
+
+@router.post("/api/album/rename")
+def rename_album(request: Request, body: RenameAlbumRequest):
+    """Rename an album (display name only — the export on disk is untouched)."""
+    session = _session(request)
+    album = next(
+        (a for a in session.inventory.albums if a.fb_album_id == body.album_fbid),
+        None,
+    )
+    if album is None:
+        raise HTTPException(status_code=404, detail="No such album")
+    new_name = body.name.strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Album name cannot be empty")
+    album.name = new_name
+    return {"ok": True, "name": new_name}
+
+
+@router.post("/api/album/archive")
+def archive_album(request: Request, body: ArchiveAlbumRequest):
+    """Move every photo in an album to the archive, then remove the album."""
+    session = _session(request)
+    inv = session.inventory
+    album = next(
+        (a for a in inv.albums if a.fb_album_id == body.album_fbid),
+        None,
+    )
+    if album is None:
+        raise HTTPException(status_code=404, detail="No such album")
+    moved = 0
+    for photo in album.photos:
+        photo.archived = True
+        inv.archived_photos.append(photo)
+        moved += 1
+    # Clear any selections for this album.
+    sel = session.selection._selected.pop(body.album_fbid, None)
+    if sel is not None:
+        session.selection._save()
+    inv.albums = [a for a in inv.albums if a.fb_album_id != body.album_fbid]
+    return {"ok": True, "moved": moved}
