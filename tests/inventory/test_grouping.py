@@ -55,10 +55,11 @@ def test_derive_groups_unanchors_and_skips_normal_albums():
     assert by_id["g01"].photos[0].album_fbid == "g01"
     assert by_id["g01"].photos[0].ready_uri == "posts/media/H1_g01/g01.jpg"
 
-    # singleton + no-caption become unanchored non-album photos
-    na = {p.fbid: p for p in inv.non_album_photos}
+    # singleton + no-caption become unanchored non-album photos, then moved to the Non-Album album
+    non_album_album = by_id["__non_album__"]
+    na = {p.fbid: p for p in non_album_album.photos}
     assert set(na) == {"s01", "n01"}
-    assert na["s01"].album_fbid is None
+    assert na["s01"].album_fbid == "__non_album__"
     assert na["s01"].ready_uri == "posts/media/s01.jpg"
 
     # a non-uncapped album with the same caption is left untouched

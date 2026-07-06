@@ -76,6 +76,21 @@ def derive_caption_albums(inventory: ExportInventory) -> None:
             inventory.non_album_photos.append(photo)
 
     inventory.albums = normal_albums + derived_albums
+    
+    if inventory.non_album_photos:
+        non_album_album = Album(
+            fb_album_id="__non_album__",
+            name="Non-Album",
+            description="Photos without an album",
+            origin="Non-Album",
+            photos=inventory.non_album_photos,
+            uncapped=False,
+        )
+        for p in inventory.non_album_photos:
+            p.album_fbid = "__non_album__"
+        inventory.albums.append(non_album_album)
+        inventory.non_album_photos = []
+
     _deduplicate_album_captions(inventory)
 
 def _deduplicate_album_captions(inventory: ExportInventory) -> None:

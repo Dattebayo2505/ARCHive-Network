@@ -10,7 +10,7 @@ def test_video_still_replaces_mp4(video_export_root: Path, tmp_path: Path):
     (thumbs / "v01.jpg").write_bytes(b"CHOSENFRAME")
 
     dest = tmp_path / "ready"
-    result = build_ready_folder(video_export_root, dest, keep_fbids=set(), video_thumb_dir=thumbs)
+    result = build_ready_folder(video_export_root, dest, keep_fbids={"v01"}, video_thumb_dir=thumbs)
 
     # the .jpg is written in the video's slot; the .mp4 is NOT copied
     assert (dest / "posts" / "media" / "videos" / "v01.jpg").read_bytes() == b"CHOSENFRAME"
@@ -26,7 +26,7 @@ def test_video_still_replaces_mp4(video_export_root: Path, tmp_path: Path):
 
 def test_video_without_still_is_skipped(video_export_root: Path, tmp_path: Path):
     dest = tmp_path / "ready"
-    result = build_ready_folder(video_export_root, dest, keep_fbids=set(), video_thumb_dir=tmp_path / "empty")
+    result = build_ready_folder(video_export_root, dest, keep_fbids={"v01"}, video_thumb_dir=tmp_path / "empty")
 
     assert result.videos_built == 0
     assert any("v01.mp4" in s for s in result.skipped_videos)

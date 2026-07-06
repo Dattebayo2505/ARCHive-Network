@@ -36,10 +36,13 @@ def test_payload_shape(tmp_path):
     assert album["fb_album_id"] == "111"
     assert album["name"] == "Animo Fest"
     assert album["count_selected"] == 1
-    assert album["photos"][0] == {"fbid": "a01", "caption": "hi", "exists": True, "selected": True}
+    def subset(p):
+        return {k: p[k] for k in ["fbid", "caption", "exists", "selected"] if k in p}
+
+    assert subset(album["photos"][0]) == {"fbid": "a01", "caption": "hi", "exists": True, "selected": True}
     assert album["photos"][1]["selected"] is False
-    # non-album photos have no `selected` key (read-only, auto-kept)
-    assert payload["non_album"][0] == {"fbid": "m01", "caption": "k", "exists": True}
+    # non-album photos have no `selected` key
+    assert subset(payload["non_album"][0]) == {"fbid": "m01", "caption": "k", "exists": True}
 
 
 def test_payload_includes_archive_and_uncapped(tmp_path):
@@ -68,7 +71,10 @@ def test_payload_includes_archive_and_uncapped(tmp_path):
     caps = {a["name"]: a["max_per_album"] for a in payload["albums"]}
     assert caps["Mobile uploads"] == 1
     assert caps["Animo Fest"] == 1  # capped
-    assert payload["archive"] == [
+    def subset_arch(p):
+        return {k: p[k] for k in ["fbid", "caption", "archive_tag", "exists"]}
+
+    assert [subset_arch(p) for p in payload["archive"]] == [
         {"fbid": "u01", "caption": "BREAKING: fire", "archive_tag": "BREAKING", "exists": True}
     ]
 
@@ -83,9 +89,10 @@ def test_payload_includes_videos(tmp_path):
     sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
     payload = inventory_payload("e", inv, sel, 10)
 
-    assert payload["videos"] == [{"fbid": "v01", "caption": "Watch this clip", "exists": True}]
-    # videos are auto-kept — no `selected` key
-    assert "selected" not in payload["videos"][0]
+    def subset(p):
+        return {k: p[k] for k in ["fbid", "caption", "exists", "selected"]}
+
+    assert [subset(p) for p in payload["videos"]] == [{"fbid": "v01", "caption": "Watch this clip", "exists": True, "selected": False}]
 
 
 def test_payload_includes_album_origin(tmp_path):

@@ -21,7 +21,7 @@ def test_build_inventory(export_root: Path):
     inv = build_inventory(export_root)
 
     by_id = {a.fb_album_id: a for a in inv.albums}
-    assert set(by_id) == {"111", "222"}
+    assert set(by_id) == {"111", "222", "__non_album__"}
     assert by_id["111"].name == "Animo Fest"
     assert len(by_id["111"].photos) == 12
     assert by_id["222"].name == "Café Night"  # mojibake decoded
@@ -32,11 +32,11 @@ def test_build_inventory(export_root: Path):
     assert a01.caption is None
 
     # non-album photos: m01 (present) and m02 (orphan)
-    nonalbum = {p.fbid: p for p in inv.non_album_photos}
+    nonalbum = {p.fbid: p for p in by_id["__non_album__"].photos}
     assert set(nonalbum) == {"m01", "m02"}
     assert nonalbum["m01"].exists is True
     assert nonalbum["m02"].exists is False
-    assert nonalbum["m01"].album_fbid is None
+    assert nonalbum["m01"].album_fbid == "__non_album__"
 
 
 def test_build_inventory_groups_captions(grouping_export_root: Path):
@@ -56,10 +56,10 @@ def test_build_inventory_groups_captions(grouping_export_root: Path):
     assert by_id["g01"].photos[0].ready_uri == "posts/media/HEADLINEONE_g01/g01.jpg"
     assert {p.fbid for p in by_id["g03"].photos} == {"g03", "g04", "g05"}
 
-    # singleton + no-caption → unanchored non-album photos
-    na = {p.fbid: p for p in inv.non_album_photos}
+    # singleton + no-caption → unanchored non-album photos in __non_album__ album
+    na = {p.fbid: p for p in by_id["__non_album__"].photos}
     assert set(na) == {"s01", "n01"}
-    assert na["s01"].album_fbid is None
+    assert na["s01"].album_fbid == "__non_album__"
     assert na["s01"].ready_uri == "posts/media/s01.jpg"
 
     # non-special album with the same caption stays capped and untouched

@@ -332,7 +332,6 @@
 				<AlbumList
 					albums={inventory.albums}
 					archivedAlbums={inventory.archived_albums}
-					nonAlbumCount={inventory.non_album.length}
 					archiveCount={archive.length}
 					videosCount={videos.length}
 					videosSelectedCount={videos.filter(v => v.selected).length}
@@ -381,9 +380,6 @@
 					Build ready folder
 				{/if}
 			</button>
-			<p class="mt-2 shrink-0 px-1 text-center text-xs text-surface-500">
-				{inventory.non_album.length} auto-kept
-			</p>
 		</aside>
 	{:else}
 		<!-- Collapsed album rail: thin icon strip with album shortcodes -->
@@ -633,10 +629,7 @@
 			<div
 				class="grid place-items-center rounded-xl border border-dashed border-surface-300 bg-surface-50 px-6 py-16 text-center"
 			>
-				<p class="font-medium text-surface-700">No named albums in this export</p>
-				<p class="mt-1 text-sm text-surface-500">
-					All {inventory.non_album?.length ?? 0} photos are non-album and will be kept automatically.
-				</p>
+				<p class="font-medium text-surface-700">No albums in this export</p>
 			</div>
 		{/if}
 	</section>

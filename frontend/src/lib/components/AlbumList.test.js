@@ -10,7 +10,7 @@ const albums = [
 describe('AlbumList', () => {
 	it('shows a denominator only for capped albums', () => {
 		render(AlbumList, {
-			props: { albums, nonAlbumCount: 0, archiveCount: 2, activeId: '111', onSelect: vi.fn() }
+			props: { albums, archiveCount: 2, activeId: '111', onSelect: vi.fn() }
 		});
 		expect(screen.getByText('2/10')).toBeInTheDocument(); // capped
 		expect(screen.queryByText('3/10')).not.toBeInTheDocument(); // uncapped: no denominator
@@ -19,7 +19,7 @@ describe('AlbumList', () => {
 	it('selects the archive section', async () => {
 		const onSelect = vi.fn();
 		render(AlbumList, {
-			props: { albums, nonAlbumCount: 0, archiveCount: 2, activeId: '111', onSelect }
+			props: { albums, archiveCount: 2, activeId: '111', onSelect }
 		});
 		await fireEvent.click(screen.getByText('Archive'));
 		expect(onSelect).toHaveBeenCalledWith('__archive__');
@@ -28,7 +28,7 @@ describe('AlbumList', () => {
 	it('shows a Videos entry and selects it', async () => {
 		const onSelect = vi.fn();
 		render(AlbumList, {
-			props: { albums: [], nonAlbumCount: 0, videosCount: 3, activeId: null, onSelect, onContextMenu: vi.fn() }
+			props: { albums: [], videosCount: 3, activeId: null, onSelect, onContextMenu: vi.fn() }
 		});
 		const btn = screen.getByRole('button', { name: /videos/i });
 		expect(btn).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe('AlbumList', () => {
 			{ fb_album_id: 'g03', name: 'HEADLINE TWO', count_selected: 0, max_per_album: null, origin: 'Mobile uploads' }
 		];
 		render(AlbumList, {
-			props: { albums: withOrigin, nonAlbumCount: 0, archiveCount: 0, activeId: '111', onSelect: vi.fn() }
+			props: { albums: withOrigin, archiveCount: 0, activeId: '111', onSelect: vi.fn() }
 		});
 		expect(screen.getByText('Mobile uploads')).toBeInTheDocument();
 		expect(screen.getByText('HEADLINE ONE')).toBeInTheDocument();

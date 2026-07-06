@@ -2,7 +2,7 @@
 	import { tick } from 'svelte';
 
 	let {
-		albums, archivedAlbums = [], nonAlbumCount, archiveCount = 0, videosCount = 0, videosSelectedCount = 0,
+		albums, archivedAlbums = [], archiveCount = 0, videosCount = 0, videosSelectedCount = 0,
 		activeId, onSelect, onContextMenu,
 		editingId = null, onRename, onCancelRename, onStartRename
 	} = $props();
@@ -249,17 +249,7 @@
 		{/if}
 	{/if}
 
-	<div class="my-1 h-px bg-surface-300"></div>
 
-	<div
-		class="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-surface-500"
-		title="All non-album photos are kept automatically and can't be deselected."
-	>
-		<svg viewBox="0 0 24 24" class="size-4 shrink-0 text-surface-400" fill="none" stroke="currentColor"
-			stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-		<span>Auto-kept</span>
-		<span class="ml-auto shrink-0 tabular-nums text-surface-400">{nonAlbumCount}</span>
-	</div>
 </nav>
 
 <style>

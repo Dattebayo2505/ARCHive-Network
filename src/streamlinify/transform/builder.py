@@ -69,6 +69,8 @@ def build_ready_folder(
     copied = 0
     orphans: list[str] = []
     for photo in inventory.all_photos():
+        if photo.is_video:
+            continue
         if photo.fbid not in keep_fbids:
             continue
         if _copy_media(photo, export_root, dest):
@@ -77,7 +79,7 @@ def build_ready_folder(
             orphans.append(photo.original_uri)
 
     present_fbids = {
-        p.fbid for p in inventory.all_photos() if p.fbid in keep_fbids and p.exists
+        p.fbid for p in inventory.all_photos() if p.fbid in keep_fbids and p.exists and not p.is_video
     }
 
     # Videos: never copy the .mp4. Copy the chosen still into the video's slot as a
