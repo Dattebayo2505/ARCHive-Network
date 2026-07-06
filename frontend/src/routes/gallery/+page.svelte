@@ -360,7 +360,7 @@
 			></div>
 
 			<div class="mt-3 flex flex-col px-1 text-center text-xs font-medium text-surface-600">
-				{totalSelected} pages | {totalSelectedMB}MB
+				{totalSelected} images | {videos.filter(v => v.selected).length} videos | ~{totalSelectedMB}MB
 			</div>
 			<button
 				class="mt-2 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-700 px-4 py-3 font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-progress disabled:opacity-70"
