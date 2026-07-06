@@ -92,7 +92,7 @@
 		</div>
 	</header>
 
-	<main class="mx-auto w-full min-h-0 max-w-7xl flex-1 overflow-y-auto px-3 py-2 sm:px-0 sm:py-5">
+	<main class="mx-auto w-full min-h-0 flex-1 overflow-y-auto px-3 py-2 sm:px-1 sm:py-5">
 		{@render children()}
 	</main>
 
