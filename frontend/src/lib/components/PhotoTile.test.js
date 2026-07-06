@@ -24,7 +24,7 @@ describe('PhotoTile', () => {
 				onToggle: vi.fn()
 			}
 		});
-		expect(screen.getByTestId('tile-m02')).toBeDisabled();
+		expect(screen.getByTestId('tile-m02')).toHaveAttribute('aria-disabled', 'true');
 	});
 
 	it('is inert and shows its tag when not selectable (archive tile)', async () => {
@@ -38,7 +38,7 @@ describe('PhotoTile', () => {
 			}
 		});
 		const tile = screen.getByTestId('tile-u01');
-		expect(tile).toBeDisabled();
+		expect(tile).toHaveAttribute('aria-disabled', 'true');
 		await fireEvent.click(tile);
 		expect(onToggle).not.toHaveBeenCalled();
 		expect(screen.getByText('BREAKING')).toBeInTheDocument();
@@ -56,7 +56,7 @@ describe('PhotoTile', () => {
 			}
 		});
 		const tile = screen.getByTestId('tile-v01');
-		expect(tile).not.toBeDisabled();
+		expect(tile).not.toHaveAttribute('aria-disabled', 'true');
 		expect(screen.getByTestId('video-badge-v01')).toBeInTheDocument();
 		await fireEvent.click(tile);
 		expect(onToggle).toHaveBeenCalledOnce();

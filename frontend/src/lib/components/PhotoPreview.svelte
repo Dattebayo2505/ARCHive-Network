@@ -13,7 +13,11 @@
 	} = $props();
 
 	let photos = $derived(album.photos);
-	let index = $state(Math.min(Math.max(startIndex, 0), album.photos.length - 1));
+	let index = $state(0);
+	$effect(() => {
+		index = Math.min(Math.max(startIndex, 0), album.photos.length - 1);
+		requestAnimationFrame(() => scrollCurrent(false));
+	});
 	let current = $derived(photos[index]);
 
 	// Filmstrip thumbs keep each photo's real proportions: fixed height, width from
@@ -22,7 +26,10 @@
 	let stripRatio = $state({});
 	function measureStrip(e, fbid) {
 		const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
-		if (w && h) stripRatio[fbid] = `${w} / ${h}`;
+		if (w && h) {
+			stripRatio[fbid] = `${w} / ${h}`;
+			requestAnimationFrame(() => scrollCurrent(false));
+		}
 	}
 
 	// The active photo can be removed (always) but only added while the album has
@@ -132,7 +139,6 @@
 		opener = document.activeElement;
 		document.body.style.overflow = 'hidden';
 		closeBtn?.focus();
-		requestAnimationFrame(() => scrollCurrent(false)); // centre the opening photo, no glide
 	});
 
 	onDestroy(() => {

@@ -25,8 +25,7 @@
 	class="group relative block w-full overflow-hidden rounded-lg bg-surface-200 ring-1 ring-inset ring-surface-300 transition-[box-shadow,transform] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:opacity-100"
 	class:ring-2={photo.selected}
 	class:!ring-primary-600={photo.selected}
-	class:cursor-not-allowed={!interactive}
-	disabled={!interactive}
+	aria-disabled={!interactive ? 'true' : undefined}
 	onclick={() => interactive && onToggle?.(photo)}
 	data-testid={`tile-${photo.fbid}`}
 	aria-pressed={photo.exists ? photo.selected : undefined}
