@@ -1,6 +1,7 @@
 <script>
 	import '../app.css';
 	import { page } from '$app/state';
+	import { getSession } from '$lib/api.js';
 
 	let { children } = $props();
 
@@ -9,6 +10,19 @@
 		{ label: 'Curate photos', match: (p) => p.startsWith('/gallery') }
 	];
 	let activeStep = $derived(steps.findIndex((s) => s.match(page.url.pathname)));
+	// Show the back arrow only once inside a workspace (the gallery); the landing
+	// page IS the workspace picker, so there's nothing to go back to there.
+	let onGallery = $derived(page.url.pathname.startsWith('/gallery'));
+
+	// The header subtitle shows the active workspace's name. Re-fetch the session
+	// whenever the route changes so it stays in sync after opening/switching.
+	let displayName = $state('');
+	$effect(() => {
+		page.url.pathname; // reactive dependency: re-run on navigation
+		getSession().then((s) => {
+			displayName = s?.loaded ? (s.display_name ?? '') : '';
+		});
+	});
 </script>
 
 <div class="flex h-dvh flex-col bg-surface-100">
@@ -16,6 +30,21 @@
 		class="sticky top-0 z-30 border-b border-primary-800/40 bg-primary-700 text-primary-50 shadow-sm"
 	>
 		<div class="mx-auto flex max-w-7xl items-center gap-3 px-3 py-2 sm:px-4">
+			{#if onGallery}
+				<a
+					href="/?switch=1"
+					class="grid size-9 shrink-0 place-items-center rounded-lg text-primary-50 transition-colors hover:bg-primary-50/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-50"
+					aria-label="Back to workspaces"
+					title="Back to workspaces"
+				>
+					<svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round">
+						<path d="M19 12H5" />
+						<path d="m12 19-7-7 7-7" />
+					</svg>
+				</a>
+			{/if}
+
 			<!-- Archers mark: a stylised bow + arrow -->
 			<span
 				class="grid size-9 shrink-0 place-items-center rounded-lg bg-primary-50/15"
@@ -31,7 +60,9 @@
 
 			<div class="min-w-0 leading-tight">
 				<p class="truncate text-base font-semibold tracking-tight sm:text-lg">Streamlinify</p>
-				<p class="truncate text-xs text-primary-100/80">Archers Network · weekly export curation</p>
+				<p class="truncate text-xs text-primary-100/80">
+					{displayName || 'Archers Network · weekly export curation'}
+				</p>
 			</div>
 
 			<!-- Step indicator -->
