@@ -59,7 +59,9 @@ def thumb(request: Request, fbid: str):
     if photo is None or not photo.exists:
         raise HTTPException(status_code=404, detail="No such photo")
     path = session.thumbnails.thumbnail_path(fbid, photo.resolved_path)
-    return FileResponse(path, media_type="image/jpeg")
+    resp = FileResponse(path, media_type="image/jpeg")
+    resp.headers["Cache-Control"] = "private, max-age=3600, immutable"
+    return resp
 
 
 @router.get("/api/preview/{fbid}")
@@ -76,7 +78,9 @@ def preview(request: Request, fbid: str):
         raise HTTPException(status_code=404, detail="No such photo")
     previews = ThumbnailService(session.thumbnails.cache_dir, size=settings.preview_size)
     path = previews.thumbnail_path(fbid, photo.resolved_path)
-    return FileResponse(path, media_type="image/jpeg")
+    resp = FileResponse(path, media_type="image/jpeg")
+    resp.headers["Cache-Control"] = "private, max-age=3600, immutable"
+    return resp
 
 
 def _reveal_target(session, body: RevealRequest) -> Path:

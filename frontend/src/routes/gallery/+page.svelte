@@ -1,6 +1,7 @@
 <script>
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
 	import { build, reveal, thumbUrl, previewUrl, toggle, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum } from '$lib/api.js';
+	import { prefetchAlbumThumbs, clearPrefetchCache } from '$lib/imageCache.js';
 	import { seedMissingThumbnails, thumbnailMissing } from '$lib/videoThumbs.js';
 	import { DEFAULT_SIZE, SIZE_STORAGE_KEY, VIEW_SIZES } from '$lib/viewSizes.js';
 	import AlbumList from '$lib/components/AlbumList.svelte';
@@ -60,6 +61,18 @@
 		// track activeId to reset description expansion when switching albums
 		if (activeId !== undefined) {
 			descExpanded = false;
+		}
+	});
+
+	// When an album is activated, eagerly prefetch all its thumbnails so that
+	// switching back later loads images from the browser cache instantly.
+	$effect(() => {
+		if (showArchive && archive.length) {
+			prefetchAlbumThumbs('__archive__', archive, thumbUrl);
+		} else if (showVideos && videos.length) {
+			prefetchAlbumThumbs('__videos__', videos, videoTileSrc);
+		} else if (activeAlbum?.photos?.length) {
+			prefetchAlbumThumbs(activeAlbum.fb_album_id, activeAlbum.photos, thumbUrl);
 		}
 	});
 
