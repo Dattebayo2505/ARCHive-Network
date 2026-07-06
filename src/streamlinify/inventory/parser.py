@@ -96,6 +96,7 @@ def build_inventory(export_root: Path) -> ExportInventory:
             Album(
                 fb_album_id=derived_album_id or album_path.stem,
                 name=fix_mojibake(raw.get("name", album_path.stem)),
+                description=fix_mojibake(raw.get("description", "")),
                 photos=photos,
             )
         )

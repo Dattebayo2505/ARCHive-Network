@@ -29,6 +29,7 @@ class Album(BaseModel):
     fb_album_id: str
     name: str
     original_name: str | None = None
+    description: str | None = None
     photos: list[Photo] = []
     uncapped: bool = False  # True for the special dump albums (no per-album cap)
     origin: str | None = None  # parent dump name for a derived caption-album (UI subheader)

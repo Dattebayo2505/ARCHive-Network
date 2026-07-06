@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections import OrderedDict
+from collections import OrderedDict, Counter
 
 from .models import Album, ExportInventory, Photo
 
@@ -76,3 +76,29 @@ def derive_caption_albums(inventory: ExportInventory) -> None:
             inventory.non_album_photos.append(photo)
 
     inventory.albums = normal_albums + derived_albums
+    _deduplicate_album_captions(inventory)
+
+def _deduplicate_album_captions(inventory: ExportInventory) -> None:
+    """Extract recurring photo captions to the album level and remove them from photos."""
+    for album in inventory.albums:
+        if not album.photos:
+            continue
+            
+        if not album.description:
+            counts = Counter()
+            for p in album.photos:
+                if p.caption:
+                    c = p.caption.strip()
+                    if c:
+                        counts[c] += 1
+            if counts:
+                best_caption, max_count = counts.most_common(1)[0]
+                if max_count > 1:
+                    album.description = best_caption
+
+        if album.description:
+            desc_strip = album.description.strip()
+            for p in album.photos:
+                if p.caption and p.caption.strip() == desc_strip:
+                    p.caption = None
+

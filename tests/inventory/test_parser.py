@@ -26,9 +26,10 @@ def test_build_inventory(export_root: Path):
     assert len(by_id["111"].photos) == 12
     assert by_id["222"].name == "Café Night"  # mojibake decoded
 
-    # caption hoisted from the post body onto album photos a01/a02
+    # caption hoisted from the post body onto the album and removed from photos
+    assert by_id["111"].description == "Great game today! #ARCH #Animo"
     a01 = next(p for p in by_id["111"].photos if p.fbid == "a01")
-    assert a01.caption == "Great game today! #ARCH #Animo"
+    assert a01.caption is None
 
     # non-album photos: m01 (present) and m02 (orphan)
     nonalbum = {p.fbid: p for p in inv.non_album_photos}

@@ -39,7 +39,15 @@
 	let albumWidth = $state(240);
 	let albumDragging = $state(false);
 	let editingAlbumId = $state(null);
+	let descExpanded = $state(false);
 	const toaster = createToaster();
+
+	$effect(() => {
+		// track activeId to reset description expansion when switching albums
+		if (activeId !== undefined) {
+			descExpanded = false;
+		}
+	});
 
 	function startAlbumResize(e) {
 		e.preventDefault();
@@ -316,7 +324,7 @@
 	     photo grid below it scrolls (and only when the pointer is over the grid). -->
 	<section class="flex min-w-0 flex-1 flex-col lg:min-h-0">
 		{#if showArchive}
-			<header class="mb-4 shrink-0 pt-1 pb-3">
+			<header class="mb-2 shrink-0 pt-1 pb-1">
 				<div class="flex min-w-0 items-baseline gap-3">
 					<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Archive</h1>
 					<p class="shrink-0 text-sm font-medium tabular-nums text-surface-500">
@@ -341,7 +349,7 @@
 				</div>
 			{/if}
 		{:else if showVideos}
-			<header class="mb-4 shrink-0 pt-1 pb-3">
+			<header class="mb-2 shrink-0 pt-1 pb-1">
 				<div class="flex min-w-0 items-baseline gap-3">
 					<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Videos</h1>
 					<p class="shrink-0 text-sm font-medium tabular-nums text-surface-500">
@@ -370,7 +378,7 @@
 		{:else if activeAlbum}
 			<!-- Toolbar: the album, its fill state, and the view + preview controls sit above
 			     the grid and never scroll — only the grid below scrolls. -->
-			<header class="mb-4 shrink-0 pt-1 pb-3">
+			<header class="mb-2 shrink-0 pt-1 pb-1">
 				<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
 					<div class="flex min-w-0 items-baseline gap-3">
 						<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">
@@ -422,15 +430,25 @@
 						></div>
 					</div>
 				{/if}
-				<p class="mt-2 text-sm text-surface-500">
-					{#if activeCap == null}
-						Click photos to keep as many as you want from this album. Right-click a photo for more.
-					{:else if activeFull}
-						This album is full. Remove a photo to choose a different one.
-					{:else}
-						Click photos to keep up to {activeCap} from this album. Right-click a photo for more.
-					{/if}
-				</p>
+				{#if activeAlbum.description}
+					{@const isLongDesc = activeAlbum.description.length > 120 || activeAlbum.description.split('\n').length > 2}
+					<div class="mt-1.5 text-xs text-surface-600 border-l-2 border-surface-300 pl-2.5 py-0.5">
+						<p class="whitespace-pre-wrap break-words leading-relaxed" class:line-clamp-2={isLongDesc && !descExpanded}>
+							{activeAlbum.description}
+						</p>
+						{#if isLongDesc}
+							{#if !descExpanded}
+								<button type="button" class="mt-0.5 font-medium text-primary-600 hover:text-primary-700 hover:underline" onclick={() => (descExpanded = true)}>
+									Read more
+								</button>
+							{:else}
+								<button type="button" class="mt-0.5 font-medium text-primary-600 hover:text-primary-700 hover:underline" onclick={() => (descExpanded = false)}>
+									See less
+								</button>
+							{/if}
+						{/if}
+					</div>
+				{/if}
 			</header>
 
 			<div class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
