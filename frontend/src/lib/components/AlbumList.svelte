@@ -12,6 +12,18 @@
 	let rowEls = $state({});
 	let editPos = $state({ top: 0, left: 0, width: 0 });
 
+	let collapsedGroups = $state(new Set());
+
+	function toggleGroup(group) {
+		const next = new Set(collapsedGroups);
+		if (next.has(group)) {
+			next.delete(group);
+		} else {
+			next.add(group);
+		}
+		collapsedGroups = next;
+	}
+
 	// When editingId changes to a valid album, seed the input value and auto-focus.
 	$effect(() => {
 		if (editingId) {
@@ -72,11 +84,24 @@
 	</p>
 
 	{#each albums as a, i (a.fb_album_id)}
-		{#if a.origin && a.origin !== albums[i - 1]?.origin}
-			<p class="px-2 pb-0.5 pt-2 text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400">
-				{a.origin}
-			</p>
+		{@const groupName = a.origin || 'Main Albums'}
+		{@const prevGroupName = i > 0 ? (albums[i - 1].origin || 'Main Albums') : null}
+		{#if groupName !== prevGroupName}
+			<button
+				type="button"
+				class="flex w-full items-center justify-between px-2 pb-0.5 pt-2 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors"
+				onclick={() => toggleGroup(groupName)}
+				aria-expanded={!collapsedGroups.has(groupName)}
+			>
+				<span class="text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400 group-hover:text-surface-600 transition-colors">
+					{groupName}
+				</span>
+				<svg viewBox="0 0 24 24" class="size-3.5 text-surface-400 transition-transform duration-200" class:-rotate-90={collapsedGroups.has(groupName)} fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<polyline points="6 9 12 15 18 9"></polyline>
+				</svg>
+			</button>
 		{/if}
+		{#if !collapsedGroups.has(groupName)}
 		{@const capped = a.max_per_album != null}
 		{@const full = capped && a.count_selected >= a.max_per_album}
 		{@const active = a.fb_album_id === activeId}
@@ -159,6 +184,7 @@
 				></div>
 			{/if}
 		</div>
+		{/if}
 	{/each}
 
 	{#if videosCount > 0}
