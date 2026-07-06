@@ -138,9 +138,9 @@ export function videoThumbUrl(fbid) {
 	return url(`/api/video/${encodeURIComponent(fbid)}/thumbnail`);
 }
 
-/** POST a captured frame (Blob) as the chosen still for a video. */
-export async function saveVideoThumbnail(fbid, blob, fetchFn = fetch) {
-	const res = await fetchFn(url(`/api/video/${encodeURIComponent(fbid)}/thumbnail`), {
+export async function saveVideoThumbnail(fbid, blob, isAuto = false, fetchFn = fetch) {
+	const urlStr = url(`/api/video/${encodeURIComponent(fbid)}/thumbnail${isAuto ? '?auto=true' : ''}`);
+	const res = await fetchFn(urlStr, {
 		method: 'POST',
 		headers: { 'content-type': 'image/jpeg' },
 		body: blob

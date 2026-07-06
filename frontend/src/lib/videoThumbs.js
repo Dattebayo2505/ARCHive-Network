@@ -37,7 +37,7 @@ export async function seedThumbnail(fbid, videoSrc) {
 	const blob = await captureFrame(v);
 	v.removeAttribute('src');
 	v.load();
-	return saveVideoThumbnail(fbid, blob);
+	return saveVideoThumbnail(fbid, blob, true);
 }
 
 /**

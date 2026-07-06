@@ -42,12 +42,12 @@ def get_video_thumbnail(request: Request, fbid: str):
 
 
 @router.post("/api/video/{fbid}/thumbnail")
-async def save_video_thumbnail(request: Request, fbid: str):
+async def save_video_thumbnail(request: Request, fbid: str, auto: bool = False):
     """Store a frame captured client-side (raw JPEG bytes in the request body)."""
     session = _session(request)
     _video(session, fbid)
     data = await request.body()
     if not data:
         raise HTTPException(status_code=400, detail="Empty thumbnail body")
-    session.video_thumbs.save(fbid, data)
+    session.video_thumbs.save(fbid, data, is_auto=auto)
     return {"ok": True}

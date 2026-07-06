@@ -30,7 +30,7 @@ class DefaultPolicy:
     uncapped_albums: frozenset[str] = frozenset()
 
     def can_select(self, album_fbid: str, current_count: int) -> bool:
-        if album_fbid in self.uncapped_albums:
+        if album_fbid in self.uncapped_albums or album_fbid == "__videos__":
             return True
         return current_count < self.max_per_album
 

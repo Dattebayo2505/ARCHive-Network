@@ -49,6 +49,7 @@ def inventory(request: Request) -> dict:
         session.inventory,
         session.selection,
         session.selection.policy.max_per_album,
+        video_thumbs=session.video_thumbs,
     )
 
 

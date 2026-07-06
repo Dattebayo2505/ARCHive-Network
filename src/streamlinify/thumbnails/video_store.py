@@ -20,7 +20,15 @@ class VideoThumbnailStore:
     def has(self, fbid: str) -> bool:
         return self.path(fbid).exists()
 
-    def save(self, fbid: str, data: bytes) -> Path:
+    def save(self, fbid: str, data: bytes, is_auto: bool = False) -> Path:
         target = self.path(fbid)
         target.write_bytes(data)
+        applied_flag = self.dir / f"{fbid}.applied"
+        if not is_auto:
+            applied_flag.touch()
+        else:
+            applied_flag.unlink(missing_ok=True)
         return target
+
+    def is_auto(self, fbid: str) -> bool:
+        return not (self.dir / f"{fbid}.applied").exists()

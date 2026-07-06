@@ -3,7 +3,7 @@
 	import { videoUrl, videoThumbUrl, saveVideoThumbnail } from '$lib/api.js';
 	import { captureFrame } from '$lib/videoThumbs.js';
 
-	let { video, onClose, onThumbnailChosen } = $props();
+	let { video, onClose, onThumbnailChosen, onToggle } = $props();
 
 	let videoEl = $state();
 	let videoH = $state(0);
@@ -88,19 +88,30 @@
 				{video.caption || video.fbid}
 			</p>
 			<p class="text-xs text-surface-300">
-				Play, then choose the frame to keep · this video is always kept{#if video?.taken_timestamp || video?.creation_at} | {formatFBDate(video?.taken_timestamp || video?.creation_at)}{/if}
+				Play, then choose the frame to keep{#if video?.taken_timestamp || video?.creation_at} | {formatFBDate(video?.taken_timestamp || video?.creation_at)}{/if}
 			</p>
 		</div>
 		<div class="ml-auto flex items-center gap-2">
 			<button
 				type="button"
-				class="flex h-9 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 disabled:opacity-70"
-				onclick={choose}
-				disabled={saving || !ready}
+				class="flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 shrink-0"
+				class:bg-primary-600={video.selected}
+				class:text-primary-50={video.selected}
+				class:hover:bg-primary-500={video.selected}
+				class:bg-surface-50={!video.selected}
+				class:text-surface-900={!video.selected}
+				class:hover:bg-surface-200={!video.selected}
+				onclick={() => onToggle?.(video)}
 			>
-				<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
-					stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" /></svg>
-				{saving ? 'Saving…' : ready ? 'Choose Thumbnail' : 'Loading…'}
+				{#if video.selected}
+					<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2.5"
+						stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+					Kept
+				{:else}
+					<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+					Keep
+				{/if}
 			</button>
 			<button
 				bind:this={closeBtn}
@@ -142,11 +153,33 @@
 						onerror={() => (hasStill = false)}
 					/>
 					<figcaption class="text-xs text-surface-300">Chosen thumbnail</figcaption>
+					<button
+						type="button"
+						class="mt-2 flex h-9 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 disabled:opacity-70"
+						onclick={choose}
+						disabled={saving || !ready}
+					>
+						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
+							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" /></svg>
+						{saving ? 'Saving…' : ready ? 'Choose Thumbnail' : 'Loading…'}
+					</button>
 				</figure>
 			{:else}
-				<p class="max-w-[10rem] text-center text-xs text-surface-400">
-					No thumbnail yet — play to a frame and click “Choose Thumbnail”.
-				</p>
+				<div class="flex flex-col items-center gap-3">
+					<p class="max-w-[10rem] text-center text-xs text-surface-400">
+						No thumbnail yet — play to a frame and click “Choose Thumbnail”.
+					</p>
+					<button
+						type="button"
+						class="flex h-9 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 disabled:opacity-70"
+						onclick={choose}
+						disabled={saving || !ready}
+					>
+						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
+							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" /></svg>
+						{saving ? 'Saving…' : ready ? 'Choose Thumbnail' : 'Loading…'}
+					</button>
+				</div>
 			{/if}
 		</div>
 	</div>

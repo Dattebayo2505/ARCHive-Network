@@ -2,7 +2,7 @@
 	import { tick } from 'svelte';
 
 	let {
-		albums, archivedAlbums = [], nonAlbumCount, archiveCount = 0, videosCount = 0,
+		albums, archivedAlbums = [], nonAlbumCount, archiveCount = 0, videosCount = 0, videosSelectedCount = 0,
 		activeId, onSelect, onContextMenu,
 		editingId = null, onRename, onCancelRename, onStartRename
 	} = $props();
@@ -200,7 +200,7 @@
 			<svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor"
 				stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="14" height="14" rx="2" /><path d="m16 10 6-3v10l-6-3z" /></svg>
 			<span class="truncate">Videos</span>
-			<span class="ml-auto shrink-0 rounded-full bg-surface-200 px-2 py-0.5 text-xs font-medium tabular-nums text-surface-600">{videosCount}</span>
+			<span class="ml-auto shrink-0 rounded-full bg-surface-200 px-2 py-0.5 text-xs font-medium tabular-nums text-surface-600">{videosSelectedCount}</span>
 		</button>
 	{/if}
 

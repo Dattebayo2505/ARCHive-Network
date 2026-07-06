@@ -109,7 +109,11 @@
 		seedMissingThumbnails(videos, {
 			videoSrc: videoUrl,
 			needsSeed: (fbid) => thumbnailMissing(fbid),
-			onSeeded: (fbid) => (thumbVersion = { ...thumbVersion, [fbid]: Date.now() })
+			onSeeded: (fbid) => {
+				thumbVersion = { ...thumbVersion, [fbid]: Date.now() };
+				const v = videos.find((x) => x.fbid === fbid);
+				if (v) v.video_thumb_tag = 'AUTO';
+			}
 		});
 	});
 
@@ -151,6 +155,12 @@
 		if (!result.ok && result.cap) return;
 		photo.selected = result.selected;
 		activeAlbum.count_selected = result.count;
+	}
+
+	async function onVideoToggle(video) {
+		const result = await toggle('__videos__', video.fbid);
+		if (!result.ok) return;
+		video.selected = result.selected;
 	}
 
 	async function runBuild() {
@@ -198,6 +208,8 @@
 
 	function onVideoChosen(fbid) {
 		thumbVersion = { ...thumbVersion, [fbid]: Date.now() };
+		const v = videos.find((x) => x.fbid === fbid);
+		if (v) v.video_thumb_tag = 'APPLIED';
 	}
 
 	// Right-click a video → choose its thumbnail (replaces "Preview") or open its file.
@@ -323,6 +335,7 @@
 					nonAlbumCount={inventory.non_album.length}
 					archiveCount={archive.length}
 					videosCount={videos.length}
+					videosSelectedCount={videos.filter(v => v.selected).length}
 					{activeId}
 					editingId={editingAlbumId}
 					onSelect={(id) => { activeId = id; editingAlbumId = null; }}
@@ -492,12 +505,18 @@
 				<div class="flex min-w-0 items-baseline gap-3">
 					<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Videos</h1>
 					<p class="shrink-0 text-sm font-medium tabular-nums text-surface-500">
-						{videos.length} · always kept
+						{videos.filter((v) => v.selected).length} / {videos.length} selected
 					</p>
 				</div>
 				<p class="mt-2 text-sm text-surface-500">
 					Videos aren’t imported — a still frame replaces each one. Click a video to play it and
-					choose the frame, or right-click for “Choose Thumbnail”. A first frame is picked by default.
+					choose the frame, or right-click for “Choose Thumbnail”. They are not auto-kept.
+					<br>
+					<span class="inline-block rounded bg-warning-900/75 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning-50">AUTO</span>
+					automatically generated from the first frame.
+					<br>
+					<span class="inline-block rounded bg-primary-900/75 px-1.5 py-0.5 text-[0.6rem] font-semibold text-primary-50">APPLIED</span>
+					hand-picked by you.
 				</p>
 			</header>
 
@@ -507,10 +526,11 @@
 						album={{ name: 'Videos', photos: videos }}
 						thumb={videoTileSrc}
 						size={gridSize}
-						selectable={false}
+						selectable={true}
 						video
-						onToggle={openVideoPreview}
+						onToggle={onVideoToggle}
 						onContextMenu={openVideoMenu}
+						onDblClick={(video) => openVideoPreview(video)}
 					/>
 				</div>
 			{/if}
@@ -661,6 +681,7 @@
 	<VideoPreview
 		video={videoPreview}
 		onThumbnailChosen={onVideoChosen}
+		onToggle={onVideoToggle}
 		onClose={() => (videoPreview = null)}
 	/>
 {/if}

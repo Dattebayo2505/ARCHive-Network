@@ -87,6 +87,8 @@ def build_ready_folder(
     skipped_videos: list[str] = []
     videos_built = 0
     for video in inventory.videos:
+        if video.fbid not in keep_fbids:
+            continue
         still = (video_thumb_dir / f"{video.fbid}.jpg") if video_thumb_dir else None
         if still is None or not still.exists():
             skipped_videos.append(video.original_uri)

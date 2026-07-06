@@ -4,8 +4,7 @@
 	// A tile the user can't act on right now: the album is full and this one
 	// isn't already selected. Selected tiles stay clickable so they can be removed.
 	let blocked = $derived(!video && full && !photo.selected);
-	// Videos are always kept — the tile is clickable (opens the picker), not toggleable.
-	let interactive = $derived(video ? photo.exists : selectable && photo.exists && !blocked);
+	let interactive = $derived(selectable && photo.exists && !blocked);
 	let imgError = $state(false);
 
 	// Shape the tile to the photo's real proportions. The cached thumbnail is already
@@ -48,26 +47,18 @@
 			</span>
 		{/if}
 
-		{#if photo.archive_tag}
+		{#if photo.archive_tag || (video && photo.video_thumb_tag)}
+			{@const tag = photo.archive_tag || photo.video_thumb_tag}
+			{@const isApplied = tag === 'APPLIED'}
+			{@const isAuto = tag === 'AUTO'}
 			<span
-				class="pointer-events-none absolute left-2 top-2 rounded bg-surface-900/75 px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-surface-50"
+				class="pointer-events-none absolute left-2 top-2 rounded px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide {isApplied ? 'bg-primary-900/75 text-primary-50' : isAuto ? 'bg-warning-900/75 text-warning-50' : 'bg-surface-900/75 text-surface-50'}"
 			>
-				{photo.archive_tag}
+				{tag}
 			</span>
 		{/if}
 
-		<!-- Selected: green wash + check badge (non-color cue = the check icon) -->
-		{#if video}
-			<span
-				data-testid={`video-badge-${photo.fbid}`}
-				class="pointer-events-none absolute inset-0 grid place-items-center"
-				aria-hidden="true"
-			>
-				<span class="grid size-11 place-items-center rounded-full bg-surface-950/55 text-surface-50 shadow-lg transition-transform group-hover:scale-110">
-					<svg viewBox="0 0 24 24" class="size-6" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-				</span>
-			</span>
-		{:else if photo.selected}
+		{#if photo.selected}
 			<span class="pointer-events-none absolute inset-0 bg-primary-700/15"></span>
 			<span
 				class="pointer-events-none absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-primary-700 text-primary-50 shadow"
@@ -89,6 +80,18 @@
 			>
 				<svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2.5"
 					stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+			</span>
+		{/if}
+
+		{#if video}
+			<span
+				data-testid={`video-badge-${photo.fbid}`}
+				class="pointer-events-none absolute inset-0 grid place-items-center"
+				aria-hidden="true"
+			>
+				<span class="grid size-11 place-items-center rounded-full bg-surface-950/55 text-surface-50 shadow-lg transition-transform group-hover:scale-110">
+					<svg viewBox="0 0 24 24" class="size-6" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+				</span>
 			</span>
 		{/if}
 
