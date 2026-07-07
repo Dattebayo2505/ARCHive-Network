@@ -13,6 +13,7 @@
 	import BuildSummary from '$lib/components/BuildSummary.svelte';
 	import SelectionPanel from '$lib/components/SelectionPanel.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import BuildConfirmDialog from '$lib/components/BuildConfirmDialog.svelte';
 
 	let { data } = $props();
 	let inventory = $state(data.inventory || {});
@@ -153,6 +154,8 @@
 			(inventory.videos ?? []).filter((v) => v.selected).reduce((sum, v) => sum + (v.file_size_bytes || 0), 0))
 		/ (1024 * 1024)).toFixed(2)
 	);
+	let albumsToBuild = $derived((inventory.albums ?? []).filter((a) => a.count_selected > 0));
+	let totalSelectedVideos = $derived((inventory.videos ?? []).filter((v) => v.selected).length);
 
 	async function onToggle(photo) {
 		if (!activeAlbum) return;
@@ -769,12 +772,12 @@
 	<BuildSummary result={buildResult} onClose={() => (buildResult = null)} />
 {/if}
 
-<ConfirmDialog
+<BuildConfirmDialog
 	open={buildConfirm}
-	title="Build ready folder"
-	message="Are you sure you want to build the ready folder? This will process and copy all selected photos and videos to the ready directory."
-	confirmLabel="Yes, build it"
-	cancelLabel="Cancel"
+	{albumsToBuild}
+	totalImages={totalSelected}
+	totalVideos={totalSelectedVideos}
+	totalMB={totalSelectedMB}
 	onCancel={() => (buildConfirm = false)}
 	onConfirm={async () => {
 		buildConfirm = false;
