@@ -32,7 +32,7 @@
 	<header
 		class="sticky top-0 z-30 border-b border-primary-800/40 bg-primary-700 text-primary-50 shadow-sm"
 	>
-		<div class="mx-auto flex max-w-7xl items-center gap-3 px-3 py-2 sm:px-4">
+		<div class="flex w-full items-center gap-3 px-3 py-2 sm:px-4">
 			{#if onGallery}
 				<a
 					href="/?switch=1"
@@ -146,7 +146,7 @@
 	     honoured by the global rule in app.css that collapses transitions. -->
 	<footer class="border-t border-surface-300 bg-surface-50">
 		<div
-			class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-xs text-surface-600 sm:px-4"
+			class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-xs text-surface-600 sm:px-4"
 		>
 			<svg viewBox="0 0 24 24" class="size-3.5 shrink-0 text-primary-600 dark:text-primary-400" fill="none"
 				stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
