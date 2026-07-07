@@ -2,15 +2,15 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from streamlinify.app import create_app
-from streamlinify.reveal import RevealError
+from archivenetwork.app import create_app
+from archivenetwork.reveal import RevealError
 
 
 def test_build_produces_ready_folder(export_root: Path, tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     revealed: list[Path] = []
     monkeypatch.setattr(
-        "streamlinify.web.routes_build.reveal_path", lambda p: revealed.append(p)
+        "archivenetwork.web.routes_build.reveal_path", lambda p: revealed.append(p)
     )
     client = TestClient(create_app())
     client.post("/api/ingest/folder", json={"folder": str(export_root)})
@@ -37,7 +37,7 @@ def test_build_survives_reveal_failure(export_root: Path, tmp_path: Path, monkey
     def _boom(_path: Path) -> None:
         raise RevealError("no file manager here")
 
-    monkeypatch.setattr("streamlinify.web.routes_build.reveal_path", _boom)
+    monkeypatch.setattr("archivenetwork.web.routes_build.reveal_path", _boom)
     client = TestClient(create_app())
     client.post("/api/ingest/folder", json={"folder": str(export_root)})
     client.post("/api/toggle", json={"album_fbid": "111", "photo_fbid": "a01"})

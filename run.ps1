@@ -1,4 +1,4 @@
-# run.ps1 - launches the FastAPI backend (uv run streamlinify, :8000) and the
+# run.ps1 - launches the FastAPI backend (uv run archivenetwork, :8000) and the
 # SvelteKit dev server (npm run dev, :5173) together in one console.
 #
 # Stop BOTH with:
@@ -73,7 +73,7 @@ try {
     $env:UV_LINK_MODE = 'copy'
 
     # Pass the dynamically selected ports to the backend and frontend
-    $env:STREAMLINIFY_PORT = $backendPort
+    $env:ARCHIVENETWORK_PORT = $backendPort
     $env:VITE_API_BASE = "http://127.0.0.1:$backendPort"
 
     # Create an empty temp file to redirect stdin for both child processes.
@@ -82,9 +82,9 @@ try {
     # vite and the parent never sees it (the classic "Ctrl+C does nothing" hang).
     $nullFile = New-TemporaryFile
 
-    Write-Host "Starting backend  (uv run streamlinify -> http://127.0.0.1:$backendPort)" -ForegroundColor Green
+    Write-Host "Starting backend  (uv run archivenetwork -> http://127.0.0.1:$backendPort)" -ForegroundColor Green
     $procs += Start-Process -FilePath 'uv' `
-        -ArgumentList 'run', 'streamlinify' `
+        -ArgumentList 'run', 'archivenetwork' `
         -WorkingDirectory $root -NoNewWindow -PassThru `
         -RedirectStandardInput $nullFile.FullName
  

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from streamlinify.app import create_app
+from archivenetwork.app import create_app
 
 
 def _loaded_client(export_root: Path, tmp_path, monkeypatch) -> TestClient:

@@ -1,10 +1,10 @@
-from streamlinify.inventory.grouping import (
+from archivenetwork.inventory.grouping import (
     caption_headline,
     derive_caption_albums,
     media_slug,
 )
-from streamlinify.inventory.models import Album, ExportInventory, Photo
-from streamlinify.inventory.parser import album_id_from_uri
+from archivenetwork.inventory.models import Album, ExportInventory, Photo
+from archivenetwork.inventory.parser import album_id_from_uri
 
 
 def test_caption_headline():

@@ -2,18 +2,18 @@
 # run.sh — launch the FastAPI backend and the SvelteKit dev server together
 # (the macOS/Linux counterpart to run.ps1). Ctrl+C stops both.
 #
-# Backend runner is auto-detected: uv if installed, else the `streamlinify`
-# console script (from `pip install -e .`), else `python -m streamlinify`.
+# Backend runner is auto-detected: uv if installed, else the `archivenetwork`
+# console script (from `pip install -e .`), else `python -m archivenetwork`.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if command -v uv >/dev/null 2>&1; then
-  backend_cmd=(uv run streamlinify)
-elif command -v streamlinify >/dev/null 2>&1; then
-  backend_cmd=(streamlinify)
+  backend_cmd=(uv run archivenetwork)
+elif command -v archivenetwork >/dev/null 2>&1; then
+  backend_cmd=(archivenetwork)
 else
-  backend_cmd=(python -m streamlinify)
+  backend_cmd=(python -m archivenetwork)
 fi
 
 backend_pid=""

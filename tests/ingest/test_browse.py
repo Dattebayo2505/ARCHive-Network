@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from streamlinify.ingest.browse import available_roots, list_directory
+from archivenetwork.ingest.browse import available_roots, list_directory
 
 
 def test_lists_only_subdirectories_sorted(tmp_path: Path):

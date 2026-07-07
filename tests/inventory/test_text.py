@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from streamlinify.inventory.text import epoch_to_dt, extract_hashtags, fix_mojibake
+from archivenetwork.inventory.text import epoch_to_dt, extract_hashtags, fix_mojibake
 
 
 def test_fix_mojibake_recovers_utf8():

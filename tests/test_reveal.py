@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from streamlinify import reveal
+from archivenetwork import reveal
 
 
 def test_command_selects_file_on_windows(tmp_path: Path):

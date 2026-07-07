@@ -30,7 +30,7 @@
 	let showCarousel = $state(true);
 	
 	onMount(() => {
-		const saved = localStorage.getItem('streamlinify_video_carousel');
+		const saved = localStorage.getItem('archivenetwork_video_carousel');
 		if (saved !== null) {
 			showCarousel = saved === 'true';
 		}
@@ -38,7 +38,7 @@
 
 	function toggleCarousel() {
 		showCarousel = !showCarousel;
-		localStorage.setItem('streamlinify_video_carousel', showCarousel.toString());
+		localStorage.setItem('archivenetwork_video_carousel', showCarousel.toString());
 		if (showCarousel) requestAnimationFrame(() => scrollCurrent(false));
 	}
 

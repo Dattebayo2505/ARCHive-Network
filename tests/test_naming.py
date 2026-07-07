@@ -1,4 +1,4 @@
-from streamlinify.inventory.naming import display_name
+from archivenetwork.inventory.naming import display_name
 
 
 def test_derives_name_and_drops_random_suffix():

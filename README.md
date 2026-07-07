@@ -43,7 +43,7 @@ cd frontend && npm install
 ```bash
 python -m venv .venv
 # Activate it:  Windows -> .venv\Scripts\activate   |   macOS/Linux -> source .venv/bin/activate
-pip install -e .            # runtime deps + the `streamlinify` command
+pip install -e .            # runtime deps + the `archivenetwork` command
 # pip install -e ".[dev]"   # add pytest / ruff / httpx for running the tests
 cd frontend && npm install
 ```
@@ -51,19 +51,19 @@ cd frontend && npm install
 ## Configuration
 
 Nothing is required to run with defaults. Everything is tunable via environment
-variables. Backend settings use the `STREAMLINIFY_` prefix (see
-`src/streamlinify/config.py`); the frontend reads `VITE_API_BASE`.
+variables. Backend settings use the `ARCHIVENETWORK_` prefix (see
+`src/archivenetwork/config.py`); the frontend reads `VITE_API_BASE`.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `STREAMLINIFY_WORKSPACE_DIR` | `workspace` | Root for all generated state, imports, and the `ready/` output. |
-| `STREAMLINIFY_SEVEN_ZIP_EXE` | `vendor/7za.exe` on Windows; auto-discovered elsewhere | Path to a zip-capable 7-Zip binary. On macOS/Linux, leave unset to auto-detect `7z`/`7za`/`7zz` (falls back to Python's `zipfile` if none), or point it at your own. |
-| `STREAMLINIFY_MAX_PER_ALBUM` | `10` | Per-album selection cap enforced server-side. |
-| `STREAMLINIFY_THUMB_SIZE` | `512` | Gallery thumbnail size (px, longest edge). |
-| `STREAMLINIFY_PREVIEW_SIZE` | `1280` | Full-screen preview render size (px). |
-| `STREAMLINIFY_HOST` | `127.0.0.1` | API bind host. |
-| `STREAMLINIFY_PORT` | `8000` | API bind port. |
-| `STREAMLINIFY_CORS_ORIGINS` / `STREAMLINIFY_CORS_ORIGIN_REGEX` | localhost:5173/3000 | Origins allowed to call the API. |
+| `ARCHIVENETWORK_WORKSPACE_DIR` | `workspace` | Root for all generated state, imports, and the `ready/` output. |
+| `ARCHIVENETWORK_SEVEN_ZIP_EXE` | `vendor/7za.exe` on Windows; auto-discovered elsewhere | Path to a zip-capable 7-Zip binary. On macOS/Linux, leave unset to auto-detect `7z`/`7za`/`7zz` (falls back to Python's `zipfile` if none), or point it at your own. |
+| `ARCHIVENETWORK_MAX_PER_ALBUM` | `10` | Per-album selection cap enforced server-side. |
+| `ARCHIVENETWORK_THUMB_SIZE` | `512` | Gallery thumbnail size (px, longest edge). |
+| `ARCHIVENETWORK_PREVIEW_SIZE` | `1280` | Full-screen preview render size (px). |
+| `ARCHIVENETWORK_HOST` | `127.0.0.1` | API bind host. |
+| `ARCHIVENETWORK_PORT` | `8000` | API bind port. |
+| `ARCHIVENETWORK_CORS_ORIGINS` / `ARCHIVENETWORK_CORS_ORIGIN_REGEX` | localhost:5173/3000 | Origins allowed to call the API. |
 | `VITE_API_BASE` | `http://127.0.0.1:8000` | Base URL the frontend uses to reach the API. |
 | `UV_LINK_MODE` | — | Set to `copy` on Windows to dodge a Defender file-lock (`os error 32`) during `uv sync`/`uv run`. |
 
@@ -84,7 +84,7 @@ Launch both servers together and stop both cleanly on exit:
 
 ```bash
 # macOS/Linux — stop with Ctrl+C. Uses uv if installed, else the installed
-# `streamlinify` command, else `python -m streamlinify`.
+# `archivenetwork` command, else `python -m archivenetwork`.
 bash run.sh
 ```
 
@@ -95,9 +95,9 @@ terminal:
 
 ```bash
 # API → http://127.0.0.1:8000
-UV_LINK_MODE=copy uv run streamlinify   # with uv
-streamlinify                            # with pip install -e . (console script)
-python -m streamlinify                  # with pip, no console script on PATH
+UV_LINK_MODE=copy uv run archivenetwork   # with uv
+archivenetwork                            # with pip install -e . (console script)
+python -m archivenetwork                  # with pip, no console script on PATH
 
 # UI (dev, hot reload) → http://localhost:5173
 cd frontend && npm run dev
@@ -152,7 +152,7 @@ cd frontend && npm run test
 
 ## Where things live
 
-- `src/streamlinify/` — the FastAPI backend package (see `docs/ARCHITECTURE.md`).
+- `src/archivenetwork/` — the FastAPI backend package (see `docs/ARCHITECTURE.md`).
 - `frontend/` — the SvelteKit UI.
 - `docs/` — design and planning: `PRODUCT.md`, `DESIGN.md`, `PLAN.md`,
   `Pipeline.md`, `Pipeline-Process.md`, and `ARCHITECTURE.md`.

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from streamlinify.app import create_app
+from archivenetwork.app import create_app
 
 
 def _loaded_client(export_root: Path, tmp_path, monkeypatch) -> TestClient:
@@ -58,7 +58,7 @@ def test_reveal_photo(export_root: Path, tmp_path: Path, monkeypatch):
     client = _loaded_client(export_root, tmp_path, monkeypatch)
     seen: list[Path] = []
     monkeypatch.setattr(
-        "streamlinify.web.routes_gallery.reveal_path", lambda p: seen.append(p)
+        "archivenetwork.web.routes_gallery.reveal_path", lambda p: seen.append(p)
     )
     resp = client.post("/api/reveal", json={"photo_fbid": "a01"})
     assert resp.status_code == 200 and resp.json() == {"ok": True}
@@ -69,7 +69,7 @@ def test_reveal_album_opens_media_folder(export_root: Path, tmp_path: Path, monk
     client = _loaded_client(export_root, tmp_path, monkeypatch)
     seen: list[Path] = []
     monkeypatch.setattr(
-        "streamlinify.web.routes_gallery.reveal_path", lambda p: seen.append(p)
+        "archivenetwork.web.routes_gallery.reveal_path", lambda p: seen.append(p)
     )
     resp = client.post("/api/reveal", json={"album_fbid": "111"})
     assert resp.status_code == 200
@@ -79,7 +79,7 @@ def test_reveal_album_opens_media_folder(export_root: Path, tmp_path: Path, monk
 def test_reveal_orphan_photo_404(export_root: Path, tmp_path: Path, monkeypatch):
     client = _loaded_client(export_root, tmp_path, monkeypatch)
     monkeypatch.setattr(
-        "streamlinify.web.routes_gallery.reveal_path", lambda p: None
+        "archivenetwork.web.routes_gallery.reveal_path", lambda p: None
     )
     assert client.post("/api/reveal", json={"photo_fbid": "m02"}).status_code == 404
 

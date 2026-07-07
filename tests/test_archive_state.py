@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from streamlinify.selection.archive_state import ArchiveState
+from archivenetwork.selection.archive_state import ArchiveState
 
 
 def test_add_remove_roundtrip(tmp_path: Path):

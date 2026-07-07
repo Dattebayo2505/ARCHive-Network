@@ -1,7 +1,7 @@
-from streamlinify.inventory.models import Album, ExportInventory, Photo
-from streamlinify.selection.policy import DefaultPolicy
-from streamlinify.selection.state import SelectionState
-from streamlinify.web.serializers import inventory_payload
+from archivenetwork.inventory.models import Album, ExportInventory, Photo
+from archivenetwork.selection.policy import DefaultPolicy
+from archivenetwork.selection.state import SelectionState
+from archivenetwork.web.serializers import inventory_payload
 
 
 def _inv() -> ExportInventory:

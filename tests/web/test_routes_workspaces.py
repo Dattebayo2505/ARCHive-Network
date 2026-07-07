@@ -1,7 +1,7 @@
 
 from fastapi.testclient import TestClient
 
-from streamlinify.app import create_app
+from archivenetwork.app import create_app
 
 
 def test_list_and_open_workspace(export_root, tmp_path, monkeypatch):

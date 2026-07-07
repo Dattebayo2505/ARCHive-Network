@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from streamlinify.inventory.parser import (
+from archivenetwork.inventory.parser import (
     album_id_from_uri,
     build_inventory,
     photo_fbid,

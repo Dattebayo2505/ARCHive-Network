@@ -1,4 +1,4 @@
-from streamlinify.selection.policy import DefaultPolicy
+from archivenetwork.selection.policy import DefaultPolicy
 
 
 def test_cap_enforced_at_max():

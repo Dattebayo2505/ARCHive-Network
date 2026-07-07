@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from streamlinify.app import create_app
+from archivenetwork.app import create_app
 
 
 def _zip_tree(src: Path, dest_zip: Path) -> None:

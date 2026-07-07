@@ -38,7 +38,7 @@ class ZipRequest(BaseModel):
 
 @router.get("/")
 def health() -> dict:
-    return {"name": "streamlinify", "status": "ok"}
+    return {"name": "archivenetwork", "status": "ok"}
 
 
 @router.get("/api/session")

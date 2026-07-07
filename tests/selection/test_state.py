@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from streamlinify.selection.policy import CapExceeded, DefaultPolicy
-from streamlinify.selection.state import SelectionState
+from archivenetwork.selection.policy import CapExceeded, DefaultPolicy
+from archivenetwork.selection.state import SelectionState
 
 
 def test_toggle_and_count(tmp_path: Path):

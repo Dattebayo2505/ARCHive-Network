@@ -1,6 +1,6 @@
 """Open the host OS file manager focused on a path.
 
-Streamlinify runs locally, so the same machine that serves the API also owns the
+ARCHive Network runs locally, so the same machine that serves the API also owns the
 desktop. "Show in File Explorer" lets a volunteer jump from a photo (or an album)
 straight to the real file on disk to sanity-check it. This only ever *opens* a
 window — it never reads or writes the export, so the read-only-original promise

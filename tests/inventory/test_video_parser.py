@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from streamlinify.inventory.parser import build_inventory, is_video_uri
+from archivenetwork.inventory.parser import build_inventory, is_video_uri
 
 
 def test_is_video_uri_by_extension():

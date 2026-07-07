@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from streamlinify.ingest.validate import find_export_root, validate_export
+from archivenetwork.ingest.validate import find_export_root, validate_export
 
 
 def test_valid_export(export_root: Path):

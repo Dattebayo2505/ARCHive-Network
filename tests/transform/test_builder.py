@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from streamlinify.transform.builder import build_ready_folder
+from archivenetwork.transform.builder import build_ready_folder
 
 
 def test_build_filtered_mirror(export_root: Path, tmp_path: Path):
@@ -71,7 +71,7 @@ def test_build_excludes_archived_and_drops_empty_posts(archive_export_root: Path
 
 
 def test_build_writes_caption_albums(grouping_export_root: Path, tmp_path: Path):
-    from streamlinify.inventory.parser import build_inventory
+    from archivenetwork.inventory.parser import build_inventory
 
     dest = tmp_path / "ready"
     inv = build_inventory(grouping_export_root)

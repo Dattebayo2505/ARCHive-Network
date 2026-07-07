@@ -12,7 +12,7 @@ export const VIEW_SIZES = [
 
 export const DEFAULT_SIZE = 'm';
 
-export const SIZE_STORAGE_KEY = 'streamlinify:gallery-size';
+export const SIZE_STORAGE_KEY = 'archivenetwork:gallery-size';
 
 export function sizeMin(id) {
 	return (VIEW_SIZES.find((s) => s.id === id) ?? VIEW_SIZES[2]).min;

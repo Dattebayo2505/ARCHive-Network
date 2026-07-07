@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from streamlinify.app import create_app
+from archivenetwork.app import create_app
 
 
 def test_browse_lists_subdirectories(export_root: Path, tmp_path: Path):

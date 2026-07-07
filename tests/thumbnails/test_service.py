@@ -2,7 +2,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from streamlinify.thumbnails.service import ThumbnailService
+from archivenetwork.thumbnails.service import ThumbnailService
 
 
 def _make_image(path: Path, w: int, h: int) -> None:

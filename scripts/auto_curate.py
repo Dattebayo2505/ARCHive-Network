@@ -18,10 +18,10 @@ from pathlib import Path
 # Allow running without an editable install (src layout).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from streamlinify.config import settings  # noqa: E402
-from streamlinify.ingest.validate import find_export_root, validate_export  # noqa: E402
-from streamlinify.inventory.parser import build_inventory  # noqa: E402
-from streamlinify.transform.builder import build_ready_folder  # noqa: E402
+from archivenetwork.config import settings  # noqa: E402
+from archivenetwork.ingest.validate import find_export_root, validate_export  # noqa: E402
+from archivenetwork.inventory.parser import build_inventory  # noqa: E402
+from archivenetwork.transform.builder import build_ready_folder  # noqa: E402
 
 
 def main() -> int:

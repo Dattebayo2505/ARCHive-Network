@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Repo root: config.py -> streamlinify -> src -> <root>. Used to locate vendored binaries.
+# Repo root: config.py -> archivenetwork -> src -> <root>. Used to locate vendored binaries.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -13,7 +13,7 @@ def _default_seven_zip() -> Path | None:
     ``vendor/7za.exe`` is a *Windows* executable (and is far faster than Python's
     zipfile on the ~875 MB export). On macOS/Linux it cannot run, so we return
     None and let ``ingest.unzip`` discover a system 7-Zip (``7zz``/``7z``/``7za``)
-    or fall back to the stdlib ``zipfile``. Override with STREAMLINIFY_SEVEN_ZIP_EXE.
+    or fall back to the stdlib ``zipfile``. Override with ARCHIVENETWORK_SEVEN_ZIP_EXE.
     Must be a zip-capable build — the reduced ``7zr.exe`` cannot read zips.
     """
     if sys.platform.startswith("win"):
@@ -22,7 +22,7 @@ def _default_seven_zip() -> Path | None:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="STREAMLINIFY_")
+    model_config = SettingsConfigDict(env_prefix="ARCHIVENETWORK_")
 
     workspace_dir: Path = Path("workspace")
     seven_zip_exe: Path | None = _default_seven_zip()

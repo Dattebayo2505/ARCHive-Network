@@ -1,4 +1,4 @@
-from streamlinify.config import Settings, settings
+from archivenetwork.config import Settings, settings
 
 
 def test_defaults():
@@ -7,5 +7,5 @@ def test_defaults():
 
 
 def test_env_override(monkeypatch):
-    monkeypatch.setenv("STREAMLINIFY_MAX_PER_ALBUM", "5")
+    monkeypatch.setenv("ARCHIVENETWORK_MAX_PER_ALBUM", "5")
     assert Settings().max_per_album == 5

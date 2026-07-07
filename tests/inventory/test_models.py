@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from streamlinify.inventory.models import Album, ExportInventory, Photo
+from archivenetwork.inventory.models import Album, ExportInventory, Photo
 
 
 def _photo(fbid, album_fbid=None):

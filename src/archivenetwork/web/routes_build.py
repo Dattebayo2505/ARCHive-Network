@@ -25,7 +25,7 @@ def build(request: Request) -> dict:
         session.export_root, dest, keep, session.video_thumbs.dir, session.renames._renames
     )
 
-    # Streamlinify owns the local desktop, so pop the OS file manager open on the
+    # ARCHive Network owns the local desktop, so pop the OS file manager open on the
     # workspace/ready/ folder — the volunteer's next step is to grab the build. A
     # reveal failure must never sink an otherwise-successful build.
     try:

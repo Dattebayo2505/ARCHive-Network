@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from streamlinify.web.registry import WorkspaceRegistry
+from archivenetwork.web.registry import WorkspaceRegistry
 
 
 def test_register_is_idempotent_on_id_and_sets_last_active(tmp_path: Path):

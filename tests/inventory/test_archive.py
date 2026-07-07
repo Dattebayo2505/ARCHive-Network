@@ -1,4 +1,4 @@
-from streamlinify.inventory.archive import archive_tag, is_special_album
+from archivenetwork.inventory.archive import archive_tag, is_special_album
 
 
 def test_is_special_album_normalizes_name():
@@ -32,8 +32,8 @@ def test_archive_tag_rejects_non_tags():
 
 
 def test_partition_archive_sets_aside_tagged():
-    from streamlinify.inventory.archive import partition_archive
-    from streamlinify.inventory.models import Album, ExportInventory, Photo
+    from archivenetwork.inventory.archive import partition_archive
+    from archivenetwork.inventory.models import Album, ExportInventory, Photo
 
     def p(fbid, caption, album):
         return Photo(fbid=fbid, original_uri="x", resolved_path="x", caption=caption, album_fbid=album)

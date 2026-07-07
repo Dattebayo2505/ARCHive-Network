@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from streamlinify.transform.builder import build_ready_folder
+from archivenetwork.transform.builder import build_ready_folder
 
 
 def test_video_still_replaces_mp4(video_export_root: Path, tmp_path: Path):

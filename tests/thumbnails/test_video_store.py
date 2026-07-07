@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from streamlinify.thumbnails.video_store import VideoThumbnailStore
+from archivenetwork.thumbnails.video_store import VideoThumbnailStore
 
 
 def test_save_and_read(tmp_path: Path):
