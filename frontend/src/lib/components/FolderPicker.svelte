@@ -1,5 +1,6 @@
 <script>
 	import { browse } from '$lib/api.js';
+	import { trapFocus } from '$lib/focusTrap.js';
 
 	let { open = false, onClose, onChoose, onChooseZip } = $props();
 
@@ -64,6 +65,8 @@
 		role="dialog"
 		aria-modal="true"
 		aria-label="Choose export folder"
+		tabindex="-1"
+		use:trapFocus
 	>
 		<div
 			class="flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-surface-300 bg-surface-50 shadow-xl"
@@ -85,7 +88,7 @@
 			<div class="space-y-2 border-b border-surface-200 bg-surface-100 px-4 py-3">
 				{#if drives.length > 1}
 					<div class="flex flex-wrap items-center gap-1.5">
-						<span class="text-xs font-medium text-surface-500">Drives</span>
+						<span class="text-xs font-medium text-surface-600">Drives</span>
 						{#each drives as d (d)}
 							<button
 								type="button"
@@ -112,7 +115,7 @@
 							<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
 						</svg>
 						<input
-							class="min-w-0 flex-1 bg-transparent py-2 font-mono text-xs text-surface-800 placeholder:text-surface-400 focus:outline-none"
+							class="min-w-0 flex-1 bg-transparent py-2 font-mono text-xs text-surface-800 placeholder:text-surface-600 focus:outline-none"
 							bind:value={pathInput}
 							onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), go())}
 							placeholder="Type or paste a folder path…"
@@ -211,7 +214,7 @@
 							</li>
 						{/each}
 						{#if !dirs.length && !files.length && !error}
-							<li class="px-3 py-8 text-center text-sm text-surface-500">
+							<li class="px-3 py-8 text-center text-sm text-surface-600">
 								No sub-folders or .zip files here.
 							</li>
 						{/if}
@@ -229,7 +232,7 @@
 							This folder is a valid Facebook export.
 						</p>
 					{:else}
-						<p class="mb-2.5 flex items-start gap-1.5 text-xs text-surface-500">
+						<p class="mb-2.5 flex items-start gap-1.5 text-xs text-surface-600">
 							<svg viewBox="0 0 24 24" class="mt-px size-3.5 shrink-0" fill="none" stroke="currentColor"
 								stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
 							No export detected here yet — open the folder with <code class="font-mono">posts/</code>, or

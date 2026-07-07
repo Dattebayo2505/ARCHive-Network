@@ -25,14 +25,14 @@
 					onclick={() => onOpen(ws.id)}
 				>
 					<p class="truncate font-medium text-surface-900">{ws.display_name}</p>
-					<p class="truncate text-xs text-surface-500" title={ws.raw_name}>
+					<p class="truncate text-xs text-surface-600" title={ws.raw_name}>
 						{ws.raw_name}{#if ws.last_opened_ts} · opened {fmt(ws.last_opened_ts)}{/if}
 					</p>
 				</button>
 				{#if confirmingId !== ws.id}
 					<button
 						type="button"
-						class="shrink-0 rounded-lg px-2.5 py-1.5 text-sm font-medium text-surface-500 transition-colors hover:bg-error-50 hover:text-error-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-error-600"
+						class="shrink-0 rounded-lg px-2.5 py-1.5 text-sm font-medium text-surface-600 transition-colors hover:bg-error-50 hover:text-error-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-error-600"
 						onclick={() => (confirmingId = ws.id)}
 					>
 						Remove

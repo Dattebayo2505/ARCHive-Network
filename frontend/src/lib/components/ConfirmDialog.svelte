@@ -1,13 +1,17 @@
 <script>
+	import { trapFocus } from '$lib/focusTrap.js';
 	/**
 	 * A styled confirmation dialog that replaces window.confirm().
 	 *
 	 * Props:
 	 *   open      — show/hide the dialog
 	 *   title     — heading text
-	 *   message   — body text (supports HTML via {@html})
+	 *   message   — body text (plain text)
 	 *   confirmLabel — text on the confirm button (default "Yes")
 	 *   cancelLabel  — text on the cancel button (default "No")
+	 *   destructive — when true, the confirm action reads as dangerous (red);
+	 *                 otherwise it's the solid-green primary action. Reserve red
+	 *                 for genuinely irreversible actions (e.g. deleting a workspace).
 	 *   onConfirm — called when the user clicks confirm
 	 *   onCancel  — called when the user clicks cancel or presses Escape
 	 */
@@ -17,6 +21,7 @@
 		message = '',
 		confirmLabel = 'Yes',
 		cancelLabel = 'No',
+		destructive = false,
 		onConfirm,
 		onCancel
 	} = $props();
@@ -39,6 +44,8 @@
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="confirm-title"
+		tabindex="-1"
+		use:trapFocus
 	>
 		<div
 			class="w-full max-w-sm overflow-hidden rounded-2xl border border-surface-300 bg-surface-50 shadow-xl animate-in"
@@ -46,15 +53,26 @@
 			<!-- Icon + heading -->
 			<div class="flex items-start gap-3.5 p-6 pb-3">
 				<span
-					class="grid size-11 shrink-0 place-items-center rounded-full bg-warning-100 text-warning-700"
+					class="grid size-11 shrink-0 place-items-center rounded-full {destructive
+						? 'bg-error-100 text-error-700'
+						: 'bg-primary-100 text-primary-700'}"
 					aria-hidden="true"
 				>
-					<svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="2"
-						stroke-linecap="round" stroke-linejoin="round">
-						<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-						<line x1="12" y1="9" x2="12" y2="13" />
-						<line x1="12" y1="17" x2="12.01" y2="17" />
-					</svg>
+					{#if destructive}
+						<svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="2"
+							stroke-linecap="round" stroke-linejoin="round">
+							<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+							<line x1="12" y1="9" x2="12" y2="13" />
+							<line x1="12" y1="17" x2="12.01" y2="17" />
+						</svg>
+					{:else}
+						<svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="2"
+							stroke-linecap="round" stroke-linejoin="round">
+							<circle cx="12" cy="12" r="10" />
+							<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+							<line x1="12" y1="17" x2="12.01" y2="17" />
+						</svg>
+					{/if}
 				</span>
 				<div class="mt-0.5">
 					<h2 id="confirm-title" class="text-lg font-semibold text-surface-900">{title}</h2>
@@ -66,14 +84,16 @@
 			<div class="flex justify-end gap-3 border-t border-surface-200 px-6 py-4">
 				<button
 					type="button"
-					class="confirm-btn confirm-btn--cancel"
+					class="rounded-lg px-4 py-2 text-sm font-medium text-surface-700 transition-colors hover:bg-surface-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
 					onclick={() => onCancel?.()}
 				>
 					{cancelLabel}
 				</button>
 				<button
 					type="button"
-					class="confirm-btn confirm-btn--confirm"
+					class="rounded-lg px-4 py-2 text-sm font-semibold text-primary-50 shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 {destructive
+						? 'bg-error-600 hover:bg-error-700 focus-visible:outline-error-600'
+						: 'bg-primary-700 hover:bg-primary-800 focus-visible:outline-primary-600'}"
 					onclick={() => onConfirm?.()}
 				>
 					{confirmLabel}
@@ -103,49 +123,5 @@
 		.animate-in {
 			animation: none;
 		}
-	}
-
-	.confirm-btn {
-		padding: 0.5rem 1.25rem;
-		border-radius: 0.5rem;
-		font-size: 0.875rem;
-		font-weight: 600;
-		transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
-		cursor: pointer;
-	}
-
-	.confirm-btn:focus-visible {
-		outline: 2px solid;
-		outline-offset: 2px;
-	}
-
-	/* Cancel / "No" — neutral, turns green on hover */
-	.confirm-btn--cancel {
-		background-color: oklch(0.95 0.01 150);
-		color: oklch(0.35 0.06 150);
-	}
-
-	.confirm-btn--cancel:hover {
-		background-color: oklch(0.45 0.14 150);
-		color: white;
-	}
-
-	.confirm-btn--cancel:focus-visible {
-		outline-color: oklch(0.45 0.14 150);
-	}
-
-	/* Confirm / "Yes" — neutral, turns red on hover */
-	.confirm-btn--confirm {
-		background-color: oklch(0.95 0.01 25);
-		color: oklch(0.40 0.10 25);
-	}
-
-	.confirm-btn--confirm:hover {
-		background-color: oklch(0.50 0.18 25);
-		color: white;
-	}
-
-	.confirm-btn--confirm:focus-visible {
-		outline-color: oklch(0.50 0.18 25);
 	}
 </style>

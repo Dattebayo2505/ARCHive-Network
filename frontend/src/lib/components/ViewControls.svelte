@@ -25,7 +25,7 @@
 	<div
 		class="flex items-center gap-2 rounded-lg border border-surface-300 bg-surface-50 py-1 pr-1 pl-2.5"
 	>
-		<span class="text-xs font-medium text-surface-500 select-none" id="size-label">Size</span>
+		<span class="text-xs font-medium text-surface-600 select-none" id="size-label">Size</span>
 		<div
 			class="flex items-center gap-0.5"
 			role="radiogroup"

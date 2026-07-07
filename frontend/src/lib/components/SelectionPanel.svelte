@@ -81,8 +81,8 @@
 				{#if selected.length === 0}
 					<div class="panel-empty">
 						<svg viewBox="0 0 24 24" class="size-8 text-surface-300" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg>
-						<p class="mt-2 text-sm text-surface-500">No photos selected yet</p>
-						<p class="mt-0.5 text-xs text-surface-400">Click photos in the grid to select them</p>
+						<p class="mt-2 text-sm text-surface-600">No photos selected yet</p>
+						<p class="mt-0.5 text-xs text-surface-600">Click photos in the grid to select them</p>
 					</div>
 				{:else}
 					<div class="thumb-grid" style="columns: {colWidth}px; column-gap: 0.375rem;">
@@ -145,7 +145,7 @@
 
 	.resize-handle:hover,
 	.resize-active {
-		background-color: rgba(27, 94, 32, 0.18);
+		background-color: oklch(0.5 0.12 159 / 0.18); /* primary-600 */
 	}
 
 	.panel-inner {
@@ -237,7 +237,7 @@
 		break-inside: avoid;
 		border-radius: 0.5rem;
 		overflow: hidden;
-		border: 2px solid var(--color-primary-600, #1b5e20);
+		border: 2px solid var(--color-primary-600, oklch(0.5 0.12 159));
 		background: var(--color-surface-200, #e5e5e5);
 		cursor: pointer;
 		padding: 0;
@@ -266,7 +266,7 @@
 		inset: 0;
 		display: grid;
 		place-items: center;
-		background: rgba(0, 0, 0, 0.55);
+		background: oklch(0.16 0.006 172 / 0.55); /* surface-950 scrim */
 		color: white;
 		opacity: 0;
 		transition: opacity 0.15s;

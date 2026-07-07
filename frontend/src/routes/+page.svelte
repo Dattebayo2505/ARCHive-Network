@@ -110,7 +110,7 @@
 				<h2 class="mb-3 text-lg font-semibold tracking-tight text-surface-900">Your workspaces</h2>
 				<WorkspaceList {workspaces} onOpen={openWs} onRemove={removeWs} />
 			</div>
-			<div class="my-6 flex items-center gap-3 text-xs font-medium tracking-wide text-surface-400">
+			<div class="my-6 flex items-center gap-3 text-xs font-medium tracking-wide text-surface-600">
 				<span class="h-px flex-1 bg-surface-300"></span>
 				OR ADD A NEW EXPORT
 				<span class="h-px flex-1 bg-surface-300"></span>
@@ -191,12 +191,12 @@
 								style="width: {progress * 100}%"
 							></div>
 						</div>
-						<p class="mt-1.5 text-sm tabular-nums text-surface-500">
+						<p class="mt-1.5 text-sm tabular-nums text-surface-600">
 							{Math.round(progress * 100)}% uploaded
 						</p>
 					</div>
 				{:else}
-					<p class="text-sm text-surface-500">Large exports can take a moment.</p>
+					<p class="text-sm text-surface-600">Large exports can take a moment.</p>
 				{/if}
 			</div>
 		{:else}
@@ -213,7 +213,7 @@
 			<p class="font-medium text-surface-800">
 				Drop your <span class="font-mono text-sm text-surface-700">export.zip</span> here
 			</p>
-			<p class="mt-1 text-sm text-surface-500">or</p>
+			<p class="mt-1 text-sm text-surface-600">or</p>
 			<button
 				type="button"
 				class="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary-700 px-4 py-2 text-sm font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
@@ -225,7 +225,7 @@
 	</div>
 
 	<!-- Divider -->
-	<div class="my-5 flex items-center gap-3 text-xs font-medium tracking-wide text-surface-400">
+	<div class="my-5 flex items-center gap-3 text-xs font-medium tracking-wide text-surface-600">
 		<span class="h-px flex-1 bg-surface-300"></span>
 		ALREADY UNZIPPED?
 		<span class="h-px flex-1 bg-surface-300"></span>
@@ -245,7 +245,7 @@
 			</span>
 			<div class="min-w-0 flex-1">
 				<p class="font-medium text-surface-800">Load from this computer</p>
-				<p class="mt-0.5 text-sm text-surface-500">
+				<p class="mt-0.5 text-sm text-surface-600">
 					Browse to the unzipped export <em class="not-italic font-medium text-surface-700">or a
 						.zip</em>, or paste a path. The .zip is unzipped locally — no upload.
 				</p>
@@ -269,7 +269,7 @@
 					<path d="m9 18 6-6-6-6" /><path d="M4 12h11" opacity="0.4" />
 				</svg>
 				<input
-					class="min-w-0 flex-1 bg-transparent py-2 font-mono text-sm text-surface-800 placeholder:font-sans placeholder:text-surface-400 focus:outline-none"
+					class="min-w-0 flex-1 bg-transparent py-2 font-mono text-sm text-surface-800 placeholder:font-sans placeholder:text-surface-600 focus:outline-none"
 					type="text"
 					bind:value={typedPath}
 					placeholder="e.g. D:\exports\facebook-export"

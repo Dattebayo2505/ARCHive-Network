@@ -26,10 +26,13 @@
 		return groups;
 	});
 
-	function snapTo(e, gIndex) {
+	function snapTo(e, gIndex, firstId) {
 		const btn = e.currentTarget;
 		btn.style.scrollMarginTop = `${gIndex * 32}px`;
 		btn.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		if (firstId) {
+			onSelect(firstId);
+		}
 	}
 
 	function toggleGroup(group) {
@@ -165,7 +168,7 @@
 		{#if capped && !isArchived}
 			<div
 				class="absolute bottom-0 left-0 h-[3px] transition-[width] duration-300"
-				style="width: {progressPct}%; background-color: #1b5e20;"
+				style="width: {progressPct}%; background-color: var(--color-primary-600);"
 				aria-hidden="true"
 			></div>
 		{/if}
@@ -173,8 +176,8 @@
 {/snippet}
 
 <nav aria-label="Albums" class="flex flex-col gap-1 p-2">
-	<p class="font-display px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-surface-500">
-		Albums <span class="font-normal text-surface-400">· {albums.length}</span>
+	<p class="font-display px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-surface-600">
+		Albums <span class="font-normal text-surface-600">· {albums.length}</span>
 	</p>
 
 	{#each albums as a, i (a.fb_album_id)}
@@ -186,14 +189,14 @@
 				type="button"
 				class="sticky z-10 bg-surface-50 flex w-full items-center justify-between px-2 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors h-[32px]"
 				style="top: {gIndex * 32}px;"
-				onclick={(e) => snapTo(e, gIndex)}
+				onclick={(e) => snapTo(e, gIndex, a.fb_album_id)}
 				ondblclick={() => toggleGroup(groupName)}
 				aria-expanded={!collapsedGroups.has(groupName)}
 			>
-				<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400 group-hover:text-surface-600 transition-colors">
+				<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-600 group-hover:text-surface-800 transition-colors">
 					{groupName}
 				</span>
-				<svg viewBox="0 0 24 24" class="size-3.5 text-surface-400 transition-transform duration-200" class:-rotate-90={collapsedGroups.has(groupName)} fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500 transition-transform duration-200" class:-rotate-90={collapsedGroups.has(groupName)} fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 					<polyline points="6 9 12 15 18 9"></polyline>
 				</svg>
 			</button>
@@ -261,14 +264,14 @@
 			type="button"
 			class="sticky z-10 bg-surface-50 flex w-full items-center justify-between px-2 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors h-[32px]"
 			style="top: {gIndex * 32}px;"
-			onclick={(e) => snapTo(e, gIndex)}
+			onclick={(e) => snapTo(e, gIndex, archivedAlbums[0]?.fb_album_id)}
 			ondblclick={() => toggleGroup(groupName)}
 			aria-expanded={!collapsedGroups.has(groupName)}
 		>
-			<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400 group-hover:text-surface-600 transition-colors">
+			<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-600 group-hover:text-surface-800 transition-colors">
 				{groupName}
 			</span>
-			<svg viewBox="0 0 24 24" class="size-3.5 text-surface-400 transition-transform duration-200" class:-rotate-90={collapsedGroups.has(groupName)} fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+			<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500 transition-transform duration-200" class:-rotate-90={collapsedGroups.has(groupName)} fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 				<polyline points="6 9 12 15 18 9"></polyline>
 			</svg>
 		</button>

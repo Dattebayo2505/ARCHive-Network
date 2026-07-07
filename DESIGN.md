@@ -281,16 +281,18 @@ A **3-column flex layout** (flex, not grid, so the third column can appear/disap
   on amber-900 with a lock icon**. The lock + the number are the non-colour cues for the cap.
 
 ### Photo Tile (signature)
-- **Shape:** the photo's **own aspect ratio** (no square crop), `rounded-lg`, 1px inset ring at
-  rest, image `object-cover` into a box matched to the original ratio. Tiles flow in a **masonry**
-  column layout (`ViewControls` sets column width) so mixed portrait/landscape photos tile without
-  gaps or cropping. The full-screen preview's filmstrip follows the same rule.
+- **Shape:** in the main **PhotoGrid**, a uniform **3:2** box (`rounded-lg`, 1px inset ring at rest,
+  image `object-cover`) laid out on a CSS Grid whose column min `ViewControls` sets — even heights
+  read best while scanning to select. The **SelectionPanel** and the full-screen preview's filmstrip
+  instead keep each photo's **own aspect ratio** in a masonry column flow.
 - **Selected:** 2px green ring + a faint green wash + a solid green circular **check badge**
   (top-right). The check is the colour-independent cue.
 - **Unselected (interactive):** an empty ring outline fades in on hover/focus as the affordance;
   image lifts `scale-[1.03]`.
-- **Blocked (album full, not selected):** 55% opacity, `cursor-not-allowed`, a small lock badge —
-  it teaches the cap instead of letting the click fail.
+- **Album full (unselected):** the tile stays fully interactive — normal opacity, hover ring, no
+  lock — so it still reads as selectable. The click is rejected server-side (the ≤10 cap) and the
+  gallery raises an **"Album is full"** toast telling the volunteer to remove one to swap. A dimmed,
+  locked tile was rejected: it read as damaged/unavailable rather than "at the limit".
 - **Caption:** bottom gradient scrim with 2-line clamped caption in paper-white.
 - **Missing file:** broken-image icon + "missing file" on the bare tile; never selectable.
 - **Archived:** full opacity but read-only — no hover ring, no check affordance, `cursor-default`.

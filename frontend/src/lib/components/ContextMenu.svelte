@@ -14,6 +14,8 @@
 	let itemEls = $state([]);
 	let pos = $state({ left: 0, top: 0 });
 	let shown = $state(false); // drives the enter animation once placed
+	let openSub = $state(null); // index of the item whose submenu is open (keyboard)
+	let subEls = $state({}); // submenu button refs, keyed `${itemIndex}:${subIndex}`
 
 	const firstEnabled = () => items.findIndex((i) => !i.disabled);
 
@@ -39,7 +41,40 @@
 			top: Math.max(m, Math.min(y, vh - h - m))
 		};
 		shown = true;
+		openSub = null;
 		itemEls[firstEnabled()]?.focus();
+	}
+
+	const enabledSubs = (i) =>
+		(items[i]?.subItems ?? [])
+			.map((s, si) => (s.disabled ? -1 : si))
+			.filter((si) => si >= 0);
+
+	function openSubmenu(i) {
+		const enabled = enabledSubs(i);
+		if (!enabled.length) return;
+		openSub = i;
+		tick().then(() => subEls[`${i}:${enabled[0]}`]?.focus());
+	}
+
+	function onSubKey(e, i, si) {
+		const enabled = enabledSubs(i);
+		const at = enabled.indexOf(si);
+		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+			e.preventDefault();
+			const step = e.key === 'ArrowDown' ? 1 : -1;
+			subEls[`${i}:${enabled[(at + step + enabled.length) % enabled.length]}`]?.focus();
+		} else if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+			e.preventDefault();
+			openSub = null;
+			itemEls[i]?.focus();
+		} else if (e.key === 'Home') {
+			e.preventDefault();
+			subEls[`${i}:${enabled[0]}`]?.focus();
+		} else if (e.key === 'End') {
+			e.preventDefault();
+			subEls[`${i}:${enabled[enabled.length - 1]}`]?.focus();
+		}
 	}
 
 	function close() {
@@ -58,9 +93,15 @@
 		const at = enabled.indexOf(i);
 		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
 			e.preventDefault();
+			openSub = null;
 			const step = e.key === 'ArrowDown' ? 1 : -1;
 			const next = enabled[(at + step + enabled.length) % enabled.length];
 			itemEls[next]?.focus();
+		} else if (e.key === 'ArrowRight') {
+			if (items[i]?.subItems) {
+				e.preventDefault();
+				openSubmenu(i);
+			}
 		} else if (e.key === 'Home') {
 			e.preventDefault();
 			itemEls[enabled[0]]?.focus();
@@ -117,6 +158,8 @@
 						role="menuitem"
 						tabindex="-1"
 						disabled={item.disabled}
+						aria-haspopup="menu"
+						aria-expanded={openSub === i}
 						class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-surface-800 transition-colors hover:bg-primary-100 focus-visible:bg-primary-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-surface-400 disabled:hover:bg-transparent"
 						onclick={() => activate(item)}
 						onkeydown={(e) => onKey(e, i)}
@@ -130,15 +173,21 @@
 						<span class="flex-1 truncate">{item.label}</span>
 						<svg viewBox="0 0 24 24" class="size-4 shrink-0 text-surface-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
 					</button>
-					<div class="absolute left-full top-0 hidden min-w-[12rem] rounded-lg border border-surface-300 bg-surface-50 p-1 shadow-[0_12px_32px_oklch(0.16_0.006_172/0.18)] group-hover/submenu:block before:absolute before:inset-y-0 before:-left-2 before:w-2">
-						{#each item.subItems as sub}
+					<div
+						class="absolute left-full top-0 hidden min-w-[12rem] rounded-lg border border-surface-300 bg-surface-50 p-1 shadow-[0_12px_32px_oklch(0.16_0.006_172/0.18)] group-hover/submenu:block before:absolute before:inset-y-0 before:-left-2 before:w-2"
+						class:!block={openSub === i}
+						role="menu"
+					>
+						{#each item.subItems as sub, si}
 							<button
+								bind:this={subEls[`${i}:${si}`]}
 								type="button"
 								role="menuitem"
 								tabindex="-1"
 								disabled={sub.disabled}
 								class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-surface-800 transition-colors hover:bg-primary-100 focus-visible:bg-primary-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-surface-400 disabled:hover:bg-transparent"
 								onclick={() => activate(sub)}
+								onkeydown={(e) => onSubKey(e, i, si)}
 							>
 								<span class="flex-1 truncate">{sub.label}</span>
 							</button>
@@ -173,7 +222,7 @@
 					</span>
 					<span class="flex-1 truncate">{item.label}</span>
 					{#if item.hint}
-						<span class="shrink-0 text-xs text-surface-400">{item.hint}</span>
+						<span class="shrink-0 text-xs text-surface-600">{item.hint}</span>
 					{/if}
 				</button>
 			{/if}

@@ -58,11 +58,13 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
 - **SelectionPanel** (`lib/components/SelectionPanel.svelte`) shows selected photos for the
   **current active album only** (not all albums). It is collapsible (toggle button in the toolbar)
   and resizable via a drag handle on its left edge (pointer-based resize, 200–600px range).
-- Photo thumbnails in both PhotoGrid and SelectionPanel use **CSS `columns` masonry layout** with
-  natural aspect ratios: each `<img>` measures `naturalWidth`/`naturalHeight` on load and sets
-  `aspect-ratio` on its container. Tiles start as `1/1` squares and snap to the real ratio once
-  loaded. SelectionPanel derives its column width from `panelWidth` so thumbnails dynamically
-  resize when the panel is dragged.
+- The two thumbnail surfaces use **different layouts on purpose**. **PhotoGrid** is a uniform
+  **CSS Grid** (`repeat(auto-fill, minmax(<size>, 1fr))`, `ViewControls` sets the min); every tile
+  is a fixed **3:2** box with `object-cover` — even heights read best for scanning/selection.
+  **SelectionPanel** keeps the **CSS `columns` masonry** with natural aspect ratios: each `<img>`
+  measures `naturalWidth`/`naturalHeight` on load and sets `aspect-ratio` on its container (tiles
+  start `1/1` and snap once loaded), and its column width derives from `panelWidth` so thumbnails
+  re-flow as the panel is dragged.
 - **Videos** are a distinct gallery category (`inventory.videos`, `activeId === '__videos__'`),
   never imported: a client-captured still (canvas → `POST /api/video/{fbid}/thumbnail`) replaces
   each in the build, and all are auto-kept. **Gotcha:** set `<video>.crossOrigin` *before* `src`

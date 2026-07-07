@@ -499,11 +499,11 @@
 			<header class="mb-2 shrink-0 pt-1 pb-1">
 				<div class="flex min-w-0 items-baseline gap-3">
 					<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Archive</h1>
-					<p class="shrink-0 text-sm font-medium tabular-nums text-surface-500">
+					<p class="shrink-0 text-sm font-medium tabular-nums text-surface-600">
 						{archive.length} set aside
 					</p>
 				</div>
-				<p class="mt-2 text-sm text-surface-500">
+				<p class="mt-2 text-sm text-surface-600">
 					Photos posted with a news caption (BREAKING, LOOK, …) from Mobile uploads &amp; Photos.
 					These are excluded from the build. Right-click to preview or open the file.
 				</p>
@@ -529,7 +529,7 @@
 				<div class="flex min-w-0 items-center gap-3">
 					<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Videos</h1>
 					<div class="flex shrink-0 items-center gap-2">
-						<p class="text-sm font-medium tabular-nums text-surface-500">
+						<p class="text-sm font-medium tabular-nums text-surface-600">
 							{videos.filter((v) => v.selected).length} / {videos.length} selected
 						</p>
 						{#if videos.some((v) => v.selected)}
@@ -544,7 +544,7 @@
 						{/if}
 					</div>
 				</div>
-				<p class="mt-2 text-sm text-surface-500">
+				<p class="mt-2 text-sm text-surface-600">
 					Videos aren’t imported — a still frame replaces each one. Click a video to play it and
 					choose the frame, or right-click for “Choose Thumbnail”. They are not auto-kept.
 					<br>
@@ -586,7 +586,7 @@
 							<p
 								class="text-sm font-medium tabular-nums"
 								class:text-warning-700={activeFull}
-								class:text-surface-500={!activeFull}
+								class:text-surface-600={!activeFull}
 							>
 								{#if activeCap != null}
 									{activeAlbum.count_selected} / {activeCap} selected
@@ -638,13 +638,13 @@
 					</div>
 				{/if}
 				{#if activeAlbum.post_timestamp}
-					<p class="mt-2 text-xs font-medium text-surface-500 uppercase tracking-wide">
+					<p class="mt-2 text-xs font-medium text-surface-600 uppercase tracking-wide">
 						Date posted on FB: {formatFBDate(activeAlbum.post_timestamp)}
 					</p>
 				{/if}
 				{#if activeAlbum.description}
 					{@const isLongDesc = activeAlbum.description.length > 120 || activeAlbum.description.split('\n').length > 2}
-					<div class="mt-1.5 text-xs text-surface-600 border-l-2 border-surface-300 pl-2.5 py-0.5">
+					<div class="mt-1.5 rounded-md bg-surface-200 px-2.5 py-1.5 text-xs text-surface-600">
 						<p class="whitespace-pre-wrap break-words leading-relaxed" class:line-clamp-2={isLongDesc && !descExpanded}>
 							{activeAlbum.description}
 						</p>
@@ -667,7 +667,6 @@
 				<PhotoGrid
 					album={activeAlbum}
 					thumb={thumbUrl}
-					full={activeFull}
 					size={gridSize}
 					{onToggle}
 					onContextMenu={openPhotoMenu}
@@ -1045,10 +1044,10 @@
 	}
 
 	.album-resize-handle:hover {
-		background-color: rgba(27, 94, 32, 0.15);
+		background-color: oklch(0.5 0.12 159 / 0.15); /* primary-600 */
 	}
 
 	.album-resize-handle.active {
-		background-color: rgba(27, 94, 32, 0.2);
+		background-color: oklch(0.5 0.12 159 / 0.2); /* primary-600 */
 	}
 </style>

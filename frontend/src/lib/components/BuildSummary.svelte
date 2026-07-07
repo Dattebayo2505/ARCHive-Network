@@ -1,4 +1,6 @@
 <script>
+	import { trapFocus } from '$lib/focusTrap.js';
+
 	let { result, onClose } = $props();
 
 	const stats = $derived([
@@ -16,6 +18,8 @@
 	role="dialog"
 	aria-modal="true"
 	aria-labelledby="build-title"
+	tabindex="-1"
+	use:trapFocus
 >
 	<div
 		class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-surface-300 bg-surface-50 shadow-xl"
@@ -48,7 +52,7 @@
 					>
 						{s.value}
 					</p>
-					<p class="mt-0.5 text-xs text-surface-500">{s.label}</p>
+					<p class="mt-0.5 text-xs text-surface-600">{s.label}</p>
 				</div>
 			{/each}
 		</div>
