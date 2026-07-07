@@ -1,7 +1,7 @@
 <script>
 	import { VIEW_SIZES } from '$lib/viewSizes.js';
 
-	let { size, onSize, onOpenPreview, previewDisabled = false } = $props();
+	let { size, onSize } = $props();
 
 	let btns = $state([]);
 
@@ -55,28 +55,4 @@
 			{/each}
 		</div>
 	</div>
-
-	<button
-		type="button"
-		class="flex h-9 items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-3 text-sm font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
-		onclick={onOpenPreview}
-		disabled={previewDisabled}
-	>
-		<svg
-			viewBox="0 0 24 24"
-			class="size-4 text-primary-600"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<path d="M15 3h6v6" />
-			<path d="M9 21H3v-6" />
-			<path d="M21 3l-7 7" />
-			<path d="M3 21l7-7" />
-		</svg>
-		Preview
-	</button>
 </div>

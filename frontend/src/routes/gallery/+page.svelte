@@ -555,8 +555,6 @@
 					<ViewControls
 						size={gridSize}
 						onSize={setSize}
-						onOpenPreview={() => openPreviewAt(0)}
-						previewDisabled={activeAlbum.photos.length === 0}
 					/>
 					<button
 						type="button"
