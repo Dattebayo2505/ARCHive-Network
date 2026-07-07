@@ -570,7 +570,7 @@
 						{#if videos.some((v) => v.selected)}
 							<button
 								type="button"
-								class="flex items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-2.5 py-1 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+								class="flex h-[38px] items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-2.5 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
 								onclick={onDeselectAll}
 							>
 								<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -634,19 +634,19 @@
 									{activeAlbum.count_selected} selected · no limit
 								{/if}
 							</p>
-							{#if activeAlbum.count_selected > 0}
-								<button
-									type="button"
-									class="flex items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-2.5 py-1 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-									onclick={onDeselectAll}
-								>
-									<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
-									Deselect All
-								</button>
-							{/if}
 						</div>
 					</div>
 					<div class="flex items-center gap-1">
+						{#if activeAlbum.count_selected > 0}
+							<button
+								type="button"
+								class="mr-2 flex h-[38px] items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-2.5 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+								onclick={onDeselectAll}
+							>
+								<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+								Deselect All
+							</button>
+						{/if}
 					<ViewControls
 						size={gridSize}
 						onSize={setSize}
