@@ -59,7 +59,7 @@
 {#if open}
 	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div
-		class="fixed inset-0 z-50 grid place-items-center bg-surface-950/50 p-4 backdrop-blur-[1px]"
+		class="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-[1px]"
 		onclick={(e) => e.target === e.currentTarget && onClose?.()}
 		onkeydown={onKey}
 		role="dialog"
@@ -169,10 +169,10 @@
 							<li>
 								<button
 									type="button"
-									class="group flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm text-surface-800 transition-colors hover:bg-primary-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-600"
+									class="group flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm text-surface-800 transition-colors hover:bg-primary-50 dark:hover:bg-primary-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-600"
 									onclick={() => load(dir.path)}
 								>
-									<svg viewBox="0 0 24 24" class="size-4 shrink-0 text-primary-600" fill="none"
+									<svg viewBox="0 0 24 24" class="size-4 shrink-0 text-primary-600 dark:text-primary-400" fill="none"
 										stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 										<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
 									</svg>
@@ -197,7 +197,7 @@
 							<li>
 								<button
 									type="button"
-									class="group flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm text-surface-800 transition-colors hover:bg-primary-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-600"
+									class="group flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm text-surface-800 transition-colors hover:bg-primary-50 dark:hover:bg-primary-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-600"
 									onclick={() => onChooseZip?.(file.path)}
 								>
 									<svg viewBox="0 0 24 24" class="size-4 shrink-0 text-surface-500" fill="none"

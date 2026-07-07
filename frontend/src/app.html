@@ -4,6 +4,25 @@
 		<meta charset="utf-8" />
 		<title>ARCHive Network</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!-- Resolve light/dark before first paint so the theme never flashes. An
+		     explicit saved choice wins; otherwise follow the OS. Mirrors the logic
+		     in src/lib/theme.svelte.js — keep the storage key in sync. -->
+		<script>
+			(function () {
+				try {
+					var saved = localStorage.getItem('archive-theme');
+					var mode =
+						saved === 'dark' || saved === 'light'
+							? saved
+							: window.matchMedia('(prefers-color-scheme: dark)').matches
+								? 'dark'
+								: 'light';
+					var root = document.documentElement;
+					if (mode === 'dark') root.classList.add('dark');
+					root.style.colorScheme = mode;
+				} catch (e) {}
+			})();
+		</script>
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link

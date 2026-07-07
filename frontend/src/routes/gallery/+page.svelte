@@ -690,11 +690,11 @@
 						</p>
 						{#if isLongDesc}
 							{#if !descExpanded}
-								<button type="button" class="mt-0.5 font-medium text-primary-600 hover:text-primary-700 hover:underline" onclick={() => (descExpanded = true)}>
+								<button type="button" class="mt-0.5 font-medium text-primary-600 hover:text-primary-700 dark:text-primary-300 dark:hover:text-primary-200 hover:underline" onclick={() => (descExpanded = true)}>
 									Read more
 								</button>
 							{:else}
-								<button type="button" class="mt-0.5 font-medium text-primary-600 hover:text-primary-700 hover:underline" onclick={() => (descExpanded = false)}>
+								<button type="button" class="mt-0.5 font-medium text-primary-600 hover:text-primary-700 dark:text-primary-300 dark:hover:text-primary-200 hover:underline" onclick={() => (descExpanded = false)}>
 									See less
 								</button>
 							{/if}

@@ -2,6 +2,9 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { getSession } from '$lib/api.js';
+	import { theme, toggleTheme } from '$lib/theme.svelte.js';
+
+	let isDark = $derived(theme.mode === 'dark');
 
 	let { children } = $props();
 
@@ -60,35 +63,78 @@
 
 			<div class="min-w-0 leading-tight">
 				<p class="font-display truncate text-base font-semibold tracking-tight sm:text-lg">ARCHive Network</p>
-				<p class="truncate text-xs text-primary-100/80">
+				<p class="truncate text-xs text-primary-50/90">
 					{displayName || 'From profile archives to production-ready assets'}
 				</p>
 			</div>
 
-			<!-- Step indicator -->
-			<nav class="ml-auto hidden items-center gap-1.5 md:flex" aria-label="Progress">
-				{#each steps as step, i}
-					{#if i > 0}
-						<span class="h-px w-5 bg-primary-50/30" aria-hidden="true"></span>
-					{/if}
-					<span
-						class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors"
-						class:bg-primary-50={i === activeStep}
-						class:text-primary-800={i === activeStep}
-						class:text-primary-100={i !== activeStep}
-						aria-current={i === activeStep ? 'step' : undefined}
-					>
+			<div class="ml-auto flex items-center gap-2 sm:gap-3">
+				<!-- Step indicator -->
+				<nav class="hidden items-center gap-1.5 md:flex" aria-label="Progress">
+					{#each steps as step, i}
+						{#if i > 0}
+							<span class="h-px w-5 bg-primary-50/30" aria-hidden="true"></span>
+						{/if}
 						<span
-							class="grid size-4 place-items-center rounded-full text-[0.65rem] font-semibold"
-							class:bg-primary-700={i === activeStep}
-							class:text-primary-50={i === activeStep}
-							class:bg-primary-50={i !== activeStep}
-							class:text-primary-700={i !== activeStep}
-						>{i + 1}</span>
-						{step.label}
-					</span>
-				{/each}
-			</nav>
+							class="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors"
+							class:bg-primary-50={i === activeStep}
+							class:text-primary-800={i === activeStep}
+							class:text-primary-50={i !== activeStep}
+							class:opacity-70={i !== activeStep}
+							aria-current={i === activeStep ? 'step' : undefined}
+						>
+							<span
+								class="grid size-4 place-items-center rounded-full text-[0.65rem] font-semibold"
+								class:bg-primary-700={i === activeStep}
+								class:text-primary-50={i === activeStep}
+								class:bg-primary-50={i !== activeStep}
+								class:text-primary-700={i !== activeStep}
+							>{i + 1}</span>
+							{step.label}
+						</span>
+					{/each}
+				</nav>
+
+				<!-- Light / dark toggle -->
+				<button
+					type="button"
+					onclick={toggleTheme}
+					class="relative grid size-9 shrink-0 place-items-center rounded-lg text-primary-50 transition-colors hover:bg-primary-50/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-50"
+					aria-pressed={isDark}
+					aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+					title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+				>
+					<!-- Sun (shown in dark mode → click for light) -->
+					<svg
+						viewBox="0 0 24 24"
+						class="theme-icon absolute size-5"
+						class:theme-icon-hidden={!isDark}
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<circle cx="12" cy="12" r="4" />
+						<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+					</svg>
+					<!-- Moon (shown in light mode → click for dark) -->
+					<svg
+						viewBox="0 0 24 24"
+						class="theme-icon absolute size-5"
+						class:theme-icon-hidden={isDark}
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+					</svg>
+				</button>
+			</div>
 		</div>
 	</header>
 
@@ -96,11 +142,13 @@
 		{@render children()}
 	</main>
 
+	<!-- theme-toggle icon crossfade lives here (scoped); reduced-motion is
+	     honoured by the global rule in app.css that collapses transitions. -->
 	<footer class="border-t border-surface-300 bg-surface-50">
 		<div
 			class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-xs text-surface-600 sm:px-4"
 		>
-			<svg viewBox="0 0 24 24" class="size-3.5 shrink-0 text-primary-600" fill="none"
+			<svg viewBox="0 0 24 24" class="size-3.5 shrink-0 text-primary-600 dark:text-primary-400" fill="none"
 				stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
 				aria-hidden="true">
 				<rect x="3" y="11" width="18" height="11" rx="2" />
@@ -114,3 +162,22 @@
 		</div>
 	</footer>
 </div>
+
+<style>
+	/* Crossfade + quarter-turn between the sun and moon glyphs. The two SVGs are
+	   stacked (absolute); the inactive one fades and rotates out. Motion is
+	   transform/opacity only, and the global prefers-reduced-motion rule collapses
+	   it to an instant swap. */
+	.theme-icon {
+		opacity: 1;
+		transform: rotate(0deg) scale(1);
+		transition:
+			opacity 200ms cubic-bezier(0.22, 1, 0.36, 1),
+			transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+	}
+
+	.theme-icon-hidden {
+		opacity: 0;
+		transform: rotate(-90deg) scale(0.5);
+	}
+</style>

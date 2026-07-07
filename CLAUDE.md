@@ -46,9 +46,22 @@ are downstream phases (see the sibling `this_profile's_activity_across_facebook/
 - `PRODUCT.md` (strategic: register, users, brand) + `DESIGN.md` (visual: the **DLSU-green "archers"**
   theme — calm, light, paper-calm; green for identity/primary action only) are the source of truth
   for UI work. The custom Skeleton theme lives in `frontend/src/app.css`.
-- The UI is **deliberately light-only**, locked with `color-scheme: only light` + a class-based
-  `dark` variant in `app.css` (Skeleton/Tailwind v4 default to `prefers-color-scheme`, which would
-  auto-invert to dark). Don't reintroduce dark mode without a product decision.
+- The UI **defaults to light** (photos read best on a neutral light surface) with an **opt-in dark
+  mode** toggled from the header (sun/moon button, upper-right). The `dark` variant is **class-based**
+  (`@variant dark` in `app.css`) so the theme is driven only by a `.dark` class on `<html>` — never
+  auto-inverted by the OS or a browser's Auto Dark Mode. The class is resolved **pre-paint** by an
+  inline script in `app.html` (no theme flash) and kept in sync by `$lib/theme.svelte.js`
+  (`localStorage` key `archive-theme`; explicit choice wins, else follows `prefers-color-scheme`).
+- **Dark mode is a semantic-token inversion, not per-component `dark:` classes.** A single `.dark`
+  block in `app.css` re-declares the `--color-surface-*` ramp (low indices → dark backgrounds, high
+  indices → light ink) so all ~300 `bg-/text-/border-surface-*` usages flip at once. DLSU green keeps
+  its identity (the deep-green header/buttons already pop on dark); only the pale `bg-primary-100`
+  wash is darkened. Two exceptions are handled deliberately: (1) "always-dark" scrims over photos/
+  modals are pinned to `bg-black/*` so they don't flip to light; (2) the full-screen photo/video
+  viewers carry `.surface-fixed` (re-pins the surface ramp to its light values) because they're a
+  dark room in *both* themes. When adding UI, prefer surface/primary tokens and it inverts for free;
+  only reach for a `dark:` utility when an element is dual-used as both a light-mode dark scrim and a
+  content surface.
 
 ## Gallery UI patterns
 - The gallery page (`routes/gallery/+page.svelte`) uses a **3-column flex layout**: fixed-width left

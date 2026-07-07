@@ -151,10 +151,9 @@
 	<!-- Primary: drag-and-drop .zip -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="relative rounded-2xl border-2 border-dashed bg-surface-50 px-6 py-10 text-center transition-colors"
-		class:border-surface-300={!dragging}
-		class:border-primary-500={dragging}
-		class:bg-primary-50={dragging}
+		class="relative rounded-2xl border-2 border-dashed bg-surface-50 px-6 py-10 text-center transition-colors {dragging
+			? 'border-primary-500 bg-primary-50 dark:bg-primary-100'
+			: 'border-surface-300'}"
 		ondragover={(e) => {
 			e.preventDefault();
 			dragging = true;

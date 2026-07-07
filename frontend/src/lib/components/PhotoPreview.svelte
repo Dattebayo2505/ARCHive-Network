@@ -153,7 +153,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
 	bind:this={container}
-	class="fixed inset-0 z-[60] flex flex-col bg-surface-950/80 backdrop-blur-sm"
+	class="surface-fixed fixed inset-0 z-[60] flex flex-col bg-surface-950/80 backdrop-blur-sm"
 	role="dialog"
 	aria-modal="true"
 	aria-label="Photo preview"

@@ -12,7 +12,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
-	class="fixed inset-0 z-50 grid place-items-center bg-surface-950/50 p-4 backdrop-blur-[1px]"
+	class="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-[1px]"
 	onclick={(e) => e.target === e.currentTarget && onClose()}
 	onkeydown={(e) => e.key === 'Escape' && onClose()}
 	role="dialog"

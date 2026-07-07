@@ -5,20 +5,26 @@
 
 @source '../node_modules/@skeletonlabs/skeleton-svelte/dist';
 
-/* ARCHive Network is a deliberately light, paper-calm tool: photos read best on a
- * neutral light surface and rotating volunteers get one predictable look.
- * Redefine Tailwind's `dark` variant to be class-based (default is the
- * prefers-color-scheme media query) so Skeleton never auto-inverts to dark. */
+/* ARCHive Network ships light by default (photos read best on a neutral light
+ * surface) with an opt-in dark mode toggled from the header. The `dark` variant
+ * is class-based (default is the prefers-color-scheme media query) so the theme
+ * is driven only by the `.dark` class on <html> — never auto-inverted by the OS
+ * or a browser's Auto Dark Mode. The class is set pre-paint in app.html. */
 @variant dark (&:where(.dark, .dark *));
 
 html {
-	/* `only light` also opts out of the browser's Auto Dark Mode force-darkening. */
-	color-scheme: only light;
+	/* Only these two schemes exist; `.dark` opts into the dark one below. Not
+	   `only light` anymore — that would fight the deliberate dark theme. */
+	color-scheme: light;
 	/* The gallery is a fixed-height app shell whose panes scroll internally; the
 	   document itself never scrolls, so suppress the overscroll rubber-band that
 	   would otherwise bounce the whole page when the wheel is over a non-scrolling
 	   region (e.g. the header). */
 	overscroll-behavior: none;
+}
+
+html.dark {
+	color-scheme: dark;
 }
 
 /* ------------------------------------------------------------------ *
@@ -249,6 +255,117 @@ html {
 	--color-surface-950: oklch(0.16 0.006 172);
 	--color-surface-contrast-dark: var(--color-surface-950);
 	--color-surface-contrast-light: var(--color-surface-50);
+	--color-surface-contrast-50: var(--color-surface-contrast-dark);
+	--color-surface-contrast-100: var(--color-surface-contrast-dark);
+	--color-surface-contrast-200: var(--color-surface-contrast-dark);
+	--color-surface-contrast-300: var(--color-surface-contrast-dark);
+	--color-surface-contrast-400: var(--color-surface-contrast-light);
+	--color-surface-contrast-500: var(--color-surface-contrast-light);
+	--color-surface-contrast-600: var(--color-surface-contrast-light);
+	--color-surface-contrast-700: var(--color-surface-contrast-light);
+	--color-surface-contrast-800: var(--color-surface-contrast-light);
+	--color-surface-contrast-900: var(--color-surface-contrast-light);
+	--color-surface-contrast-950: var(--color-surface-contrast-light);
+}
+
+/* ------------------------------------------------------------------ *
+ * Dark mode — the same `archers` product, at night.
+ *
+ * The palette was authored single-mode, so most tokens are dual-use: low
+ * surface indices are backgrounds, high indices are text. Dark mode therefore
+ * *inverts the neutral surface ramp* — one override that flips every
+ * `bg-surface-50` card, `text-surface-900` heading, and `border-surface-300`
+ * hairline across the whole app at once, with no per-component edits. The ramp
+ * stays green-tinted (hue ~170) so it reads as the same tool after dark, and
+ * elevation still climbs with the index (100 = canvas, 50 = raised card).
+ *
+ * DLSU green keeps its identity: the deep-green header and green buttons/rings
+ * already pop on a dark field, so the brand ramp is left intact — only the pale
+ * green *wash* tints (used as row-hover fills on content) are darkened here so
+ * they don't flash bright. A few "always dark" scrims over photos/modals are
+ * pinned to fixed values in their components (they must stay dark in both
+ * modes, not follow this inverted ramp). See DESIGN.md § Dark mode.
+ * ------------------------------------------------------------------ */
+[data-theme='archers'].dark,
+.dark [data-theme='archers'] {
+	/* Surface — inverted, green-tinted cool neutrals. 100 is the canvas (darkest
+	   background); 50 is the raised card a half-step above it; 200 is a hover/
+	   badge fill; 300–400 are hairlines; 500–950 climb from dim to primary ink. */
+	--color-surface-50: oklch(0.215 0.006 172); /* raised cards, panels, footer */
+	--color-surface-100: oklch(0.17 0.006 172); /* body canvas (darkest) */
+	--color-surface-200: oklch(0.255 0.007 171); /* hover fills, badges, code chips */
+	--color-surface-300: oklch(0.325 0.008 171); /* borders & dividers */
+	--color-surface-400: oklch(0.52 0.01 170); /* faint icons / disabled text */
+	--color-surface-500: oklch(0.64 0.011 169); /* dim text */
+	--color-surface-600: oklch(0.73 0.011 168); /* muted secondary text (≥4.5:1) */
+	--color-surface-700: oklch(0.81 0.009 167); /* secondary text */
+	--color-surface-800: oklch(0.88 0.007 166); /* strong text */
+	--color-surface-900: oklch(0.94 0.005 165); /* primary ink */
+	--color-surface-950: oklch(0.98 0.003 165); /* max-contrast text */
+
+	/* Contrast tokens invert with the ramp: low surfaces are now dark (need light
+	   text), high surfaces are light (need dark text). */
+	--color-surface-contrast-50: var(--color-surface-contrast-light);
+	--color-surface-contrast-100: var(--color-surface-contrast-light);
+	--color-surface-contrast-200: var(--color-surface-contrast-light);
+	--color-surface-contrast-300: var(--color-surface-contrast-light);
+	--color-surface-contrast-400: var(--color-surface-contrast-light);
+	--color-surface-contrast-500: var(--color-surface-contrast-dark);
+	--color-surface-contrast-600: var(--color-surface-contrast-dark);
+	--color-surface-contrast-700: var(--color-surface-contrast-dark);
+	--color-surface-contrast-800: var(--color-surface-contrast-dark);
+	--color-surface-contrast-900: var(--color-surface-contrast-dark);
+	--color-surface-contrast-950: var(--color-surface-contrast-dark);
+
+	/* The pale-green wash used for row hover / active fills (`bg-primary-100`) is
+	   darkened so it reads as a subtle green tint on dark, not a bright flash.
+	   primary-50 is left intact — it's overwhelmingly *light text* on the green
+	   header/buttons (the few `bg-primary-50` hovers opt into the darker wash via
+	   `dark:bg-primary-100`). primary-200 is also left intact: it's the *light*
+	   pill behind the in-progress count badge (mirrors the amber "full" pill) and
+	   the faint spinner track — both want to stay light on dark. Higher primary
+	   indices stay put (deep-green header/buttons look right on dark as-is). */
+	--color-primary-100: oklch(0.31 0.05 161); /* row hover / active fill */
+
+	/* Anchor/link green brightened so it stays legible on the dark canvas. */
+	--anchor-font-color: var(--color-primary-300);
+
+	/* Skeleton swaps to its `*-dark` base tokens under `.dark`; those point at the
+	   *original* ramp ends (surface-950 bg, surface-50 text), which the inversion
+	   above has flipped the wrong way. Repoint them at the inverted ramp so the
+	   document background and default text color are dark-canvas / light-ink. */
+	--base-font-color-dark: var(--color-surface-900);
+	--heading-font-color-dark: var(--color-surface-900);
+	--body-background-color-dark: var(--color-surface-100);
+	--anchor-font-color-dark: var(--color-primary-300);
+}
+
+/* Active rail rows (album / Videos / Archive / rename overlay) pair the green
+   wash `bg-primary-100` with dark-green `text-primary-900`. On dark the wash is
+   itself dark green, so lift the paired text to a light green — scoped to that
+   exact pairing so the in-progress count badge (dark text on the *light*
+   `bg-primary-200` pill) is untouched. */
+.dark .bg-primary-100.text-primary-900 {
+	color: var(--color-primary-300);
+}
+
+/* The full-screen photo/video viewers are a deliberate dark room in BOTH themes:
+   a dark overlay, light text, a white "Keep" pill. Under dark mode the inverted
+   ramp would turn all that light text dark-on-dark, so re-pin the surface ramp to
+   its light-mode values inside `.surface-fixed` (the viewer roots). One block
+   keeps both viewers identical in light and dark with no per-element overrides. */
+.dark .surface-fixed {
+	--color-surface-50: oklch(0.99 0.003 165);
+	--color-surface-100: oklch(0.975 0.004 165);
+	--color-surface-200: oklch(0.93 0.006 165);
+	--color-surface-300: oklch(0.87 0.007 165);
+	--color-surface-400: oklch(0.72 0.008 166);
+	--color-surface-500: oklch(0.58 0.008 167);
+	--color-surface-600: oklch(0.48 0.008 168);
+	--color-surface-700: oklch(0.4 0.008 169);
+	--color-surface-800: oklch(0.31 0.008 170);
+	--color-surface-900: oklch(0.23 0.007 171);
+	--color-surface-950: oklch(0.16 0.006 172);
 	--color-surface-contrast-50: var(--color-surface-contrast-dark);
 	--color-surface-contrast-100: var(--color-surface-contrast-dark);
 	--color-surface-contrast-200: var(--color-surface-contrast-dark);

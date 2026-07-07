@@ -101,11 +101,12 @@ it copied, and otherwise stays quiet and out of the way. Deep **DLSU green** car
 Network identity at the header and on the actions that matter; everything else is a soft,
 green-tinted paper neutral so the photographs are the brightest thing on the screen.
 
-The system is **light by deliberate choice** — locked with `color-scheme: only light` so neither
-OS dark mode nor a browser's Auto Dark Mode can mangle it. The audience rotates every term and
-gets no training, so legibility and self-evidence beat density and cleverness. Colour is treasure
-spent only where attention is genuinely needed: an album hitting its cap, an ingest error, a build
-confirmation.
+The system is **light by default** with an **opt-in dark mode** the volunteer toggles from the
+header. It is never left to chance: the `dark` variant is class-based, so neither OS dark mode nor a
+browser's Auto Dark Mode can mangle it — the theme changes only when the user asks. The audience
+rotates every term and gets no training, so legibility and self-evidence beat density and cleverness.
+Colour is treasure spent only where attention is genuinely needed: an album hitting its cap, an
+ingest error, a build confirmation. See **§ Dark mode** for how the palette inverts.
 
 It explicitly rejects the flashy-SaaS-landing reflex (no gradient heroes, no marketing hype, no
 decorative motion), the toy/consumer-app reflex (no mascots, candy colours, or gimmicks that
@@ -169,6 +170,35 @@ the header and the Build button feel like *the* things to act on.
 **The Spend-At-The-Edge Rule.** Amber and red are forbidden on anything at rest. They appear only
 at a real limit (cap reached) or a real failure (bad export, destructive confirm). A screen with no
 problems has no amber and no red on it.
+
+### Dark mode
+
+Light is the default; dark is an **opt-in** toggled from the header (a sun/moon button, upper-right)
+and remembered per-viewer (`localStorage` `archive-theme`; explicit choice wins, else follows the
+OS). The class is resolved **before first paint** by an inline script in `app.html` so the theme
+never flashes.
+
+Dark mode is a **semantic-token inversion**, not a second set of components. One `.dark` block in
+`app.css` re-declares the `--color-surface-*` ramp so the *same* tokens mean the right thing after
+dark: low indices become dark backgrounds (`surface-100` canvas, `surface-50` the raised card a
+half-step above it), high indices become light ink (`surface-900`). Because every surface across the
+app is expressed as a `surface-*` token, the whole product flips at once — cards, rails, borders,
+text, modals — with no per-component `dark:` classes. The ramp stays green-tinted (hue ~170) so it
+reads as the same tool at night, and elevation still climbs with the index.
+
+**DLSU green keeps its identity.** The deep-green header and green buttons/rings already pop on a
+dark field, so the brand ramp is left intact; only the pale `bg-primary-100` *wash* (row hover /
+active fill) is darkened so it doesn't flash bright, and green *text on dark content* (active album
+name, "Read more", the footer lock) is lifted to a lighter green for contrast.
+
+Two deliberate exceptions stay dark in **both** themes: (1) **scrims over media** — modal backdrops,
+photo caption gradients, tile badges, preview backdrops — are pinned to fixed `bg-black/*` values so
+the inverted ramp can't turn them light-on-light; (2) the **full-screen photo/video viewers** carry
+`.surface-fixed`, which re-pins the surface ramp to its light values inside them, because a photo
+viewer is a dark room regardless of the app theme (dark overlay, light chrome, a white "Keep" pill).
+
+Contrast is held to the same AA bar in dark as in light: body/placeholder ≥4.5:1, large text and the
+green buttons ≥3:1, verified against the actual dark surfaces.
 
 ## 3. Typography
 
@@ -368,7 +398,9 @@ closes (keys shown as `<kbd>`). `VideoPreview` also drives the client-side thumb
   wordmark, headings, and tracked labels; Inter for all body, UI, and data.
 - **Do** keep ≥4.5:1 body / placeholder contrast and ≥3:1 for large text and the green buttons;
   give every control a visible `primary-600` focus ring.
-- **Do** lock the theme with `color-scheme: only light` so OS/browser dark modes can't invert it.
+- **Do** keep the `dark` variant **class-based** (`@variant dark` in `app.css`) so only the header
+  toggle drives the theme — never the OS or a browser's Auto Dark Mode. Verify contrast in **both**
+  light and dark; every surface/primary token must invert cleanly (see § Dark mode).
 
 ### Don't:
 - **Don't** build a flashy SaaS landing: no gradient heroes, marketing hype, or decorative motion.

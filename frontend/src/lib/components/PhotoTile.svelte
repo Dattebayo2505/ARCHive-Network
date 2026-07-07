@@ -46,7 +46,7 @@
 			{@const isApplied = tag === 'APPLIED'}
 			{@const isAuto = tag === 'AUTO'}
 			<span
-				class="pointer-events-none absolute left-2 top-2 rounded px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide {isApplied ? 'bg-primary-900/75 text-primary-50' : isAuto ? 'bg-warning-900/75 text-warning-50' : 'bg-surface-900/75 text-surface-50'}"
+				class="pointer-events-none absolute left-2 top-2 rounded px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide {isApplied ? 'bg-primary-900/75 text-primary-50' : isAuto ? 'bg-warning-900/75 text-warning-50' : 'bg-black/65 text-white'}"
 			>
 				{tag}
 			</span>
@@ -64,7 +64,7 @@
 		{:else if interactive}
 			<!-- Affordance: empty ring appears on hover/focus -->
 			<span
-				class="pointer-events-none absolute right-2 top-2 size-6 rounded-full border-2 border-surface-50/90 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+				class="pointer-events-none absolute right-2 top-2 size-6 rounded-full border-2 border-white/90 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
 				aria-hidden="true"
 			></span>
 		{/if}
@@ -75,7 +75,7 @@
 				class="pointer-events-none absolute inset-0 grid place-items-center"
 				aria-hidden="true"
 			>
-				<span class="grid size-11 place-items-center rounded-full bg-surface-950/55 text-surface-50 shadow-lg transition-transform group-hover:scale-110">
+				<span class="grid size-11 place-items-center rounded-full bg-black/55 text-white shadow-lg transition-transform group-hover:scale-110">
 					<svg viewBox="0 0 24 24" class="size-6" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
 				</span>
 			</span>
@@ -84,9 +84,9 @@
 		<!-- Caption overlay -->
 		{#if photo.caption}
 			<span
-				class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-surface-950/80 to-transparent px-2 pb-1.5 pt-6"
+				class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-6"
 			>
-				<span class="line-clamp-2 text-left text-[0.7rem] leading-snug text-surface-50">{photo.caption}</span>
+				<span class="line-clamp-2 text-left text-[0.7rem] leading-snug text-white">{photo.caption}</span>
 			</span>
 		{/if}
 	{:else}
