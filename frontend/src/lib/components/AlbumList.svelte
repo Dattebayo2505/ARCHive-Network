@@ -218,7 +218,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="sticky z-10 bg-surface-50 flex w-full items-center justify-between pl-2 pr-1 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors h-[32px] select-none"
-				style="top: {gIndex * 32}px;"
+				style="top: {gIndex * 32}px; bottom: {(visibleGroups.length - 1 - gIndex) * 32}px;"
 				ondblclick={(e) => snapTo(e, gIndex, a.fb_album_id)}
 				oncontextmenu={(e) => {
 					e.preventDefault();
@@ -253,7 +253,7 @@
 		<button
 			type="button"
 			class="sticky z-10 flex items-center gap-2 rounded-lg px-2.5 text-left text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 h-[32px]"
-			style="top: {gIndex * 32}px;"
+			style="top: {gIndex * 32}px; bottom: {(visibleGroups.length - 1 - gIndex) * 32}px;"
 			class:bg-surface-50={!active}
 			class:bg-primary-100={active}
 			class:text-primary-900={active}
@@ -278,7 +278,7 @@
 		<button
 			type="button"
 			class="sticky z-10 flex items-center gap-2 rounded-lg px-2.5 text-left text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 h-[32px]"
-			style="top: {gIndex * 32}px;"
+			style="top: {gIndex * 32}px; bottom: {(visibleGroups.length - 1 - gIndex) * 32}px;"
 			class:bg-surface-50={!active}
 			class:bg-primary-100={active}
 			class:text-primary-900={active}
@@ -303,7 +303,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="sticky z-10 bg-surface-50 flex w-full items-center justify-between pl-2 pr-1 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors h-[32px] select-none"
-			style="top: {gIndex * 32}px;"
+			style="top: {gIndex * 32}px; bottom: {(visibleGroups.length - 1 - gIndex) * 32}px;"
 			ondblclick={(e) => snapTo(e, gIndex, archivedAlbums[0]?.fb_album_id)}
 			oncontextmenu={(e) => {
 				e.preventDefault();
