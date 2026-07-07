@@ -44,6 +44,19 @@
 	let albumOpen = $state(true);
 	let albumWidth = $state(240);
 	let albumDragging = $state(false);
+	let albumScrollTop = $state(0);
+	let expandedScrollEl = $state(null);
+	let collapsedScrollEl = $state(null);
+
+	$effect(() => {
+		if (albumOpen && expandedScrollEl && expandedScrollEl.scrollTop !== albumScrollTop) {
+			expandedScrollEl.scrollTop = albumScrollTop;
+		}
+		if (!albumOpen && collapsedScrollEl && collapsedScrollEl.scrollTop !== albumScrollTop) {
+			collapsedScrollEl.scrollTop = albumScrollTop;
+		}
+	});
+
 	let editingAlbumId = $state(null);
 	let descExpanded = $state(false);
 	const toaster = createToaster();
@@ -96,12 +109,29 @@
 	function startAlbumResize(e) {
 		e.preventDefault();
 		albumDragging = true;
-		const startX = e.clientX;
-		const startW = albumWidth;
+		let startX = e.clientX;
+		let startW = albumOpen ? albumWidth : 36;
 
 		function onMove(ev) {
 			const delta = ev.clientX - startX;
-			albumWidth = Math.max(140, Math.min(400, startW + delta));
+			let newW = startW + delta;
+
+			if (!albumOpen) {
+				if (delta > 15) {
+					albumOpen = true;
+					startX = ev.clientX;
+					startW = 140;
+					albumWidth = startW;
+				}
+			} else {
+				if (newW < 110) {
+					albumOpen = false;
+					startX = ev.clientX;
+					startW = 36;
+				} else {
+					albumWidth = Math.max(140, Math.min(400, newW));
+				}
+			}
 		}
 		function onUp() {
 			albumDragging = false;
@@ -373,6 +403,8 @@
 
 			<div
 				use:dragScrollY
+				bind:this={expandedScrollEl}
+				onscroll={(e) => { albumScrollTop = e.currentTarget.scrollTop; }}
 				class="rounded-xl border border-surface-300 bg-surface-50 shadow-sm lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 			>
 				<AlbumList
@@ -443,7 +475,18 @@
 		</aside>
 	{:else}
 		<!-- Collapsed album rail: thin icon strip with album shortcodes -->
-		<aside class="album-sidebar-collapsed">
+		<aside
+			class="album-sidebar-collapsed relative"
+			bind:this={collapsedScrollEl}
+			onscroll={(e) => { albumScrollTop = e.currentTarget.scrollTop; }}
+		>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="album-resize-handle"
+				class:active={albumDragging}
+				onpointerdown={startAlbumResize}
+			></div>
+
 			<div class="album-expand-wrapper">
 				<button
 					type="button"
@@ -990,6 +1033,7 @@
 
 	/* --- Album sidebar (collapsed icon rail) --- */
 	.album-sidebar-collapsed {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
