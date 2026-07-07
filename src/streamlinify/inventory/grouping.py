@@ -63,10 +63,17 @@ def derive_caption_albums(inventory: ExportInventory) -> None:
             for photo in members:
                 photo.album_fbid = synth
                 photo.ready_uri = f"posts/media/{slug}/{photo.fbid}.jpg"
+            album_post_ts = None
+            for p in members:
+                if p.post_timestamp:
+                    album_post_ts = p.post_timestamp
+                    break
+
             derived_albums.append(
                 Album(
                     fb_album_id=synth, name=headline, origin=album.name,
                     uncapped=True, media_slug=slug, photos=members,
+                    post_timestamp=album_post_ts,
                 )
             )
 

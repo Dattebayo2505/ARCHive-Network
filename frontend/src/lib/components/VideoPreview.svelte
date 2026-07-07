@@ -88,7 +88,7 @@
 				{video.caption || video.fbid}
 			</p>
 			<p class="text-xs text-surface-300">
-				Play, then choose the frame to keep{#if video?.taken_timestamp || video?.creation_at} | {formatFBDate(video?.taken_timestamp || video?.creation_at)}{/if}
+				Play, then choose the frame to keep {#if video?.creation_at} &middot; {formatFBDate(video.creation_at)}{/if}
 			</p>
 		</div>
 		<div class="ml-auto flex items-center gap-2">
