@@ -229,10 +229,6 @@
 		};
 	}
 
-	function openVideoPreview(video) {
-		videoPreview = video;
-	}
-
 	function onVideoChosen(fbid, sizeBytes, timestamp) {
 		thumbVersion = { ...thumbVersion, [fbid]: Date.now() };
 		const v = videos.find((x) => x.fbid === fbid);
@@ -245,12 +241,13 @@
 
 	// Right-click a video → choose its thumbnail (replaces "Preview") or open its file.
 	function openVideoMenu(video, e) {
+		const index = videos.findIndex((v) => v.fbid === video.fbid);
 		menu = {
 			open: true,
 			x: e.clientX,
 			y: e.clientY,
 			items: [
-				{ label: 'Choose Thumbnail', icon: 'preview', onSelect: () => openVideoPreview(video) },
+				{ label: 'Choose Thumbnail', icon: 'preview', onSelect: () => openPreviewAt(index) },
 				{
 					label: 'Show in File Explorer',
 					icon: 'folder',
@@ -569,7 +566,10 @@
 						video
 						onToggle={onVideoToggle}
 						onContextMenu={openVideoMenu}
-						onDblClick={(video) => openVideoPreview(video)}
+						onDblClick={(video) => {
+							const index = videos.findIndex((v) => v.fbid === video.fbid);
+							if (index !== -1) openPreviewAt(index);
+						}}
 					/>
 				</div>
 			{/if}
@@ -710,6 +710,15 @@
 		onToggle={() => {}}
 		onClose={() => (previewOpen = false)}
 	/>
+{:else if previewOpen && showVideos && videos.length}
+	<VideoPreview
+		{videos}
+		startIndex={previewStart}
+		thumbVersionMap={thumbVersion}
+		onThumbnailChosen={onVideoChosen}
+		onToggle={onVideoToggle}
+		onClose={() => (previewOpen = false)}
+	/>
 {:else if previewOpen && activeAlbum && activeAlbum.photos.length}
 	<PhotoPreview
 		album={activeAlbum}
@@ -720,16 +729,6 @@
 		startIndex={previewStart}
 		{onToggle}
 		onClose={() => (previewOpen = false)}
-	/>
-{/if}
-
-{#if videoPreview}
-	<VideoPreview
-		video={videoPreview}
-		version={thumbVersion[videoPreview.fbid] ?? 0}
-		onThumbnailChosen={onVideoChosen}
-		onToggle={onVideoToggle}
-		onClose={() => (videoPreview = null)}
 	/>
 {/if}
 

@@ -3,7 +3,13 @@
 	import { videoUrl, videoThumbUrl, saveVideoThumbnail } from '$lib/api.js';
 	import { captureFrame } from '$lib/videoThumbs.js';
 
-	let { video, version = 0, onClose, onThumbnailChosen, onToggle } = $props();
+	let { videos, startIndex = 0, thumbVersionMap = {}, onClose, onThumbnailChosen, onToggle } = $props();
+
+	let index = $state(0);
+	$effect(() => {
+		index = Math.min(Math.max(startIndex, 0), videos.length - 1);
+	});
+	let video = $derived(videos[index]);
 
 	let videoEl = $state();
 	let videoH = $state(0);
@@ -11,14 +17,23 @@
 	let closeBtn = $state();
 	let saving = $state(false);
 	let ready = $state(false); // a frame is decoded → capture is possible
-	// Bust the <img> cache after we save a new still so the panel updates.
-	let stillVersion = $state(version);
-	let stillSrc = $derived(`${videoThumbUrl(video.fbid)}?v=${stillVersion}`);
+	
+	let stillVersion = $state(thumbVersionMap[video?.fbid] ?? 0);
+	let stillSrc = $derived(`${videoThumbUrl(video?.fbid)}?v=${stillVersion}`);
 	let hasStill = $state(true); // assume a default exists; onerror flips it off
+
+	$effect(() => {
+		// When the video changes, update the still version from the map
+		if (video) {
+			stillVersion = thumbVersionMap[video.fbid] ?? 0;
+			hasStill = true;
+			ready = false;
+		}
+	});
 
 	async function choose() {
 		// Need a decoded frame; videoWidth stays 0 until one is ready.
-		if (!videoEl || saving || !ready || !videoEl.videoWidth) return;
+		if (!videoEl || saving || !ready || !videoEl.videoWidth || !video) return;
 		saving = true;
 		try {
 			const blob = await captureFrame(videoEl);
@@ -34,25 +49,42 @@
 		}
 	}
 
+	function go(to) {
+		const n = videos.length;
+		index = ((to % n) + n) % n; // wrap both ends
+	}
+
 	function onKey(e) {
 		if (e.key === 'Escape') {
 			e.preventDefault();
 			onClose();
+		} else if (e.key === 'ArrowRight') {
+			e.preventDefault();
+			go(index + 1);
+		} else if (e.key === 'ArrowLeft') {
+			e.preventDefault();
+			go(index - 1);
+		} else if (e.key === 'Home') {
+			e.preventDefault();
+			go(0);
+		} else if (e.key === 'End') {
+			e.preventDefault();
+			go(videos.length - 1);
 		}
 	}
 
 	let opener;
+	$effect(() => {
+		if (videoEl && video) {
+			videoEl.crossOrigin = 'anonymous';
+			videoEl.src = videoUrl(video.fbid);
+		}
+	});
+
 	onMount(() => {
 		opener = document.activeElement;
 		document.body.style.overflow = 'hidden';
 		closeBtn?.focus();
-		// Set crossOrigin BEFORE src so the media loads in CORS mode — otherwise the
-		// frame taints the canvas and toBlob yields null (Chrome reports taint via a
-		// null callback, not a throw). Mirrors the working seed path in videoThumbs.js.
-		if (videoEl) {
-			videoEl.crossOrigin = 'anonymous';
-			videoEl.src = videoUrl(video.fbid);
-		}
 	});
 	onDestroy(() => {
 		document.body.style.overflow = '';
@@ -100,11 +132,11 @@
 >
 	<div class="flex items-center gap-3 px-4 py-3 text-surface-50 sm:px-6">
 		<div class="min-w-0">
-			<p class="truncate text-sm font-medium" title={video.caption || video.fbid}>
-				{video.caption || video.fbid}
+			<p class="truncate text-sm font-medium" title={video?.caption || video?.fbid}>
+				{video?.caption || video?.fbid}
 			</p>
-			<p class="text-xs text-surface-300">
-				Play, then choose the frame to keep {#if video?.creation_at} &middot; {formatFBDate(video.creation_at)}{/if}
+			<p class="text-xs text-surface-300 tabular-nums">
+				{index + 1} of {videos.length} · Play, then choose the frame to keep {#if video?.creation_at} &middot; {formatFBDate(video.creation_at)}{/if}
 			</p>
 		</div>
 		<div class="ml-auto flex items-center gap-2">
@@ -145,11 +177,23 @@
 	<!-- Stage: video left, chosen still right (vertically centred, 30% smaller). -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="relative flex min-h-0 flex-1 items-center justify-center gap-6 px-4 sm:px-12"
+		class="relative flex min-h-0 flex-1 items-center justify-center px-2 sm:px-16"
 		onclick={(e) => e.target === e.currentTarget && onClose()}
 	>
-		<!-- svelte-ignore a11y_media_has_caption -->
-		<video
+		<button
+			type="button"
+			class="absolute left-2 z-10 grid size-10 place-items-center rounded-full bg-surface-950/40 text-surface-50 transition-colors hover:bg-surface-950/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 sm:size-11"
+			onclick={() => go(index - 1)}
+			aria-label="Previous video"
+		>
+			<svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+		</button>
+
+		<!-- The stage interior wraps the video and thumb panel to group them -->
+		<div class="flex items-center justify-center gap-6" style="max-height: 100%; max-width: 100%;">
+			<!-- svelte-ignore a11y_media_has_caption -->
+			<video
 			bind:this={videoEl}
 			bind:clientHeight={videoH}
 			bind:clientWidth={videoW}
@@ -200,9 +244,20 @@
 				</div>
 			{/if}
 		</div>
+		</div>
+
+		<button
+			type="button"
+			class="absolute right-2 z-10 grid size-10 place-items-center rounded-full bg-surface-950/40 text-surface-50 transition-colors hover:bg-surface-950/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 sm:size-11"
+			onclick={() => go(index + 1)}
+			aria-label="Next video"
+		>
+			<svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+		</button>
 	</div>
 
 	<p class="px-4 pb-3 pt-1 text-center text-xs text-surface-400">
-		<kbd class="font-sans">Esc</kbd> to close
+		<kbd class="font-sans">←</kbd> <kbd class="font-sans">→</kbd> to browse · <kbd class="font-sans">Esc</kbd> to close
 	</p>
 </div>

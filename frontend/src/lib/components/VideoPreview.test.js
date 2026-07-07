@@ -15,11 +15,15 @@ import { captureFrame } from '../videoThumbs.js';
 import VideoPreview from './VideoPreview.svelte';
 
 describe('VideoPreview', () => {
+	const mockVideo = { fbid: 'v01', caption: 'clip' };
+	
+	function renderPreview(props = {}) {
+		return render(VideoPreview, { props: { videos: [mockVideo], ...props } });
+	}
+
 	it('captures and saves the current frame, then notifies', async () => {
 		const onThumbnailChosen = vi.fn();
-		const { container } = render(VideoPreview, {
-			props: { video: { fbid: 'v01', caption: 'clip' }, onClose: vi.fn(), onThumbnailChosen }
-		});
+		const { container } = renderPreview({ onClose: vi.fn(), onThumbnailChosen });
 		// A frame must be decoded before capture is enabled.
 		const videoEl = container.querySelector('video');
 		Object.defineProperty(videoEl, 'videoWidth', { value: 320, configurable: true });
@@ -33,9 +37,7 @@ describe('VideoPreview', () => {
 	});
 
 	it('keeps the capture button disabled until a frame is ready', () => {
-		render(VideoPreview, {
-			props: { video: { fbid: 'v01', caption: 'clip' }, onClose: vi.fn(), onThumbnailChosen: vi.fn() }
-		});
+		renderPreview({ onClose: vi.fn(), onThumbnailChosen: vi.fn() });
 		expect(screen.getByRole('button', { name: /loading/i })).toBeDisabled();
 	});
 });
