@@ -1,6 +1,8 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { slide } from 'svelte/transition';
+	import CarouselScrollbar from './CarouselScrollbar.svelte';
+	import { dragScroll } from '$lib/dragScroll.js';
 	import { videoUrl, videoThumbUrl, saveVideoThumbnail } from '$lib/api.js';
 	import { captureFrame } from '$lib/videoThumbs.js';
 
@@ -24,6 +26,7 @@
 	let hasStill = $state(true); // assume a default exists; onerror flips it off
 
 	let container;
+	let scrollContainer = $state();
 	let showCarousel = $state(true);
 	
 	onMount(() => {
@@ -349,7 +352,7 @@
 
 		<div class="mx-auto max-w-3xl">
 			{#if showCarousel}
-				<div transition:slide={{ duration: 200 }} class="flex gap-2 overflow-x-auto pb-2 pt-1 [scrollbar-width:thin]">
+				<div use:dragScroll bind:this={scrollContainer} transition:slide={{ duration: 200 }} class="flex gap-2 overflow-x-auto pb-2 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden select-none">
 					{#each videos as v, i (v.fbid)}
 						{@const isCurrent = i === index}
 						{@const thumbSrc = `${videoThumbUrl(v.fbid)}?v=${thumbVersionMap[v.fbid] ?? 0}`}
@@ -378,6 +381,9 @@
 							{/if}
 						</button>
 					{/each}
+				</div>
+				<div transition:slide={{ duration: 200 }} class="mt-1">
+					<CarouselScrollbar container={scrollContainer} />
 				</div>
 			{/if}
 

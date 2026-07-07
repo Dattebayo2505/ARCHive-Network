@@ -9,6 +9,7 @@
 	import ViewControls from '$lib/components/ViewControls.svelte';
 	import PhotoPreview from '$lib/components/PhotoPreview.svelte';
 	import VideoPreview from '$lib/components/VideoPreview.svelte';
+	import CarouselScrollbar from '$lib/components/CarouselScrollbar.svelte';
 	import ContextMenu from '$lib/components/ContextMenu.svelte';
 	import BuildSummary from '$lib/components/BuildSummary.svelte';
 	import SelectionPanel from '$lib/components/SelectionPanel.svelte';
@@ -539,18 +540,23 @@
 			</header>
 
 			{#if archive.length}
-				<div class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
-					<PhotoGrid
-						album={{ name: 'Archive', photos: archive }}
-						thumb={thumbUrl}
-						size={gridSize}
-						selectable={false}
-						onContextMenu={openArchiveMenu}
-						onDblClick={(photo) => {
-							const index = archive.findIndex((p) => p.fbid === photo.fbid);
-							if (index !== -1) openPreviewAt(index);
-						}}
-					/>
+				<div class="flex min-h-0 flex-1 gap-2 pr-1">
+					<div bind:this={gridContainer} class="flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+						<PhotoGrid
+							album={{ name: 'Archive', photos: archive }}
+							thumb={thumbUrl}
+							size={gridSize}
+							selectable={false}
+							onContextMenu={openArchiveMenu}
+							onDblClick={(photo) => {
+								const index = archive.findIndex((p) => p.fbid === photo.fbid);
+								if (index !== -1) openPreviewAt(index);
+							}}
+						/>
+					</div>
+					<div class="py-2 shrink-0">
+						<CarouselScrollbar container={gridContainer} vertical={true} />
+					</div>
 				</div>
 			{/if}
 		{:else if showVideos}
@@ -586,20 +592,25 @@
 			</header>
 
 			{#if videos.length}
-				<div class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
-					<PhotoGrid
-						album={{ name: 'Videos', photos: videos }}
-						thumb={videoTileSrc}
-						size={gridSize}
-						selectable={true}
-						video
-						onToggle={onVideoToggle}
-						onContextMenu={openVideoMenu}
-						onDblClick={(video) => {
-							const index = videos.findIndex((v) => v.fbid === video.fbid);
-							if (index !== -1) openPreviewAt(index);
-						}}
-					/>
+				<div class="flex min-h-0 flex-1 gap-2 pr-1">
+					<div bind:this={gridContainer} class="flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+						<PhotoGrid
+							album={{ name: 'Videos', photos: videos }}
+							thumb={videoTileSrc}
+							size={gridSize}
+							selectable={true}
+							video
+							onToggle={onVideoToggle}
+							onContextMenu={openVideoMenu}
+							onDblClick={(video) => {
+								const index = videos.findIndex((v) => v.fbid === video.fbid);
+								if (index !== -1) openPreviewAt(index);
+							}}
+						/>
+					</div>
+					<div class="py-2 shrink-0">
+						<CarouselScrollbar container={gridContainer} vertical={true} />
+					</div>
 				</div>
 			{/if}
 		{:else if activeAlbum}
@@ -692,19 +703,24 @@
 				{/if}
 			</header>
 
-			<div bind:this={gridContainer} class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
-				<PhotoGrid
-					album={activeAlbum}
-					thumb={thumbUrl}
-					size={gridSize}
-					{onToggle}
-					onContextMenu={openPhotoMenu}
-					onDblClick={(photo) => {
-						const index = activeAlbum.photos.findIndex((p) => p.fbid === photo.fbid);
-						if (index !== -1) openPreviewAt(index);
-					}}
-					selectable={!isActiveArchived}
-				/>
+			<div class="flex min-h-0 flex-1 gap-2 pr-1">
+				<div bind:this={gridContainer} class="flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					<PhotoGrid
+						album={activeAlbum}
+						thumb={thumbUrl}
+						size={gridSize}
+						{onToggle}
+						onContextMenu={openPhotoMenu}
+						onDblClick={(photo) => {
+							const index = activeAlbum.photos.findIndex((p) => p.fbid === photo.fbid);
+							if (index !== -1) openPreviewAt(index);
+						}}
+						selectable={!isActiveArchived}
+					/>
+				</div>
+				<div class="py-2 shrink-0">
+					<CarouselScrollbar container={gridContainer} vertical={true} />
+				</div>
 			</div>
 		{:else}
 			<div

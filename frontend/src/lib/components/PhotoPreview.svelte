@@ -1,5 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
+	import CarouselScrollbar from './CarouselScrollbar.svelte';
+	import { dragScroll } from '$lib/dragScroll.js';
 
 	let {
 		album,
@@ -37,6 +39,7 @@
 	let blocked = $derived(full && current && !current.selected);
 
 	let container;
+	let scrollContainer = $state();
 	let closeBtn = $state();
 	let opener;
 
@@ -255,8 +258,11 @@
 	<!-- Filmstrip carousel: fixed-height thumbs keep each photo's aspect ratio; the
 	     current one is ringed in green and centred. -->
 	<div class="px-4 pt-2 pb-3 sm:px-6">
-		<div class="mx-auto max-w-3xl">
-			<div class="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
+		<div class="mx-auto max-w-5xl">
+			<div use:dragScroll bind:this={scrollContainer} class="flex gap-2 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden select-none"
+				class:overflow-x-auto={photos.length >= 8}
+				class:overflow-hidden={photos.length < 8}
+				class:justify-center={photos.length < 10}>
 				{#each photos as photo, i (photo.fbid)}
 					{@const isCurrent = i === index}
 					<button
@@ -292,6 +298,10 @@
 						{/if}
 					</button>
 				{/each}
+			</div>
+
+			<div class="mt-2">
+				<CarouselScrollbar container={scrollContainer} />
 			</div>
 
 			<p class="mt-1.5 text-center text-xs text-surface-400">
