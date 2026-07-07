@@ -134,6 +134,7 @@
 	{@const full = capped && a.count_selected >= a.max_per_album}
 	{@const active = a.fb_album_id === activeId}
 	{@const editing = a.fb_album_id === editingId}
+	{@const bypassedFull = full && a.limit_bypassed}
 	{@const progressPct = capped ? Math.min((a.count_selected / a.max_per_album) * 100, 100) : 0}
 	<div class="relative overflow-hidden rounded-lg">
 		<button
@@ -158,10 +159,12 @@
 			<span
 				class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
 				class:opacity-0={editing}
-				class:bg-warning-200={full}
-				class:text-warning-900={full}
-				class:bg-primary-200={!full && a.count_selected > 0}
-				class:text-primary-900={!full && a.count_selected > 0}
+				class:bg-warning-200={(full && !bypassedFull) || (a.limit_bypassed && a.count_selected >= 10 && !full)}
+				class:text-warning-900={(full && !bypassedFull) || (a.limit_bypassed && a.count_selected >= 10 && !full)}
+				class:bg-error-200={bypassedFull}
+				class:text-error-900={bypassedFull}
+				class:bg-primary-200={!full && a.count_selected > 0 && !(a.limit_bypassed && a.count_selected >= 10)}
+				class:text-primary-900={!full && a.count_selected > 0 && !(a.limit_bypassed && a.count_selected >= 10)}
 				class:bg-surface-200={a.count_selected === 0}
 				class:text-surface-600={a.count_selected === 0}
 				title={capped
@@ -171,8 +174,12 @@
 					: `${a.count_selected} selected · no limit`}
 			>
 				{#if full}
-					<svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2.5"
-						stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+					{#if bypassedFull}
+						<svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="11" width="14" height="11" rx="2" /><path d="M4 11V7a4 4 0 0 1 8 0v4" /><rect x="9" y="11" width="14" height="11" rx="2" /><path d="M12 11V7a4 4 0 0 1 8 0v4" /></svg>
+					{:else}
+						<svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2.5"
+							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+					{/if}
 				{/if}
 				{#if capped}{a.count_selected}/{a.max_per_album}{:else}{a.count_selected}{/if}
 			</span>
@@ -198,8 +205,10 @@
 		{#if capped && !isArchived}
 			<div
 				class="absolute bottom-0 left-0 h-[3px] transition-[width] duration-300"
-				style="width: {progressPct}%; background-color: var(--color-primary-600);"
-				aria-hidden="true"
+				class:bg-warning-500={(full && !bypassedFull) || (a.limit_bypassed && a.count_selected >= 10 && !full)}
+				class:bg-error-500={bypassedFull}
+				class:bg-primary-600={!full && !(a.limit_bypassed && a.count_selected >= 10)}
+				style="width: {progressPct}%"
 			></div>
 		{/if}
 	</div>

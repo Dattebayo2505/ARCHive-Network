@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import Protocol, Callable
 
 from ..config import settings
 
@@ -28,11 +28,13 @@ class DefaultPolicy:
 
     max_per_album: int = settings.max_per_album
     uncapped_albums: frozenset[str] = frozenset()
+    get_limit: Callable[[str, int], int] | None = None
 
     def can_select(self, album_fbid: str, current_count: int) -> bool:
         if album_fbid in self.uncapped_albums or album_fbid == "__videos__":
             return True
-        return current_count < self.max_per_album
+        limit = self.get_limit(album_fbid, self.max_per_album) if self.get_limit else self.max_per_album
+        return current_count < limit
 
     def non_album_selectable(self) -> bool:
         return False

@@ -1,6 +1,6 @@
 <script>
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
-	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum } from '$lib/api.js';
+	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum, increaseLimit, undoIncreaseLimit } from '$lib/api.js';
 	import { prefetchAlbumThumbs, clearPrefetchCache } from '$lib/imageCache.js';
 	import { seedMissingThumbnails, thumbnailMissing } from '$lib/videoThumbs.js';
 	import { DEFAULT_SIZE, SIZE_STORAGE_KEY, VIEW_SIZES } from '$lib/viewSizes.js';
@@ -39,6 +39,8 @@
 	let archiveConfirm = $state({ open: false, album: null });
 	let unarchiveConfirm = $state({ open: false, album: null });
 	let resetConfirm = $state({ open: false, album: null });
+	let increaseLimitConfirm = $state({ open: false, album: null });
+	let undoLimitConfirm = $state({ open: false, album: null });
 	let buildConfirm = $state(false);
 	let selectionOpen = $state(false);
 	let albumOpen = $state(true);
@@ -274,6 +276,27 @@
 				}
 			]
 		};
+
+		const isLocked = activeFull && !photo.selected;
+		if (isLocked) {
+			if (!activeAlbum.limit_bypassed && activeAlbum.photos?.length > 10) {
+				menu.items.push({
+					label: 'Increase Image Limit',
+					icon: 'unlock',
+					onSelect: () => {
+						increaseLimitConfirm = { open: true, album: activeAlbum };
+					}
+				});
+			} else if (activeAlbum.limit_bypassed) {
+				menu.items.push({
+					label: 'Undo Image Increase',
+					icon: 'lock',
+					onSelect: () => {
+						undoLimitConfirm = { open: true, album: activeAlbum };
+					}
+				});
+			}
+		}
 	}
 
 	function onVideoChosen(fbid, sizeBytes, timestamp) {
@@ -360,7 +383,21 @@
 						onSelect: () => {
 							archiveConfirm = { open: true, album };
 						}
-					}
+					},
+					...(album.max_per_album != null && !album.limit_bypassed && album.photos?.length > 10 ? [{
+						label: 'Increase Image Limit',
+						icon: 'unlock',
+						onSelect: () => {
+							increaseLimitConfirm = { open: true, album };
+						}
+					}] : []),
+					...(album.limit_bypassed ? [{
+						label: 'Undo Image Increase',
+						icon: 'lock',
+						onSelect: () => {
+							undoLimitConfirm = { open: true, album };
+						}
+					}] : [])
 				] : [
 					{
 						label: 'Unarchive',
@@ -706,8 +743,9 @@
 						<div class="flex shrink-0 items-center gap-2">
 							<p
 								class="text-sm font-medium tabular-nums"
-								class:text-warning-700={activeFull}
-								class:text-surface-600={!activeFull}
+								class:text-warning-700={(activeFull && !activeAlbum?.limit_bypassed) || (activeAlbum?.limit_bypassed && activeAlbum.count_selected >= 10 && !activeFull)}
+								class:text-error-700={activeFull && activeAlbum?.limit_bypassed}
+								class:text-surface-600={!activeFull && !(activeAlbum?.limit_bypassed && activeAlbum.count_selected >= 10)}
 							>
 								{#if activeCap != null}
 									{activeAlbum.count_selected} / {activeCap} selected
@@ -752,8 +790,9 @@
 					<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-200">
 						<div
 							class="h-full rounded-full transition-[width] duration-300"
-							class:bg-warning-500={activeFull}
-							class:bg-primary-600={!activeFull}
+							class:bg-warning-500={(activeFull && !activeAlbum?.limit_bypassed) || (activeAlbum?.limit_bypassed && activeAlbum.count_selected >= 10 && !activeFull)}
+							class:bg-error-500={activeFull && activeAlbum?.limit_bypassed}
+							class:bg-primary-600={!activeFull && !(activeAlbum?.limit_bypassed && activeAlbum.count_selected >= 10)}
 							style="width: {(activeAlbum.count_selected / activeCap) * 100}%"
 						></div>
 					</div>
@@ -973,6 +1012,61 @@
 			toaster.success({ title: 'Name reset', description: `Album is now named "${result.name}"` });
 		} else {
 			toaster.error({ title: 'Reset failed', description: result.error });
+		}
+	}}
+/>
+
+<ConfirmDialog
+	open={increaseLimitConfirm.open}
+	title="Increase Image Limit"
+	message={increaseLimitConfirm.album
+		? `Are you sure you want to increase the image limit for "${increaseLimitConfirm.album.name}"? This will allow you to select up to 15 images.`
+		: ''}
+	confirmLabel="Yes, increase limit"
+	cancelLabel="Cancel"
+	onCancel={() => (increaseLimitConfirm = { open: false, album: null })}
+	onConfirm={async () => {
+		const album = increaseLimitConfirm.album;
+		increaseLimitConfirm = { open: false, album: null };
+		if (!album) return;
+		const res = await increaseLimit(album.fb_album_id);
+		if (res.ok) {
+			album.max_per_album = res.max_per_album;
+			album.limit_bypassed = true;
+			toaster.success({ title: 'Success', description: 'Image limit increased.' });
+		} else {
+			toaster.error({ title: 'Failed', description: res.error });
+		}
+	}}
+/>
+
+<ConfirmDialog
+	open={undoLimitConfirm.open}
+	title="Undo Image Increase"
+	message={undoLimitConfirm.album
+		? `Are you sure you want to revert the image limit for "${undoLimitConfirm.album.name}"? This will return the limit to 10 and keep only the first 10 selected images.`
+		: ''}
+	confirmLabel="Yes, undo increase"
+	cancelLabel="Cancel"
+	onCancel={() => (undoLimitConfirm = { open: false, album: null })}
+	onConfirm={async () => {
+		const album = undoLimitConfirm.album;
+		undoLimitConfirm = { open: false, album: null };
+		if (!album) return;
+		const res = await undoIncreaseLimit(album.fb_album_id);
+		if (res.ok) {
+			album.max_per_album = res.max_per_album;
+			album.count_selected = res.count;
+			album.limit_bypassed = false;
+			const deselected = new Set(res.deselected || []);
+			for (const p of album.photos) {
+				if (deselected.has(p.fbid)) {
+					p.selected = false;
+				}
+			}
+			toaster.success({ title: 'Success', description: 'Image limit reverted.' });
+		} else {
+			toaster.error({ title: 'Failed', description: res.error });
 		}
 	}}
 />

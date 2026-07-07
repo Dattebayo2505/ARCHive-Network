@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ..inventory.models import ExportInventory, Photo
 from ..selection.state import SelectionState
+from ..inventory.limits import LimitState
 
 
 def _photo(p: Photo, selected: bool | None = None) -> dict:
@@ -39,6 +40,7 @@ def inventory_payload(
     inventory: ExportInventory,
     selection: SelectionState,
     max_per_album: int,
+    limits: LimitState,
     video_thumbs: VideoThumbnailStore | None = None,
 ) -> dict:
     albums = [
@@ -50,7 +52,8 @@ def inventory_payload(
             "origin": a.origin,
             "post_timestamp": a.post_timestamp.isoformat() if a.post_timestamp else None,
             "count_selected": selection.count(a.fb_album_id),
-            "max_per_album": min(max_per_album, len(a.photos)),
+            "max_per_album": min(limits.get_limit(a.fb_album_id, max_per_album), len(a.photos)),
+            "limit_bypassed": limits.get_limit(a.fb_album_id, -1) != -1,
             "photos": [
                 _photo(p, selected=selection.is_selected(a.fb_album_id, p.fbid))
                 for p in a.photos
@@ -67,7 +70,8 @@ def inventory_payload(
             "origin": a.origin,
             "post_timestamp": a.post_timestamp.isoformat() if a.post_timestamp else None,
             "count_selected": selection.count(a.fb_album_id),
-            "max_per_album": min(max_per_album, len(a.photos)),
+            "max_per_album": min(limits.get_limit(a.fb_album_id, max_per_album), len(a.photos)),
+            "limit_bypassed": limits.get_limit(a.fb_album_id, -1) != -1,
             "photos": [
                 _photo(p, selected=selection.is_selected(a.fb_album_id, p.fbid))
                 for p in a.photos

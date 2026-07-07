@@ -22,6 +22,7 @@ from ..selection.policy import DefaultPolicy
 from ..selection.state import SelectionState
 from ..thumbnails.service import ThumbnailService
 from ..thumbnails.video_store import VideoThumbnailStore
+from ..inventory.limits import LimitState
 from .session import Session
 
 router = APIRouter()
@@ -103,6 +104,7 @@ def _start_session(
     inventory = build_inventory(export_root)
     renames = RenameState(state_dir / "renames.json")
     archive = ArchiveState(state_dir / "archive.json")
+    limits = LimitState(state_dir / "limits.json")
     for album in inventory.albums + inventory.archived_albums:
         album.original_name = album.name
         if album.fb_album_id in renames._renames:
@@ -114,11 +116,12 @@ def _start_session(
         state_dir=state_dir,
         export_root=export_root,
         inventory=inventory,
-        selection=SelectionState(state_dir / "selection.json", DefaultPolicy()),
+        selection=SelectionState(state_dir / "selection.json", DefaultPolicy(get_limit=limits.get_limit)),
         thumbnails=ThumbnailService(state_dir / "thumbs"),
         video_thumbs=VideoThumbnailStore(state_dir / "thumbs" / "videos"),
         renames=renames,
         archive=archive,
+        limits=limits,
     )
     return {
         "ok": True,

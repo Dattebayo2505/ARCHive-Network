@@ -9,6 +9,7 @@ from ..selection.archive_state import ArchiveState
 from ..selection.state import SelectionState
 from ..thumbnails.service import ThumbnailService
 from ..thumbnails.video_store import VideoThumbnailStore
+from ..inventory.limits import LimitState
 
 
 @dataclass
@@ -22,3 +23,4 @@ class Session:
     video_thumbs: VideoThumbnailStore
     renames: RenameState
     archive: ArchiveState
+    limits: LimitState

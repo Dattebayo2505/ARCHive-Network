@@ -217,6 +217,34 @@ export async function unarchiveAlbum(albumFbid, fetchFn = fetch) {
 	return data; // {ok, moved}
 }
 
+/** Increase limit of the album */
+export async function increaseLimit(albumFbid, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/album/increase_limit'), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ album_fbid: albumFbid })
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		return { ok: false, error: data.detail ?? 'Could not increase the limit.' };
+	}
+	return { ok: true, ...(await res.json()) };
+}
+
+/** Undo increase limit of the album */
+export async function undoIncreaseLimit(albumFbid, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/album/undo_increase_limit'), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ album_fbid: albumFbid })
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		return { ok: false, error: data.detail ?? 'Could not undo the limit increase.' };
+	}
+	return { ok: true, ...(await res.json()) };
+}
+
 /** List every known workspace, newest-opened first, plus the last-active id. */
 export async function listWorkspaces(fetchFn = fetch) {
 	try {

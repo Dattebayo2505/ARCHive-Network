@@ -10,28 +10,28 @@ class SelectionState:
     def __init__(self, path: Path, policy: SelectionPolicy) -> None:
         self.path = path
         self.policy = policy
-        self._selected: dict[str, set[str]] = {}
+        self._selected: dict[str, list[str]] = {}
         self._load()
 
     def _load(self) -> None:
         if self.path.exists():
             data = json.loads(self.path.read_text(encoding="utf-8"))
-            self._selected = {k: set(v) for k, v in data.items()}
+            self._selected = {k: list(v) for k, v in data.items()}
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        data = {k: sorted(v) for k, v in self._selected.items() if v}
+        data = {k: list(v) for k, v in self._selected.items() if v}
         self.path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def toggle(self, album_fbid: str, photo_fbid: str) -> bool:
-        sel = self._selected.setdefault(album_fbid, set())
+        sel = self._selected.setdefault(album_fbid, [])
         if photo_fbid in sel:
             sel.remove(photo_fbid)
             self._save()
             return False
         if not self.policy.can_select(album_fbid, len(sel)):
             raise CapExceeded(album_fbid)
-        sel.add(photo_fbid)
+        sel.append(photo_fbid)
         self._save()
         return True
 
@@ -40,14 +40,23 @@ class SelectionState:
             del self._selected[album_fbid]
             self._save()
 
+    def truncate_to(self, album_fbid: str, max_count: int) -> list[str]:
+        sel = self._selected.get(album_fbid, [])
+        deselected = []
+        if len(sel) > max_count:
+            deselected = sel[max_count:]
+            self._selected[album_fbid] = sel[:max_count]
+            self._save()
+        return deselected
+
     def is_selected(self, album_fbid: str, photo_fbid: str) -> bool:
-        return photo_fbid in self._selected.get(album_fbid, set())
+        return photo_fbid in self._selected.get(album_fbid, [])
 
     def count(self, album_fbid: str) -> int:
-        return len(self._selected.get(album_fbid, set()))
+        return len(self._selected.get(album_fbid, []))
 
     def selected_fbids(self) -> set[str]:
         out: set[str] = set()
         for fbids in self._selected.values():
-            out |= fbids
+            out |= set(fbids)
         return out

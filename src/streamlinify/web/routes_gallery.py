@@ -33,6 +33,10 @@ class ArchiveAlbumRequest(BaseModel):
     album_fbid: str
 
 
+class IncreaseLimitRequest(BaseModel):
+    album_fbid: str
+
+
 class RevealRequest(BaseModel):
     photo_fbid: str | None = None
     album_fbid: str | None = None
@@ -53,6 +57,7 @@ def inventory(request: Request) -> dict:
         session.inventory,
         session.selection,
         session.selection.policy.max_per_album,
+        session.limits,
         video_thumbs=session.video_thumbs,
     )
 
@@ -189,6 +194,40 @@ def reset_album(request: Request, body: RenameAlbumRequest):
         album.name = album.original_name
     session.renames.remove_name(album.fb_album_id)
     return {"ok": True, "name": album.name}
+
+
+@router.post("/api/album/increase_limit")
+def increase_limit(request: Request, body: IncreaseLimitRequest):
+    """Increase the image limit of an album, bypassing the 10 max up to 15."""
+    session = _session(request)
+    album = next(
+        (a for a in session.inventory.albums if a.fb_album_id == body.album_fbid),
+        None,
+    )
+    if album is None:
+        raise HTTPException(status_code=404, detail="No such album")
+    
+    new_max = min(15, len(album.photos))
+    session.limits.set_limit(album.fb_album_id, new_max)
+    return {"ok": True, "max_per_album": new_max}
+
+
+@router.post("/api/album/undo_increase_limit")
+def undo_increase_limit(request: Request, body: IncreaseLimitRequest):
+    """Revert the image limit of an album to default, removing overflow selected items."""
+    session = _session(request)
+    album = next(
+        (a for a in session.inventory.albums if a.fb_album_id == body.album_fbid),
+        None,
+    )
+    if album is None:
+        raise HTTPException(status_code=404, detail="No such album")
+    
+    default_max = session.selection.policy.max_per_album
+    session.limits.remove_limit(album.fb_album_id)
+    deselected = session.selection.truncate_to(album.fb_album_id, default_max)
+    return {"ok": True, "max_per_album": default_max, "count": session.selection.count(album.fb_album_id), "deselected": deselected}
+
 
 
 @router.post("/api/album/archive")
