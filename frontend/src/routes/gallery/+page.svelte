@@ -444,15 +444,17 @@
 	{:else}
 		<!-- Collapsed album rail: thin icon strip with album shortcodes -->
 		<aside class="album-sidebar-collapsed">
-			<button
-				type="button"
-				class="album-expand-btn"
-				onclick={() => (albumOpen = true)}
-				aria-label="Expand album sidebar"
-				title="Show albums"
-			>
-				<svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13 17 5-5-5-5" /><path d="m6 17 5-5-5-5" /></svg>
-			</button>
+			<div class="album-expand-wrapper">
+				<button
+					type="button"
+					class="album-expand-btn"
+					onclick={() => (albumOpen = true)}
+					aria-label="Expand album sidebar"
+					title="Show albums"
+				>
+					<svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13 17 5-5-5-5" /><path d="m6 17 5-5-5-5" /></svg>
+				</button>
+			</div>
 
 			<div class="rail-divider" style="height: 1px; background: var(--color-surface-300, #d4d4d4);"></div>
 
@@ -465,15 +467,27 @@
 				{:else if i > 0}
 					<div class="rail-dot"></div>
 				{/if}
+				{@const cleanName = a.name.replace(/^[^a-zA-Z0-9]+/, '').trim() || 'A'}
+				{@const chars = Array.from(cleanName)}
+				{@const shortChars = chars.slice(0, 3)}
 				<button
 					type="button"
 					class="rail-album-btn"
-					class:rail-active={a.fb_album_id === activeId}
+					class:bg-primary-100={a.fb_album_id === activeId}
+					class:text-primary-900={a.fb_album_id === activeId}
+					class:font-semibold={a.fb_album_id === activeId}
+					class:text-surface-700={a.fb_album_id !== activeId}
+					class:hover:bg-surface-200={a.fb_album_id !== activeId}
 					onclick={() => { activeId = a.fb_album_id; editingAlbumId = null; }}
 					ondblclick={() => (albumOpen = true)}
 					oncontextmenu={(e) => { e.preventDefault(); openAlbumMenu(a, e); }}
 					title={a.name}
-				>A{i + 1}</button>
+				>
+					<span>{shortChars[0]}</span>
+					{#if shortChars.length > 1}
+						<span class="opacity-50">{shortChars.slice(1).join('')}</span>
+					{/if}
+				</button>
 			{/each}
 
 			{#if videos.length > 0}
@@ -481,7 +495,11 @@
 				<button
 					type="button"
 					class="rail-icon-btn"
-					class:rail-active={activeId === '__videos__'}
+					class:bg-primary-100={activeId === '__videos__'}
+					class:text-primary-900={activeId === '__videos__'}
+					class:font-semibold={activeId === '__videos__'}
+					class:text-surface-700={activeId !== '__videos__'}
+					class:hover:bg-surface-200={activeId !== '__videos__'}
 					onclick={() => { activeId = '__videos__'; editingAlbumId = null; }}
 					ondblclick={() => (albumOpen = true)}
 					title="Videos"
@@ -495,7 +513,11 @@
 				<button
 					type="button"
 					class="rail-icon-btn"
-					class:rail-active={activeId === '__archive__'}
+					class:bg-primary-100={activeId === '__archive__'}
+					class:text-primary-900={activeId === '__archive__'}
+					class:font-semibold={activeId === '__archive__'}
+					class:text-surface-700={activeId !== '__archive__'}
+					class:hover:bg-surface-200={activeId !== '__archive__'}
 					onclick={() => { activeId = '__archive__'; editingAlbumId = null; }}
 					ondblclick={() => (albumOpen = true)}
 					title="Archive"
@@ -507,18 +529,32 @@
 			{#if inventory.archived_albums && inventory.archived_albums.length > 0}
 				<div class="rail-divider"></div>
 				{#each inventory.archived_albums as a, i (a.fb_album_id)}
+					{@const cleanName = a.name.replace(/^[^a-zA-Z0-9]+/, '').trim() || 'A'}
+					{@const chars = Array.from(cleanName)}
+					{@const shortChars = chars.slice(0, 3)}
 					{#if i > 0}
 						<div class="rail-dot"></div>
 					{/if}
 					<button
 						type="button"
-						class="rail-album-btn rail-archived"
-						class:rail-active={a.fb_album_id === activeId}
+						class="rail-album-btn rail-archived transition-opacity duration-150"
+						class:opacity-100={a.fb_album_id === activeId}
+						class:opacity-70={a.fb_album_id !== activeId}
+						class:bg-primary-100={a.fb_album_id === activeId}
+						class:text-primary-900={a.fb_album_id === activeId}
+						class:font-semibold={a.fb_album_id === activeId}
+						class:text-surface-700={a.fb_album_id !== activeId}
+						class:hover:bg-surface-200={a.fb_album_id !== activeId}
 						onclick={() => { activeId = a.fb_album_id; editingAlbumId = null; }}
 						ondblclick={() => (albumOpen = true)}
 						oncontextmenu={(e) => { e.preventDefault(); openAlbumMenu(a, e); }}
 						title={a.name}
-					>{a.name.length > 3 ? a.name.slice(0, 3) : a.name}</button>
+					>
+						<span>{shortChars[0]}</span>
+						{#if shortChars.length > 1}
+							<span class="opacity-50">{shortChars.slice(1).join('')}</span>
+						{/if}
+					</button>
 				{/each}
 			{/if}
 		</aside>
@@ -958,7 +994,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 0.25rem;
-		padding: 0.375rem 0;
+		padding-bottom: 0.375rem;
 		flex-shrink: 0;
 		width: 36px;
 		border-radius: 0.75rem;
@@ -978,6 +1014,17 @@
 		.album-sidebar-collapsed {
 			max-height: 100%;
 		}
+	}
+
+	.album-expand-wrapper {
+		position: sticky;
+		top: 0;
+		z-index: 10;
+		background: var(--color-surface-50, #fafafa);
+		padding-top: 0.375rem;
+		width: 100%;
+		display: flex;
+		justify-content: center;
 	}
 
 	.album-expand-btn {
@@ -1016,40 +1063,23 @@
 	.rail-album-btn {
 		width: 28px;
 		height: 28px;
-		display: grid;
-		place-items: center;
+		display: flex;
+		justify-content: center;
+		align-items: center;
 		border-radius: 0.375rem;
 		font-size: 0.6875rem;
-		font-weight: 700;
 		letter-spacing: -0.01em;
-		color: var(--color-surface-600, #525252);
 		transition: all 0.15s;
 		cursor: pointer;
 		border: none;
-		background: none;
+		background: transparent;
 		padding: 0;
 		line-height: 1;
 		flex-shrink: 0;
 	}
 
-	.rail-album-btn:hover {
-		background: var(--color-surface-200, #e5e5e5);
-		color: var(--color-surface-800, #262626);
-	}
-
-	.rail-album-btn.rail-active {
-		background: var(--color-primary-100, #dcfce7);
-		color: var(--color-primary-900, #14532d);
-	}
-
 	.rail-archived {
 		font-size: 0.625rem;
-		font-weight: 600;
-		opacity: 0.7;
-	}
-
-	.rail-archived.rail-active {
-		opacity: 1;
 	}
 
 	.rail-icon-btn {
@@ -1058,23 +1088,12 @@
 		display: grid;
 		place-items: center;
 		border-radius: 0.375rem;
-		color: var(--color-surface-500, #737373);
 		transition: all 0.15s;
 		cursor: pointer;
 		border: none;
-		background: none;
+		background: transparent;
 		padding: 0;
 		flex-shrink: 0;
-	}
-
-	.rail-icon-btn:hover {
-		background: var(--color-surface-200, #e5e5e5);
-		color: var(--color-surface-700, #404040);
-	}
-
-	.rail-icon-btn.rail-active {
-		background: var(--color-primary-100, #dcfce7);
-		color: var(--color-primary-900, #14532d);
 	}
 
 	/* --- Album resize handle --- */
