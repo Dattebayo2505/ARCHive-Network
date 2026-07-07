@@ -25,3 +25,8 @@ ready/
 # OS
 .DS_Store
 Thumbs.db
+
+# Excluded project docs/config
+CLAUDE.md
+.claude/
+docs/
