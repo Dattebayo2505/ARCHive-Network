@@ -22,10 +22,11 @@
 		saving = true;
 		try {
 			const blob = await captureFrame(videoEl);
-			const res = await saveVideoThumbnail(video.fbid, blob);
+			const timestamp = videoEl.currentTime;
+			const res = await saveVideoThumbnail(video.fbid, blob, false, timestamp);
 			stillVersion += 1;
 			hasStill = true;
-			onThumbnailChosen?.(video.fbid, res.file_size_bytes);
+			onThumbnailChosen?.(video.fbid, res.file_size_bytes, timestamp);
 		} catch {
 			/* frame not capturable yet — leave the current still in place */
 		} finally {
@@ -70,6 +71,21 @@
 			minute: '2-digit',
 			hour12: true
 		}).format(date).replace('\u202f', ' ');
+	}
+
+	function formatDuration(seconds) {
+		if (seconds == null) return null;
+		const m = Math.floor(seconds / 60);
+		const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+		const ms = Math.floor((seconds % 1) * 1000).toString().padStart(3, '0');
+		return m > 0 ? `${m}m ${s}s ${ms}ms` : `${s}s ${ms}ms`;
+	}
+
+	function seekTo(timestamp) {
+		if (videoEl && timestamp != null) {
+			videoEl.pause();
+			videoEl.currentTime = timestamp;
+		}
 	}
 </script>
 
@@ -152,7 +168,9 @@
 						alt="Chosen thumbnail"
 						onerror={() => (hasStill = false)}
 					/>
-					<figcaption class="text-xs text-surface-300">Chosen thumbnail</figcaption>
+					<figcaption class="text-sm text-surface-300">
+						Chosen thumbnail {#if video.thumb_timestamp != null} at <button type="button" class="text-primary-400 font-medium hover:text-primary-300 hover:underline" onclick={() => seekTo(video.thumb_timestamp)}>{formatDuration(video.thumb_timestamp)}</button>{/if}
+					</figcaption>
 					<button
 						type="button"
 						class="mt-2 flex h-9 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 disabled:opacity-70"

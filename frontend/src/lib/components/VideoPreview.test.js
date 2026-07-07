@@ -28,8 +28,8 @@ describe('VideoPreview', () => {
 
 		await fireEvent.click(screen.getByRole('button', { name: /choose thumbnail/i }));
 		expect(captureFrame).toHaveBeenCalledOnce();
-		expect(saveVideoThumbnail).toHaveBeenCalledWith('v01', expect.any(Blob));
-		expect(onThumbnailChosen).toHaveBeenCalledWith('v01', undefined);
+		expect(saveVideoThumbnail).toHaveBeenCalledWith('v01', expect.any(Blob), false, 0);
+		expect(onThumbnailChosen).toHaveBeenCalledWith('v01', undefined, 0);
 	});
 
 	it('keeps the capture button disabled until a frame is ready', () => {

@@ -147,8 +147,11 @@ export function videoThumbUrl(fbid) {
 	return url(`/api/video/${encodeURIComponent(fbid)}/thumbnail`);
 }
 
-export async function saveVideoThumbnail(fbid, blob, isAuto = false, fetchFn = fetch) {
-	const urlStr = url(`/api/video/${encodeURIComponent(fbid)}/thumbnail${isAuto ? '?auto=true' : ''}`);
+export async function saveVideoThumbnail(fbid, blob, auto = false, timestamp = 0.0, fetchFn = fetch) {
+	const u = new URL(videoThumbUrl(fbid), window.location.origin);
+	if (auto) u.searchParams.set('auto', 'true');
+	u.searchParams.set('timestamp', timestamp.toString());
+	const urlStr = u.href;
 	const res = await fetchFn(urlStr, {
 		method: 'POST',
 		headers: { 'content-type': 'image/jpeg' },

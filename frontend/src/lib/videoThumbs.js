@@ -35,9 +35,10 @@ export async function seedThumbnail(fbid, videoSrc) {
 		v.currentTime = Math.min(0.1, (v.duration || 1) / 2);
 	});
 	const blob = await captureFrame(v);
+	const timestamp = v.currentTime;
 	v.removeAttribute('src');
 	v.load();
-	const result = await saveVideoThumbnail(fbid, blob, true);
+	const result = await saveVideoThumbnail(fbid, blob, true, timestamp);
 	if (!result.ok) throw new Error('save failed');
 	return result;
 }
@@ -51,7 +52,7 @@ export async function seedMissingThumbnails(videos, { videoSrc, needsSeed, onSee
 		try {
 			if (!(await needsSeed(v.fbid))) continue;
 			const result = await seedThumbnail(v.fbid, videoSrc(v.fbid));
-			onSeeded?.(v.fbid, result.file_size_bytes);
+			onSeeded?.(v.fbid, result.file_size_bytes, result.thumb_timestamp);
 		} catch {
 			/* leave the placeholder; the build reports videos with no still */
 		}

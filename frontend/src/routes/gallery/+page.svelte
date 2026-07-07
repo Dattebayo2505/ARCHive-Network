@@ -110,12 +110,13 @@
 		seedMissingThumbnails(videos, {
 			videoSrc: videoUrl,
 			needsSeed: (fbid) => thumbnailMissing(fbid),
-			onSeeded: (fbid, sizeBytes) => {
+			onSeeded: (fbid, sizeBytes, timestamp) => {
 				thumbVersion = { ...thumbVersion, [fbid]: Date.now() };
 				const v = videos.find((x) => x.fbid === fbid);
 				if (v) {
 					v.video_thumb_tag = 'AUTO';
 					if (sizeBytes !== undefined) v.file_size_bytes = sizeBytes;
+					if (timestamp !== undefined) v.thumb_timestamp = timestamp;
 				}
 			}
 		});
@@ -232,12 +233,13 @@
 		videoPreview = video;
 	}
 
-	function onVideoChosen(fbid, sizeBytes) {
+	function onVideoChosen(fbid, sizeBytes, timestamp) {
 		thumbVersion = { ...thumbVersion, [fbid]: Date.now() };
 		const v = videos.find((x) => x.fbid === fbid);
 		if (v) {
 			v.video_thumb_tag = 'APPLIED';
 			if (sizeBytes !== undefined) v.file_size_bytes = sizeBytes;
+			if (timestamp !== undefined) v.thumb_timestamp = timestamp;
 		}
 	}
 
