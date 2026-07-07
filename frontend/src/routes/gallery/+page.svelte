@@ -36,6 +36,7 @@
 	let archiveConfirm = $state({ open: false, album: null });
 	let unarchiveConfirm = $state({ open: false, album: null });
 	let resetConfirm = $state({ open: false, album: null });
+	let buildConfirm = $state(false);
 	let selectionOpen = $state(false);
 	let albumOpen = $state(true);
 	let albumWidth = $state(240);
@@ -384,7 +385,7 @@
 			<button
 				class="mt-2 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-700 px-4 py-3 font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-progress disabled:opacity-70"
 				type="button"
-				onclick={runBuild}
+				onclick={() => (buildConfirm = true)}
 				disabled={building}
 			>
 				{#if building}
@@ -731,6 +732,19 @@
 {#if buildResult}
 	<BuildSummary result={buildResult} onClose={() => (buildResult = null)} />
 {/if}
+
+<ConfirmDialog
+	open={buildConfirm}
+	title="Build ready folder"
+	message="Are you sure you want to build the ready folder? This will process and copy all selected photos and videos to the ready directory."
+	confirmLabel="Yes, build it"
+	cancelLabel="Cancel"
+	onCancel={() => (buildConfirm = false)}
+	onConfirm={async () => {
+		buildConfirm = false;
+		await runBuild();
+	}}
+/>
 
 <ConfirmDialog
 	open={archiveConfirm.open}
