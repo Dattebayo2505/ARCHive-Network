@@ -45,6 +45,18 @@
 	let descExpanded = $state(false);
 	const toaster = createToaster();
 
+	let gridContainer = $state();
+	let lastActiveId = $state(activeId);
+
+	$effect(() => {
+		if (activeId !== lastActiveId) {
+			lastActiveId = activeId;
+			if (gridContainer) {
+				gridContainer.scrollTop = 0;
+			}
+		}
+	});
+
 	function formatFBDate(isoString) {
 		if (!isoString) return '';
 		const date = new Date(isoString);
@@ -367,6 +379,20 @@
 					editingId={editingAlbumId}
 					onSelect={(id) => { activeId = id; editingAlbumId = null; }}
 					onContextMenu={openAlbumMenu}
+					onGroupContextMenu={(groupName, isCollapsed, toggleFn, e) => {
+						menu = {
+							open: true,
+							x: e.clientX,
+							y: e.clientY,
+							items: [
+								{
+									label: isCollapsed ? 'Expand Group' : 'Collapse Group',
+									icon: 'folder',
+									onSelect: toggleFn
+								}
+							]
+						};
+					}}
 					onRename={async (album, newName) => {
 						const result = await renameAlbum(album.fb_album_id, newName);
 						if (result.ok) {
@@ -663,7 +689,7 @@
 				{/if}
 			</header>
 
-			<div class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
+			<div bind:this={gridContainer} class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
 				<PhotoGrid
 					album={activeAlbum}
 					thumb={thumbUrl}

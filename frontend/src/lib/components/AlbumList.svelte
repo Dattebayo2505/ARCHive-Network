@@ -3,7 +3,7 @@
 
 	let {
 		albums, archivedAlbums = [], archiveCount = 0, videosCount = 0, videosSelectedCount = 0,
-		activeId, onSelect, onContextMenu,
+		activeId, onSelect, onContextMenu, onGroupContextMenu,
 		editingId = null, onRename, onCancelRename, onStartRename
 	} = $props();
 
@@ -26,12 +26,42 @@
 		return groups;
 	});
 
+	function smoothScroll(element, target, duration) {
+		const start = element.scrollTop;
+		const distance = target - start;
+		const startTime = performance.now();
+
+		function step(currentTime) {
+			const progress = Math.min((currentTime - startTime) / duration, 1);
+			const ease = 1 - Math.pow(1 - progress, 4); // ease-out quart for a fast "spring" look
+			element.scrollTop = start + distance * ease;
+			if (progress < 1) requestAnimationFrame(step);
+		}
+		requestAnimationFrame(step);
+	}
+
 	function snapTo(e, gIndex, firstId) {
-		const btn = e.currentTarget;
-		btn.style.scrollMarginTop = `${gIndex * 32}px`;
-		btn.scrollIntoView({ behavior: 'smooth', block: 'start' });
-		if (firstId) {
+		let targetItem;
+		let offset = 0;
+
+		if (firstId && rowEls[firstId]) {
+			targetItem = rowEls[firstId];
+			offset = (gIndex + 1) * 32;
 			onSelect(firstId);
+		} else {
+			targetItem = e.currentTarget;
+			offset = gIndex * 32;
+		}
+
+		const scroller = targetItem.closest('.lg\\:overflow-y-auto');
+		if (scroller) {
+			const scrollerRect = scroller.getBoundingClientRect();
+			const itemRect = targetItem.getBoundingClientRect();
+			const targetScroll = scroller.scrollTop + (itemRect.top - scrollerRect.top) - offset;
+			smoothScroll(scroller, targetScroll, 300); // 300ms snappy animation
+		} else {
+			targetItem.style.scrollMarginTop = `${offset}px`;
+			targetItem.scrollIntoView({ behavior: 'auto', block: 'start' });
 		}
 	}
 
@@ -185,21 +215,31 @@
 		{@const prevGroupName = i > 0 ? (albums[i - 1].origin || 'Main Albums') : null}
 		{#if groupName !== prevGroupName}
 			{@const gIndex = visibleGroups.indexOf(groupName)}
-			<button
-				type="button"
-				class="sticky z-10 bg-surface-50 flex w-full items-center justify-between px-2 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors h-[32px]"
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="sticky z-10 bg-surface-50 flex w-full items-center justify-between pl-2 pr-1 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors h-[32px] select-none"
 				style="top: {gIndex * 32}px;"
-				onclick={(e) => snapTo(e, gIndex, a.fb_album_id)}
-				ondblclick={() => toggleGroup(groupName)}
-				aria-expanded={!collapsedGroups.has(groupName)}
+				ondblclick={(e) => snapTo(e, gIndex, a.fb_album_id)}
+				oncontextmenu={(e) => {
+					e.preventDefault();
+					onGroupContextMenu?.(groupName, collapsedGroups.has(groupName), () => toggleGroup(groupName), e);
+				}}
 			>
-				<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-600 group-hover:text-surface-800 transition-colors">
+				<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400 group-hover:text-surface-600 transition-colors flex-1 cursor-pointer">
 					{groupName}
 				</span>
-				<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500 transition-transform duration-200" class:-rotate-90={collapsedGroups.has(groupName)} fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<polyline points="6 9 12 15 18 9"></polyline>
-				</svg>
-			</button>
+				<button 
+					type="button"
+					class="p-1 rounded text-surface-400 hover:bg-surface-200 hover:text-surface-600 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+					onclick={(e) => { e.stopPropagation(); toggleGroup(groupName); }}
+					aria-expanded={!collapsedGroups.has(groupName)}
+					title={collapsedGroups.has(groupName) ? "Expand" : "Collapse"}
+				>
+					<svg viewBox="0 0 24 24" class="size-3.5 transition-transform duration-200" class:-rotate-90={collapsedGroups.has(groupName)} fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<polyline points="6 9 12 15 18 9"></polyline>
+					</svg>
+				</button>
+			</div>
 		{/if}
 		{#if !collapsedGroups.has(groupName)}
 			{@render albumItem(a, i)}
@@ -260,21 +300,31 @@
 	{#if archivedAlbums && archivedAlbums.length > 0}
 		{@const groupName = 'Archived Albums'}
 		{@const gIndex = visibleGroups.indexOf('Archived Albums')}
-		<button
-			type="button"
-			class="sticky z-10 bg-surface-50 flex w-full items-center justify-between px-2 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors h-[32px]"
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="sticky z-10 bg-surface-50 flex w-full items-center justify-between pl-2 pr-1 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors h-[32px] select-none"
 			style="top: {gIndex * 32}px;"
-			onclick={(e) => snapTo(e, gIndex, archivedAlbums[0]?.fb_album_id)}
-			ondblclick={() => toggleGroup(groupName)}
-			aria-expanded={!collapsedGroups.has(groupName)}
+			ondblclick={(e) => snapTo(e, gIndex, archivedAlbums[0]?.fb_album_id)}
+			oncontextmenu={(e) => {
+				e.preventDefault();
+				onGroupContextMenu?.(groupName, collapsedGroups.has(groupName), () => toggleGroup(groupName), e);
+			}}
 		>
-			<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-600 group-hover:text-surface-800 transition-colors">
+			<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400 group-hover:text-surface-600 transition-colors flex-1 cursor-pointer">
 				{groupName}
 			</span>
-			<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500 transition-transform duration-200" class:-rotate-90={collapsedGroups.has(groupName)} fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-				<polyline points="6 9 12 15 18 9"></polyline>
-			</svg>
-		</button>
+			<button 
+				type="button"
+				class="p-1 rounded text-surface-400 hover:bg-surface-200 hover:text-surface-600 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary-600"
+				onclick={(e) => { e.stopPropagation(); toggleGroup(groupName); }}
+				aria-expanded={!collapsedGroups.has(groupName)}
+				title={collapsedGroups.has(groupName) ? "Expand" : "Collapse"}
+			>
+				<svg viewBox="0 0 24 24" class="size-3.5 transition-transform duration-200" class:-rotate-90={collapsedGroups.has(groupName)} fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<polyline points="6 9 12 15 18 9"></polyline>
+				</svg>
+			</button>
+		</div>
 		{#if !collapsedGroups.has(groupName)}
 			{#each archivedAlbums as a, i (a.fb_album_id)}
 				{@render albumItem(a, i, true)}
