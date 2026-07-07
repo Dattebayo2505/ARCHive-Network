@@ -1,5 +1,6 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
+	import { slide } from 'svelte/transition';
 	import { videoUrl, videoThumbUrl, saveVideoThumbnail } from '$lib/api.js';
 	import { captureFrame } from '$lib/videoThumbs.js';
 
@@ -342,17 +343,13 @@
 				onclick={toggleCarousel}
 				aria-label={showCarousel ? 'Hide carousel' : 'Show carousel'}
 			>
-				{#if showCarousel}
-					<svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-				{:else}
-					<svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
-				{/if}
+				<svg viewBox="0 0 24 24" class="size-5 transition-transform duration-200 {showCarousel ? 'rotate-180' : ''}" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
 			</button>
 		</div>
 
 		<div class="mx-auto max-w-3xl">
 			{#if showCarousel}
-				<div class="flex gap-2 overflow-x-auto pb-2 pt-1 [scrollbar-width:thin]">
+				<div transition:slide={{ duration: 200 }} class="flex gap-2 overflow-x-auto pb-2 pt-1 [scrollbar-width:thin]">
 					{#each videos as v, i (v.fbid)}
 						{@const isCurrent = i === index}
 						{@const thumbSrc = `${videoThumbUrl(v.fbid)}?v=${thumbVersionMap[v.fbid] ?? 0}`}
