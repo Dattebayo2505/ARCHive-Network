@@ -797,6 +797,7 @@
 							if (index !== -1) openPreviewAt(index);
 						}}
 						selectable={!isActiveArchived}
+						full={activeFull}
 					/>
 				</div>
 				<div class="py-2 shrink-0">

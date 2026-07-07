@@ -1,11 +1,10 @@
 <script>
-	let { photo, src = '', selectable = true, video = false, onToggle } = $props();
+	let { photo, src = '', selectable = true, full = false, video = false, onToggle } = $props();
 
-	// Any existing photo in a selectable album stays interactive — including when
-	// the album is at its cap. A full album's unselected tile still reads as
-	// selectable (hover ring, clickable); the click is rejected server-side and the
-	// gallery surfaces an "Album is full" toast, rather than the tile looking locked.
-	let interactive = $derived(selectable && photo.exists);
+	// A tile the user can't act on right now: the album is full and this one
+	// isn't already selected. Selected tiles stay clickable so they can be removed.
+	let blocked = $derived(full && !photo.selected);
+	let interactive = $derived(selectable && photo.exists && !blocked);
 	let imgError = $state(false);
 
 	// Tiles use a uniform 3:2 aspect ratio: the grid layout reads best with even
@@ -67,6 +66,14 @@
 				class="pointer-events-none absolute right-2 top-2 size-6 rounded-full border-2 border-white/90 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
 				aria-hidden="true"
 			></span>
+		{:else if blocked}
+			<span
+				class="pointer-events-none absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-surface-900/70 text-surface-50"
+				aria-hidden="true"
+			>
+				<svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2.5"
+					stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+			</span>
 		{/if}
 
 		{#if video}
