@@ -154,7 +154,8 @@ export async function saveVideoThumbnail(fbid, blob, isAuto = false, fetchFn = f
 		headers: { 'content-type': 'image/jpeg' },
 		body: blob
 	});
-	return { ok: res.ok };
+	if (!res.ok) return { ok: false };
+	return { ok: true, ...(await res.json()) };
 }
 
 /** Rename an album (display name only — the export on disk is untouched). */

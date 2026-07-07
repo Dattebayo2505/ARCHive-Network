@@ -5,7 +5,7 @@ import { saveVideoThumbnail, videoThumbUrl } from './api.js';
  * crossorigin="anonymous" from a CORS-enabled source, or the canvas is tainted and
  * toBlob throws a SecurityError.
  */
-export function captureFrame(videoEl, quality = 0.85) {
+export function captureFrame(videoEl, quality = 0.95) {
 	const canvas = document.createElement('canvas');
 	canvas.width = videoEl.videoWidth;
 	canvas.height = videoEl.videoHeight;
@@ -37,7 +37,9 @@ export async function seedThumbnail(fbid, videoSrc) {
 	const blob = await captureFrame(v);
 	v.removeAttribute('src');
 	v.load();
-	return saveVideoThumbnail(fbid, blob, true);
+	const result = await saveVideoThumbnail(fbid, blob, true);
+	if (!result.ok) throw new Error('save failed');
+	return result;
 }
 
 /**
@@ -48,8 +50,8 @@ export async function seedMissingThumbnails(videos, { videoSrc, needsSeed, onSee
 	for (const v of videos) {
 		try {
 			if (!(await needsSeed(v.fbid))) continue;
-			await seedThumbnail(v.fbid, videoSrc(v.fbid));
-			onSeeded?.(v.fbid);
+			const result = await seedThumbnail(v.fbid, videoSrc(v.fbid));
+			onSeeded?.(v.fbid, result.file_size_bytes);
 		} catch {
 			/* leave the placeholder; the build reports videos with no still */
 		}

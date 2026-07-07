@@ -110,10 +110,13 @@
 		seedMissingThumbnails(videos, {
 			videoSrc: videoUrl,
 			needsSeed: (fbid) => thumbnailMissing(fbid),
-			onSeeded: (fbid) => {
+			onSeeded: (fbid, sizeBytes) => {
 				thumbVersion = { ...thumbVersion, [fbid]: Date.now() };
 				const v = videos.find((x) => x.fbid === fbid);
-				if (v) v.video_thumb_tag = 'AUTO';
+				if (v) {
+					v.video_thumb_tag = 'AUTO';
+					if (sizeBytes !== undefined) v.file_size_bytes = sizeBytes;
+				}
 			}
 		});
 	});
@@ -132,7 +135,10 @@
 	);
 	let totalSelected = $derived((inventory.albums ?? []).reduce((n, a) => n + a.count_selected, 0));
 	let totalSelectedMB = $derived(
-		((inventory.albums ?? []).flatMap((a) => (a.photos ?? []).filter((p) => p.selected)).reduce((sum, p) => sum + (p.file_size_bytes || 0), 0) / (1024 * 1024)).toFixed(2)
+		(
+			((inventory.albums ?? []).flatMap((a) => (a.photos ?? []).filter((p) => p.selected)).reduce((sum, p) => sum + (p.file_size_bytes || 0), 0) +
+			(inventory.videos ?? []).filter((v) => v.selected).reduce((sum, v) => sum + (v.file_size_bytes || 0), 0))
+		/ (1024 * 1024)).toFixed(2)
 	);
 
 	async function onToggle(photo) {
@@ -226,10 +232,13 @@
 		videoPreview = video;
 	}
 
-	function onVideoChosen(fbid) {
+	function onVideoChosen(fbid, sizeBytes) {
 		thumbVersion = { ...thumbVersion, [fbid]: Date.now() };
 		const v = videos.find((x) => x.fbid === fbid);
-		if (v) v.video_thumb_tag = 'APPLIED';
+		if (v) {
+			v.video_thumb_tag = 'APPLIED';
+			if (sizeBytes !== undefined) v.file_size_bytes = sizeBytes;
+		}
 	}
 
 	// Right-click a video → choose its thumbnail (replaces "Preview") or open its file.
@@ -715,6 +724,7 @@
 {#if videoPreview}
 	<VideoPreview
 		video={videoPreview}
+		version={thumbVersion[videoPreview.fbid] ?? 0}
 		onThumbnailChosen={onVideoChosen}
 		onToggle={onVideoToggle}
 		onClose={() => (videoPreview = null)}

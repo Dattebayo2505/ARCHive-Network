@@ -3,7 +3,7 @@
 	import { videoUrl, videoThumbUrl, saveVideoThumbnail } from '$lib/api.js';
 	import { captureFrame } from '$lib/videoThumbs.js';
 
-	let { video, onClose, onThumbnailChosen, onToggle } = $props();
+	let { video, version = 0, onClose, onThumbnailChosen, onToggle } = $props();
 
 	let videoEl = $state();
 	let videoH = $state(0);
@@ -12,7 +12,7 @@
 	let saving = $state(false);
 	let ready = $state(false); // a frame is decoded → capture is possible
 	// Bust the <img> cache after we save a new still so the panel updates.
-	let stillVersion = $state(0);
+	let stillVersion = $state(version);
 	let stillSrc = $derived(`${videoThumbUrl(video.fbid)}?v=${stillVersion}`);
 	let hasStill = $state(true); // assume a default exists; onerror flips it off
 
@@ -22,10 +22,10 @@
 		saving = true;
 		try {
 			const blob = await captureFrame(videoEl);
-			await saveVideoThumbnail(video.fbid, blob);
+			const res = await saveVideoThumbnail(video.fbid, blob);
 			stillVersion += 1;
 			hasStill = true;
-			onThumbnailChosen?.(video.fbid);
+			onThumbnailChosen?.(video.fbid, res.file_size_bytes);
 		} catch {
 			/* frame not capturable yet — leave the current still in place */
 		} finally {

@@ -51,7 +51,7 @@ describe('PhotoTile', () => {
 				photo: { fbid: 'v01', exists: true, caption: 'clip' },
 				src: '/api/video/v01/thumbnail',
 				video: true,
-				selectable: false,
+				selectable: true,
 				onToggle
 			}
 		});

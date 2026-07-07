@@ -82,10 +82,11 @@ def inventory_payload(
         "archived_albums": archived_albums,
         "non_album": [_photo(p) for p in inventory.non_album_photos],
         "videos": [
-            _photo(
-                type("V", (), {"__class__": v.__class__, **v.__dict__, "video_thumb_tag": "AUTO" if video_thumbs and video_thumbs.is_auto(v.fbid) else "APPLIED" if video_thumbs and video_thumbs.has(v.fbid) else None})(),
-                selected=selection.is_selected("__videos__", v.fbid)
-            )
+            {
+                **_photo(v, selected=selection.is_selected("__videos__", v.fbid)),
+                "video_thumb_tag": "AUTO" if video_thumbs and video_thumbs.is_auto(v.fbid) else "APPLIED" if video_thumbs and video_thumbs.has(v.fbid) else None,
+                "file_size_bytes": video_thumbs.path(v.fbid).stat().st_size if video_thumbs and video_thumbs.has(v.fbid) else 0
+            }
             for v in inventory.videos
         ],
         "archive": [_archive_photo(p) for p in inventory.archived_photos],

@@ -49,5 +49,5 @@ async def save_video_thumbnail(request: Request, fbid: str, auto: bool = False):
     data = await request.body()
     if not data:
         raise HTTPException(status_code=400, detail="Empty thumbnail body")
-    session.video_thumbs.save(fbid, data, is_auto=auto)
-    return {"ok": True}
+    target = session.video_thumbs.save(fbid, data, is_auto=auto)
+    return {"ok": True, "file_size_bytes": target.stat().st_size}

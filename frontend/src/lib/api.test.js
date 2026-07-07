@@ -28,10 +28,10 @@ describe('video api', () => {
 	});
 
 	it('POSTs the captured blob as image/jpeg', async () => {
-		const fetchFn = vi.fn().mockResolvedValue({ ok: true });
+		const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ file_size_bytes: 1234 }) });
 		const blob = new Blob(['x'], { type: 'image/jpeg' });
-		const res = await saveVideoThumbnail('v01', blob, fetchFn);
-		expect(res).toEqual({ ok: true });
+		const res = await saveVideoThumbnail('v01', blob, false, fetchFn);
+		expect(res).toEqual({ ok: true, file_size_bytes: 1234 });
 		const [, opts] = fetchFn.mock.calls[0];
 		expect(opts.method).toBe('POST');
 		expect(opts.headers['content-type']).toBe('image/jpeg');
