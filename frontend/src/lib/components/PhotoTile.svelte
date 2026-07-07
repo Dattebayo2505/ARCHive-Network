@@ -7,14 +7,13 @@
 	let interactive = $derived(selectable && photo.exists && !blocked);
 	let imgError = $state(false);
 
-	// Shape the tile to the photo's real proportions. The cached thumbnail is already
-	// scaled to the original aspect ratio (PIL fits the longest side), so the loaded
-	// image's natural size *is* the original ratio. Square until it loads so the masonry
-	// column reserves space instead of snapping from zero height.
-	let ratio = $state('1 / 1');
+	// Shape the tile to a uniform 3:2 aspect ratio for the standard grid layout.
+	// The masonry column approach used to dynamically size these, but grid works
+	// best with uniform heights. object-cover handles any outliers.
+	let ratio = $state('3 / 2');
 	function measure(e) {
-		const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
-		if (w && h) ratio = `${w} / ${h}`;
+		// Intentionally left blank: we no longer measure naturalWidth/Height
+		// since we want to force the uniform 3:2 grid ratio.
 	}
 </script>
 

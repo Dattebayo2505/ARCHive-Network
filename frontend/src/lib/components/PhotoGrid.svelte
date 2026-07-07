@@ -7,15 +7,15 @@
 	let min = $derived(sizeMin(size));
 </script>
 
-<!-- Masonry columns: tiles keep their true aspect ratio and still tile without
-     gaps. The view-size control sets the column width, so density still works. -->
-<div style="columns: {min}; column-gap: 0.75rem;">
+<!-- Standard CSS Grid: Left-to-right flow. Images will fit into grid cells 
+     and object-cover will handle any aspect ratio outliers, catering to the 3:2 majority. -->
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax({min}, 1fr)); gap: 0.75rem;">
 	{#each album.photos as photo (photo.fbid)}
 		<!-- contextmenu lives on the wrapper, not the tile button, so right-click
 		     still works on blocked (disabled) and missing tiles. -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="mb-3 break-inside-avoid"
+			class="break-inside-avoid"
 			oncontextmenu={(e) => {
 				e.preventDefault();
 				onContextMenu?.(photo, e);
