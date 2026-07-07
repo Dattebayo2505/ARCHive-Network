@@ -109,6 +109,15 @@ export async function toggle(albumFbid, photoFbid, fetchFn = fetch) {
 	return { ok: true, cap: false, selected: data.selected, count: data.count };
 }
 
+export async function deselectAll(albumFbid, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/deselect_all'), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ album_fbid: albumFbid })
+	});
+	return res.json();
+}
+
 export async function build(fetchFn = fetch) {
 	return (await fetchFn(url('/api/build'), { method: 'POST' })).json();
 }

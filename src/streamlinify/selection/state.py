@@ -35,6 +35,11 @@ class SelectionState:
         self._save()
         return True
 
+    def deselect_all(self, album_fbid: str) -> None:
+        if album_fbid in self._selected:
+            del self._selected[album_fbid]
+            self._save()
+
     def is_selected(self, album_fbid: str, photo_fbid: str) -> bool:
         return photo_fbid in self._selected.get(album_fbid, set())
 

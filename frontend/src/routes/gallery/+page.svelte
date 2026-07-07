@@ -1,6 +1,6 @@
 <script>
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
-	import { build, reveal, thumbUrl, previewUrl, toggle, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum } from '$lib/api.js';
+	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum } from '$lib/api.js';
 	import { prefetchAlbumThumbs, clearPrefetchCache } from '$lib/imageCache.js';
 	import { seedMissingThumbnails, thumbnailMissing } from '$lib/videoThumbs.js';
 	import { DEFAULT_SIZE, SIZE_STORAGE_KEY, VIEW_SIZES } from '$lib/viewSizes.js';
@@ -161,6 +161,25 @@
 		const result = await toggle('__videos__', video.fbid);
 		if (!result.ok) return;
 		video.selected = result.selected;
+	}
+
+	async function onDeselectAll() {
+		if (showVideos) {
+			const result = await deselectAll('__videos__');
+			if (result.ok) {
+				for (const video of videos) {
+					video.selected = false;
+				}
+			}
+		} else if (activeAlbum) {
+			const result = await deselectAll(activeAlbum.fb_album_id);
+			if (result.ok) {
+				activeAlbum.count_selected = 0;
+				for (const photo of activeAlbum.photos) {
+					photo.selected = false;
+				}
+			}
+		}
 	}
 
 	async function runBuild() {
@@ -498,11 +517,23 @@
 			{/if}
 		{:else if showVideos}
 			<header class="mb-2 shrink-0 pt-1 pb-1">
-				<div class="flex min-w-0 items-baseline gap-3">
+				<div class="flex min-w-0 items-center gap-3">
 					<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Videos</h1>
-					<p class="shrink-0 text-sm font-medium tabular-nums text-surface-500">
-						{videos.filter((v) => v.selected).length} / {videos.length} selected
-					</p>
+					<div class="flex shrink-0 items-center gap-2">
+						<p class="text-sm font-medium tabular-nums text-surface-500">
+							{videos.filter((v) => v.selected).length} / {videos.length} selected
+						</p>
+						{#if videos.some((v) => v.selected)}
+							<button
+								type="button"
+								class="flex items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-2.5 py-1 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+								onclick={onDeselectAll}
+							>
+								<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+								Deselect All
+							</button>
+						{/if}
+					</div>
 				</div>
 				<p class="mt-2 text-sm text-surface-500">
 					Videos aren’t imported — a still frame replaces each one. Click a video to play it and
@@ -535,21 +566,33 @@
 			     the grid and never scroll — only the grid below scrolls. -->
 			<header class="mb-2 shrink-0 pt-1 pb-1">
 				<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-					<div class="flex min-w-0 items-baseline gap-3">
+					<div class="flex min-w-0 items-center gap-3">
 						<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">
 							{activeAlbum.name}
 						</h1>
-						<p
-							class="shrink-0 text-sm font-medium tabular-nums"
-							class:text-warning-700={activeFull}
-							class:text-surface-500={!activeFull}
-						>
-							{#if activeCap != null}
-								{activeAlbum.count_selected} / {activeCap} selected
-							{:else}
-								{activeAlbum.count_selected} selected · no limit
+						<div class="flex shrink-0 items-center gap-2">
+							<p
+								class="text-sm font-medium tabular-nums"
+								class:text-warning-700={activeFull}
+								class:text-surface-500={!activeFull}
+							>
+								{#if activeCap != null}
+									{activeAlbum.count_selected} / {activeCap} selected
+								{:else}
+									{activeAlbum.count_selected} selected · no limit
+								{/if}
+							</p>
+							{#if activeAlbum.count_selected > 0}
+								<button
+									type="button"
+									class="flex items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-2.5 py-1 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+									onclick={onDeselectAll}
+								>
+									<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+									Deselect All
+								</button>
 							{/if}
-						</p>
+						</div>
 					</div>
 					<div class="flex items-center gap-1">
 					<ViewControls

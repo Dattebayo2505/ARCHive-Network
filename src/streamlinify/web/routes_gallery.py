@@ -20,6 +20,10 @@ class ToggleRequest(BaseModel):
     photo_fbid: str
 
 
+class DeselectAllRequest(BaseModel):
+    album_fbid: str
+
+
 class RenameAlbumRequest(BaseModel):
     album_fbid: str
     name: str
@@ -139,6 +143,13 @@ def toggle(request: Request, body: ToggleRequest):
             status_code=409,
         )
     return {"selected": selected, "count": session.selection.count(body.album_fbid)}
+
+
+@router.post("/api/deselect_all")
+def deselect_all(request: Request, body: DeselectAllRequest):
+    session = _session(request)
+    session.selection.deselect_all(body.album_fbid)
+    return {"ok": True, "count": 0}
 
 
 @router.post("/api/album/rename")
