@@ -14,6 +14,24 @@
 
 	let collapsedGroups = $state(new Set());
 
+	let visibleGroups = $derived.by(() => {
+		const groups = [];
+		for (const a of albums) {
+			const g = a.origin || 'Main Albums';
+			if (!groups.includes(g)) groups.push(g);
+		}
+		if (videosCount > 0) groups.push('__videos__');
+		if (archiveCount > 0) groups.push('__archive__');
+		if (archivedAlbums && archivedAlbums.length > 0) groups.push('Archived Albums');
+		return groups;
+	});
+
+	function snapTo(e, gIndex) {
+		const btn = e.currentTarget;
+		btn.style.scrollMarginTop = `${gIndex * 32}px`;
+		btn.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
 	function toggleGroup(group) {
 		const next = new Set(collapsedGroups);
 		if (next.has(group)) {
@@ -154,7 +172,7 @@
 	</div>
 {/snippet}
 
-<nav aria-label="Albums" class="flex flex-col gap-1">
+<nav aria-label="Albums" class="flex flex-col gap-1 p-2">
 	<p class="font-display px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-surface-500">
 		Albums <span class="font-normal text-surface-400">· {albums.length}</span>
 	</p>
@@ -163,10 +181,13 @@
 		{@const groupName = a.origin || 'Main Albums'}
 		{@const prevGroupName = i > 0 ? (albums[i - 1].origin || 'Main Albums') : null}
 		{#if groupName !== prevGroupName}
+			{@const gIndex = visibleGroups.indexOf(groupName)}
 			<button
 				type="button"
-				class="flex w-full items-center justify-between px-2 pb-0.5 pt-2 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors"
-				onclick={() => toggleGroup(groupName)}
+				class="sticky z-10 bg-surface-50 flex w-full items-center justify-between px-2 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors h-[32px]"
+				style="top: {gIndex * 32}px;"
+				onclick={(e) => snapTo(e, gIndex)}
+				ondblclick={() => toggleGroup(groupName)}
 				aria-expanded={!collapsedGroups.has(groupName)}
 			>
 				<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400 group-hover:text-surface-600 transition-colors">
@@ -184,10 +205,13 @@
 
 	{#if videosCount > 0}
 		{@const active = activeId === '__videos__'}
+		{@const gIndex = visibleGroups.indexOf('__videos__')}
 		<div class="my-1 h-px bg-surface-300"></div>
 		<button
 			type="button"
-			class="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+			class="sticky z-10 flex items-center gap-2 rounded-lg px-2.5 text-left text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 h-[32px]"
+			style="top: {gIndex * 32}px;"
+			class:bg-surface-50={!active}
 			class:bg-primary-100={active}
 			class:text-primary-900={active}
 			class:font-semibold={active}
@@ -206,10 +230,13 @@
 
 	{#if archiveCount > 0}
 		{@const active = activeId === '__archive__'}
+		{@const gIndex = visibleGroups.indexOf('__archive__')}
 		<div class="my-1 h-px bg-surface-300"></div>
 		<button
 			type="button"
-			class="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+			class="sticky z-10 flex items-center gap-2 rounded-lg px-2.5 text-left text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 h-[32px]"
+			style="top: {gIndex * 32}px;"
+			class:bg-surface-50={!active}
 			class:bg-primary-100={active}
 			class:text-primary-900={active}
 			class:font-semibold={active}
@@ -229,10 +256,13 @@
 
 	{#if archivedAlbums && archivedAlbums.length > 0}
 		{@const groupName = 'Archived Albums'}
+		{@const gIndex = visibleGroups.indexOf('Archived Albums')}
 		<button
 			type="button"
-			class="flex w-full items-center justify-between px-2 pb-0.5 pt-2 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors"
-			onclick={() => toggleGroup(groupName)}
+			class="sticky z-10 bg-surface-50 flex w-full items-center justify-between px-2 text-left rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 group hover:bg-surface-100 transition-colors h-[32px]"
+			style="top: {gIndex * 32}px;"
+			onclick={(e) => snapTo(e, gIndex)}
+			ondblclick={() => toggleGroup(groupName)}
 			aria-expanded={!collapsedGroups.has(groupName)}
 		>
 			<span class="font-display text-[0.65rem] font-semibold uppercase tracking-wide text-surface-400 group-hover:text-surface-600 transition-colors">

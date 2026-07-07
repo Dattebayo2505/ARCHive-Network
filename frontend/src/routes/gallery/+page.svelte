@@ -355,7 +355,7 @@
 			</div>
 
 			<div
-				class="rounded-xl border border-surface-300 bg-surface-50 p-2 shadow-sm lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
+				class="rounded-xl border border-surface-300 bg-surface-50 shadow-sm lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
 			>
 				<AlbumList
 					albums={inventory.albums}
