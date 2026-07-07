@@ -28,13 +28,13 @@ html.dark {
 }
 
 /* ------------------------------------------------------------------ *
- * Archers — DLSU-green theme for ARCHive Network.
+ * Default — Brand-green theme for ARCHive Network.
  * A calm, confident product palette: deep La Salle green carries the
  * identity (header + primary actions), green-tinted cool neutrals carry
  * the surfaces, and attention colors (amber "full", red "error") are
  * spent only at the edges. See DESIGN.md.
  * ------------------------------------------------------------------ */
-[data-theme='archers'] {
+[data-theme='default'] {
 	--spacing: 0.25rem;
 	--text-scaling: 1.067;
 
@@ -85,7 +85,7 @@ html.dark {
 	--default-divide-width: 1px;
 	--default-ring-width: 2px;
 
-	/* Primary — DLSU / La Salle green (anchor ≈ #00703C) */
+	/* Primary — Brand green (anchor ≈ #00703C) */
 	--color-primary-50: oklch(0.96 0.02 159);
 	--color-primary-100: oklch(0.92 0.04 159);
 	--color-primary-200: oklch(0.85 0.07 158);
@@ -137,7 +137,7 @@ html.dark {
 	--color-secondary-contrast-900: var(--color-secondary-contrast-light);
 	--color-secondary-contrast-950: var(--color-secondary-contrast-light);
 
-	/* Tertiary — restrained DLSU gold, sparing accent only */
+	/* Tertiary — restrained brand gold, sparing accent only */
 	--color-tertiary-50: oklch(0.96 0.03 85);
 	--color-tertiary-100: oklch(0.92 0.05 84);
 	--color-tertiary-200: oklch(0.86 0.08 83);
@@ -269,7 +269,7 @@ html.dark {
 }
 
 /* ------------------------------------------------------------------ *
- * Dark mode — the same `archers` product, at night.
+ * Dark mode — the same `default` product, at night.
  *
  * The palette was authored single-mode, so most tokens are dual-use: low
  * surface indices are backgrounds, high indices are text. Dark mode therefore
@@ -279,15 +279,15 @@ html.dark {
  * stays green-tinted (hue ~170) so it reads as the same tool after dark, and
  * elevation still climbs with the index (100 = canvas, 50 = raised card).
  *
- * DLSU green keeps its identity: the deep-green header and green buttons/rings
+ * Brand green keeps its identity: the deep-green header and green buttons/rings
  * already pop on a dark field, so the brand ramp is left intact — only the pale
  * green *wash* tints (used as row-hover fills on content) are darkened here so
  * they don't flash bright. A few "always dark" scrims over photos/modals are
  * pinned to fixed values in their components (they must stay dark in both
  * modes, not follow this inverted ramp). See DESIGN.md § Dark mode.
  * ------------------------------------------------------------------ */
-[data-theme='archers'].dark,
-.dark [data-theme='archers'] {
+[data-theme='default'].dark,
+.dark [data-theme='default'] {
 	/* Surface — inverted, green-tinted cool neutrals. 100 is the canvas (darkest
 	   background); 50 is the raised card a half-step above it; 200 is a hover/
 	   badge fill; 300–400 are hairlines; 500–950 climb from dim to primary ink. */

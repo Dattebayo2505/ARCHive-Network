@@ -1,6 +1,6 @@
-# ARCHive Network — Archers Network FB Export Curation Tool
+# ARCHive Network — FB Export Curation Tool
 
-Local FastAPI tool that turns a weekly Facebook export into a curated,
+Local FastAPI tool that turns a Facebook data export into a curated,
 filtered "ready-to-upload" folder. See the design + plan in `docs/superpowers/`.
 
 ## Run
@@ -31,6 +31,6 @@ cd frontend && npm run test
 
 1. Start both servers; open the UI.
 2. Drop the weekly export `.zip` (or paste the unzipped folder path).
-3. Pick ≤10 photos per named album; non-album photos are auto-kept.
+3. Pick ≤10 photos per named album and video thumbnails.
 4. Click **Build ready folder** → output lands in `workspace/ready/<export-name>/`.
    The original export is never modified.

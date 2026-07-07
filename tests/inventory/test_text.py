@@ -13,7 +13,7 @@ def test_fix_mojibake_passthrough_on_plain_ascii():
 
 
 def test_extract_hashtags():
-    assert extract_hashtags("game! #ARCH #ArchersNetwork done") == ["#ARCH", "#ArchersNetwork"]
+    assert extract_hashtags("game! #TEST #MyPage done") == ["#TEST", "#MyPage"]
 
 
 def test_epoch_to_dt_is_utc():

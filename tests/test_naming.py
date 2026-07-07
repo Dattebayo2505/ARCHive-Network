@@ -3,15 +3,15 @@ from streamlinify.inventory.naming import display_name
 
 def test_derives_name_and_drops_random_suffix():
     assert (
-        display_name("facebook-ArchersNetwork-2026-07-03-7xOuGnNl")
-        == "Archers Network Facebook Export | 2026-07-03"
+        display_name("facebook-MyPage-2026-07-03-7xOuGnNl")
+        == "MyPage Facebook Export | 2026-07-03"
     )
 
 
 def test_drops_trailing_annotation_after_suffix():
     assert (
-        display_name("facebook-ArchersNetwork-2026-06-08-Th2bzEER_previous-week-posts")
-        == "Archers Network Facebook Export | 2026-06-08"
+        display_name("facebook-MyPage-2026-06-08-Th2bzEER_previous-week-posts")
+        == "MyPage Facebook Export | 2026-06-08"
     )
 
 

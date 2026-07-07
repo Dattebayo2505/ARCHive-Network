@@ -10,8 +10,8 @@ _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 def display_name(export_name: str) -> str:
     """Turn an FB export folder name into a friendly label.
 
-    ``facebook-ArchersNetwork-2026-07-03-7xOuGnNl`` ->
-    ``Archers Network Facebook Export | 2026-07-03``.
+    ``facebook-MyPage-2026-07-03-7xOuGnNl`` ->
+    ``MyPage Facebook Export | 2026-07-03``.
 
     Rule: strip a leading ``facebook-``; find the first YYYY-MM-DD date; the page
     name is everything before it (CamelCase-split, ``-``/``_`` collapsed to spaces);

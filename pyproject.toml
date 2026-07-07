@@ -1,7 +1,7 @@
 [project]
 name = "streamlinify"
 version = "0.1.0"
-description = "Local FastAPI tool to curate Facebook exports for Archers Network"
+description = "Local FastAPI tool to curate Facebook exports"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",

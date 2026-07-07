@@ -48,7 +48,7 @@
 				</a>
 			{/if}
 
-			<!-- Archers mark: a stylised bow + arrow -->
+			<!-- Brand logo -->
 			<span
 				class="grid size-9 shrink-0 place-items-center rounded-lg bg-primary-50/15"
 				aria-hidden="true"
