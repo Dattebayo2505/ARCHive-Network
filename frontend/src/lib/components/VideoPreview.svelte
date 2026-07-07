@@ -191,7 +191,7 @@
 		</button>
 
 		<!-- The stage interior wraps the video and thumb panel to group them -->
-		<div class="flex items-center justify-center gap-6" style="max-height: 100%; max-width: 100%;">
+		<div class="flex h-full w-full min-h-0 min-w-0 items-center justify-center gap-6" style="max-height: 100%; max-width: 100%;">
 			<!-- svelte-ignore a11y_media_has_caption -->
 			<video
 			bind:this={videoEl}
