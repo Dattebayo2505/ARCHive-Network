@@ -45,9 +45,26 @@ def test_rejects_zip_slip(tmp_path: Path):
     assert not (tmp_path / "evil.txt").exists()
 
 
-def test_missing_7zr_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_falls_back_to_zipfile_when_no_7zip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    # No configured binary and none discoverable on PATH -> stdlib zipfile fallback,
+    # so extraction still succeeds on machines without 7-Zip (e.g. a bare macOS/Linux).
     zip_path = tmp_path / "x.zip"
     _make_zip(zip_path, {"posts/profile_posts_1.json": "[]"})
-    monkeypatch.setattr(settings, "seven_zip_exe", tmp_path / "nope" / "7zr.exe")
-    with pytest.raises(FileNotFoundError):
-        extract_zip(zip_path, tmp_path / "out")
+    monkeypatch.setattr(settings, "seven_zip_exe", None)
+    monkeypatch.setattr("streamlinify.ingest.unzip.shutil.which", lambda _name: None)
+    dest = tmp_path / "out"
+    extract_zip(zip_path, dest)
+    assert (dest / "posts" / "profile_posts_1.json").read_text() == "[]"
+
+
+def test_windows_exe_ignored_off_windows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    # A committed vendor/7za.exe "exists" on macOS/Linux but cannot run there, so
+    # find_seven_zip must skip it (and fall through to PATH / zipfile) off Windows.
+    from streamlinify.ingest.unzip import find_seven_zip
+
+    fake_exe = tmp_path / "7za.exe"
+    fake_exe.write_bytes(b"MZ")  # a stand-in Windows binary
+    monkeypatch.setattr(settings, "seven_zip_exe", fake_exe)
+    monkeypatch.setattr("streamlinify.ingest.unzip.shutil.which", lambda _name: None)
+    monkeypatch.setattr("streamlinify.ingest.unzip.sys.platform", "linux")
+    assert find_seven_zip() is None
