@@ -9,9 +9,28 @@
 
 $ErrorActionPreference = 'Stop'
 $root  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ports = @(8000, 5173)
 $procs = @()
 $nullFile = $null
+
+function Get-FreePort {
+    param([int]$StartingPort)
+    $port = $StartingPort
+    while ($true) {
+        try {
+            $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $port)
+            $listener.Start()
+            $listener.Stop()
+            return $port
+        } catch {
+            $port++
+        }
+    }
+}
+
+$backendPort = Get-FreePort -StartingPort 8000
+$frontendPort = Get-FreePort -StartingPort 5173
+
+$ports = @($backendPort, $frontendPort)
 
 # Resolve paths to npm-cli.js and npx-cli.js to run npm/npx commands using node directly,
 # avoiding cmd.exe's "Terminate batch job (Y/N)?" prompt.
@@ -53,16 +72,9 @@ function Stop-All {
 try {
     $env:UV_LINK_MODE = 'copy'
 
-    # Pre-flight: auto-close anything already holding our dev ports (orphaned
-    # uvicorn/node from a prior crash or another run) so we always start clean.
-    Write-Host "Freeing dev ports (auto-closing anything already running)..." -ForegroundColor Yellow
-    foreach ($port in $ports) {
-        if ($npxCli) {
-            node $npxCli --yes kill-port $port *> $null
-        } else {
-            npx --yes kill-port $port *> $null
-        }
-    }
+    # Pass the dynamically selected ports to the backend and frontend
+    $env:STREAMLINIFY_PORT = $backendPort
+    $env:VITE_API_BASE = "http://127.0.0.1:$backendPort"
 
     # Create an empty temp file to redirect stdin for both child processes.
     # Without it, vite (npm run dev) opens the shared console's stdin for its shortcut keys and
@@ -70,21 +82,21 @@ try {
     # vite and the parent never sees it (the classic "Ctrl+C does nothing" hang).
     $nullFile = New-TemporaryFile
 
-    Write-Host "Starting backend  (uv run streamlinify -> http://127.0.0.1:8000)" -ForegroundColor Green
+    Write-Host "Starting backend  (uv run streamlinify -> http://127.0.0.1:$backendPort)" -ForegroundColor Green
     $procs += Start-Process -FilePath 'uv' `
         -ArgumentList 'run', 'streamlinify' `
         -WorkingDirectory $root -NoNewWindow -PassThru `
         -RedirectStandardInput $nullFile.FullName
  
-    Write-Host "Starting frontend (npm run dev     -> http://localhost:5173)" -ForegroundColor Green
+    Write-Host "Starting frontend (npm run dev     -> http://localhost:$frontendPort)" -ForegroundColor Green
     if ($npmCli) {
         $procs += Start-Process -FilePath 'node' `
-            -ArgumentList "`"$npmCli`"", 'run', 'dev' `
+            -ArgumentList "`"$npmCli`"", 'run', 'dev', '--', '--port', "$frontendPort", '--strictPort' `
             -WorkingDirectory (Join-Path $root 'frontend') -NoNewWindow -PassThru `
             -RedirectStandardInput $nullFile.FullName
     } else {
         $procs += Start-Process -FilePath 'cmd.exe' `
-            -ArgumentList '/c', 'npm run dev < NUL' `
+            -ArgumentList '/c', "npm run dev -- --port $frontendPort --strictPort < NUL" `
             -WorkingDirectory (Join-Path $root 'frontend') -NoNewWindow -PassThru
     }
 
