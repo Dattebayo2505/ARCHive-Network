@@ -36,7 +36,8 @@
 
 	// The active photo can be removed (always) but only added while the album has
 	// room — mirrors the grid's per-tile rule so the cap behaves the same everywhere.
-	let blocked = $derived(full && current && !current.selected);
+	let isFull = $derived(album.max_per_album != null ? album.count_selected >= album.max_per_album : full);
+	let blocked = $derived(isFull && current && !current.selected);
 
 	let container;
 	let scrollContainer = $state();
@@ -173,26 +174,39 @@
 
 		<div class="ml-auto flex items-center gap-2">
 			{#if selectable && current?.exists}
+				{#if current.selected}
+					<button
+						type="button"
+						class="flex h-9 items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-3 text-sm font-semibold text-surface-900 shadow-sm transition-colors hover:bg-surface-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface-50"
+						disabled={!isFull}
+						onclick={() => onToggle(current)}
+					>
+						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+						Deselect
+					</button>
+				{/if}
+
 				<button
 					type="button"
-					class="flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300"
-					class:bg-primary-600={current.selected}
-					class:text-primary-50={current.selected || blocked}
-					class:hover:bg-primary-500={current.selected}
-					class:bg-warning-600={blocked}
-					class:bg-surface-50={!current.selected && !blocked}
-					class:text-surface-900={!current.selected && !blocked}
-					class:hover:bg-surface-200={!current.selected && !blocked}
+					class="flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 disabled:cursor-not-allowed disabled:opacity-100"
+					class:bg-primary-600={current.selected && !isFull}
+					class:text-primary-50={current.selected || isFull}
+					class:hover:bg-primary-500={current.selected && !isFull}
+					class:bg-warning-600={isFull}
+					class:bg-surface-50={!current.selected && !isFull}
+					class:text-surface-900={!current.selected && !isFull}
+					class:hover:bg-surface-200={!current.selected && !isFull}
+					disabled={isFull}
 					onclick={() => onToggle(current)}
 				>
-					{#if current.selected}
-						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2.5"
-							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-						Kept
-					{:else if blocked}
+					{#if isFull}
 						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2.25"
 							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
 						Album full
+					{:else if current.selected}
+						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2.5"
+							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+						Kept
 					{:else}
 						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"
 							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
