@@ -22,6 +22,75 @@
 	let stillSrc = $derived(`${videoThumbUrl(video?.fbid)}?v=${stillVersion}`);
 	let hasStill = $state(true); // assume a default exists; onerror flips it off
 
+	let container;
+	let showCarousel = $state(true);
+	
+	onMount(() => {
+		const saved = localStorage.getItem('streamlinify_video_carousel');
+		if (saved !== null) {
+			showCarousel = saved === 'true';
+		}
+	});
+
+	function toggleCarousel() {
+		showCarousel = !showCarousel;
+		localStorage.setItem('streamlinify_video_carousel', showCarousel.toString());
+		if (showCarousel) requestAnimationFrame(() => scrollCurrent(false));
+	}
+
+	let stripRatio = $state({});
+	function measureStrip(e, fbid) {
+		const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
+		if (w && h) {
+			stripRatio[fbid] = `${w} / ${h}`;
+			requestAnimationFrame(() => scrollCurrent(false));
+		}
+	}
+
+	function reducedMotion() {
+		return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+	}
+
+	let scrollRaf = 0;
+	function animateScroll(sc, to) {
+		cancelAnimationFrame(scrollRaf);
+		if (reducedMotion() || document.hidden) {
+			sc.scrollLeft = to;
+			return;
+		}
+		const from = sc.scrollLeft;
+		const dist = to - from;
+		if (Math.abs(dist) < 1) return;
+		const start = performance.now();
+		const duration = 260;
+		const easeOutQuart = (t) => 1 - Math.pow(1 - t, 4);
+		const step = (now) => {
+			const t = Math.min(1, (now - start) / duration);
+			sc.scrollLeft = from + dist * easeOutQuart(t);
+			if (t < 1) scrollRaf = requestAnimationFrame(step);
+		};
+		scrollRaf = requestAnimationFrame(step);
+	}
+
+	function scrollCurrent(smooth = true) {
+		if (!showCarousel) return;
+		const el = container?.querySelectorAll('[data-strip]')[index];
+		const sc = el?.parentElement;
+		if (!el || !sc) return;
+		const elBox = el.getBoundingClientRect();
+		const scBox = sc.getBoundingClientRect();
+		const pad = 8;
+		const target = sc.scrollLeft + (elBox.left - scBox.left) - pad;
+		const clamped = Math.max(0, Math.min(target, sc.scrollWidth - sc.clientWidth));
+		if (smooth) animateScroll(sc, clamped);
+		else sc.scrollLeft = clamped;
+	}
+
+	$effect(() => {
+		index; // subscribe to index changes
+		requestAnimationFrame(() => scrollCurrent(false));
+	});
+
 	$effect(() => {
 		// When the video changes, update the still version from the map
 		if (video) {
@@ -52,6 +121,12 @@
 	function go(to) {
 		const n = videos.length;
 		index = ((to % n) + n) % n; // wrap both ends
+		scrollCurrent();
+	}
+
+	function selectAt(i) {
+		index = i;
+		scrollCurrent();
 	}
 
 	function onKey(e) {
@@ -123,6 +198,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
+	bind:this={container}
 	class="fixed inset-0 z-[60] flex flex-col bg-surface-950/80 backdrop-blur-sm"
 	role="dialog"
 	aria-modal="true"
@@ -182,7 +258,7 @@
 	>
 		<button
 			type="button"
-			class="absolute left-2 z-10 grid size-10 place-items-center rounded-full bg-surface-950/40 text-surface-50 transition-colors hover:bg-surface-950/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 sm:size-11"
+			class="absolute left-2 z-10 grid size-10 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-black/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 sm:size-11"
 			onclick={() => go(index - 1)}
 			aria-label="Previous video"
 		>
@@ -248,7 +324,7 @@
 
 		<button
 			type="button"
-			class="absolute right-2 z-10 grid size-10 place-items-center rounded-full bg-surface-950/40 text-surface-50 transition-colors hover:bg-surface-950/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 sm:size-11"
+			class="absolute right-2 z-10 grid size-10 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-black/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 sm:size-11"
 			onclick={() => go(index + 1)}
 			aria-label="Next video"
 		>
@@ -257,7 +333,60 @@
 		</button>
 	</div>
 
-	<p class="px-4 pb-3 pt-1 text-center text-xs text-surface-400">
-		<kbd class="font-sans">←</kbd> <kbd class="font-sans">→</kbd> to browse · <kbd class="font-sans">Esc</kbd> to close
-	</p>
+	<!-- Filmstrip carousel -->
+	<div class="px-4 pb-3 pt-1 sm:px-6">
+		<div class="mb-1 flex justify-center">
+			<button
+				type="button"
+				class="grid size-8 place-items-center rounded-full bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300"
+				onclick={toggleCarousel}
+				aria-label={showCarousel ? 'Hide carousel' : 'Show carousel'}
+			>
+				{#if showCarousel}
+					<svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+				{:else}
+					<svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+				{/if}
+			</button>
+		</div>
+
+		<div class="mx-auto max-w-3xl">
+			{#if showCarousel}
+				<div class="flex gap-2 overflow-x-auto pb-2 pt-1 [scrollbar-width:thin]">
+					{#each videos as v, i (v.fbid)}
+						{@const isCurrent = i === index}
+						{@const thumbSrc = `${videoThumbUrl(v.fbid)}?v=${thumbVersionMap[v.fbid] ?? 0}`}
+						<button
+							data-strip
+							type="button"
+							tabindex="-1"
+							style="aspect-ratio: {stripRatio[v.fbid] ?? '1 / 1'};"
+							class="relative h-16 shrink-0 overflow-hidden rounded-md bg-surface-800 ring-1 ring-inset transition-[box-shadow] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 sm:h-20"
+							class:ring-2={isCurrent}
+							class:!ring-primary-400={isCurrent}
+							class:ring-surface-50={!isCurrent}
+							class:opacity-55={!isCurrent}
+							onclick={() => selectAt(i)}
+							aria-label={`Show ${v.caption || v.fbid}`}
+							aria-current={isCurrent ? 'true' : undefined}
+						>
+							<img class="size-full object-cover" loading="lazy" onload={(e) => measureStrip(e, v.fbid)} src={thumbSrc} alt="" />
+							{#if v.selected}
+								<span
+									class="absolute right-1 top-1 grid size-4 place-items-center rounded-full bg-primary-600 text-primary-50 shadow"
+									aria-hidden="true"
+								>
+									<svg viewBox="0 0 24 24" class="size-2.5" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+								</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
+
+			<p class="mt-1 text-center text-xs text-surface-400">
+				<kbd class="font-sans">←</kbd> <kbd class="font-sans">→</kbd> to browse · <kbd class="font-sans">Esc</kbd> to close
+			</p>
+		</div>
+	</div>
 </div>
