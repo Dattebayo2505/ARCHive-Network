@@ -15,6 +15,7 @@
 	import SelectionPanel from '$lib/components/SelectionPanel.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import BuildConfirmDialog from '$lib/components/BuildConfirmDialog.svelte';
+	import { dragScrollY } from '$lib/dragScrollY.js';
 
 	let { data } = $props();
 	let inventory = $state(data.inventory || {});
@@ -371,7 +372,8 @@
 			</div>
 
 			<div
-				class="rounded-xl border border-surface-300 bg-surface-50 shadow-sm lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
+				use:dragScrollY
+				class="rounded-xl border border-surface-300 bg-surface-50 shadow-sm lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 			>
 				<AlbumList
 					albums={inventory.albums}
