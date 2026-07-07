@@ -24,7 +24,7 @@ def test_build_filtered_mirror(export_root: Path, tmp_path: Path):
     assert result.copied == 3
     assert any("m02" in o for o in result.orphans)
 
-    # unnecessary JSONs dropped
+    # no video still was captured in this build → no videos.json manifest
     assert not (dest / "posts" / "videos.json").exists()
 
     # profile_posts filtered to kept + present media

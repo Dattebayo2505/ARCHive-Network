@@ -20,7 +20,11 @@ def build(request: Request) -> dict:
     keep |= {p.fbid for p in session.inventory.non_album_photos if p.exists}
 
     ready_root = settings.workspace_dir / "ready"
-    dest = ready_root / session.export_root.name
+    # Name the ready folder from the workspace id (the friendly zip-based
+    # ``facebook-<page>-<date>`` name), matching ``workspace/state/<id>/`` — not the generic
+    # extracted-root name (``this_profile's_activity_across_facebook``). Falls back to the
+    # export folder name for plain folder imports, where ``workspace_id == export_root.name``.
+    dest = ready_root / session.workspace_id
     result = build_ready_folder(
         session.export_root, dest, keep, session.video_thumbs.dir, session.renames._renames
     )

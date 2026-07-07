@@ -23,6 +23,12 @@ def test_video_still_replaces_mp4(video_export_root: Path, tmp_path: Path):
     assert any(u.endswith("videos/v01.jpg") for u in uris)
     assert not any(u.endswith(".mp4") for u in uris)
 
+    # a videos.json manifest is emitted (the explicit video marker for the ETL): only the
+    # built video, uri rewritten to its poster .jpg (prefix stripped), metadata preserved.
+    manifest = json.loads((dest / "posts" / "videos.json").read_text(encoding="utf-8"))
+    assert [v["uri"] for v in manifest["videos_v2"]] == ["posts/media/videos/v01.jpg"]
+    assert manifest["videos_v2"][0]["description"] == "Watch this clip"
+
 
 def test_video_without_still_is_skipped(video_export_root: Path, tmp_path: Path):
     dest = tmp_path / "ready"
@@ -36,3 +42,5 @@ def test_video_without_still_is_skipped(video_export_root: Path, tmp_path: Path)
     posts = json.loads((dest / "posts" / "profile_posts_1.json").read_text(encoding="utf-8"))
     uris = [d["media"]["uri"] for p in posts for att in p["attachments"] for d in att["data"] if "media" in d]
     assert not any("v01" in u for u in uris)
+    # no built videos → no manifest
+    assert not (dest / "posts" / "videos.json").exists()

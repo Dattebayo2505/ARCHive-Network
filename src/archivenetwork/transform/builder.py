@@ -8,14 +8,6 @@ from pathlib import Path
 from ..inventory.archive import is_special_album
 from ..inventory.parser import build_inventory, photo_fbid, resolve_uri
 
-DROP_JSON = {
-    "videos.json",
-    "content_sharing_links_you_have_created.json",
-    "edits_you_made_to_posts.json",
-    "places_you_have_been_tagged_in.json",
-}
-
-
 @dataclass
 class BuildResult:
     ready_root: Path
@@ -131,7 +123,16 @@ def build_ready_folder(
         raw = json.loads(album_path.read_text(encoding="utf-8"))
         if is_special_album(raw.get("name", "")):
             continue
-        kept = [p for p in raw.get("photos", []) if photo_fbid(p["uri"]) in keep_fbids]
+        # Strip the export-folder prefix from each kept uri so the ready output carries
+        # only `posts/media/...` paths (derived albums are already stripped) — a single
+        # consistent storage_path for the downstream ETL.
+        kept = []
+        for p in raw.get("photos", []):
+            if photo_fbid(p["uri"]) not in keep_fbids:
+                continue
+            rec = dict(p)
+            rec["uri"] = _rel_from_posts(p["uri"])
+            kept.append(rec)
         if not kept:
             continue
         album_dst_dir.mkdir(parents=True, exist_ok=True)
@@ -165,6 +166,8 @@ def build_ready_folder(
                         continue
                     if fbid in ready_uris:
                         d["media"]["uri"] = ready_uris[fbid]
+                    else:
+                        d["media"]["uri"] = _rel_from_posts(d["media"]["uri"])
                     kept_data.append(d)
                 att["data"] = kept_data
             post["attachments"] = [att for att in post.get("attachments", []) if att["data"]]
@@ -173,6 +176,28 @@ def build_ready_folder(
         (dest / "posts" / "profile_posts_1.json").write_text(
             json.dumps(posts, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+    # Videos manifest: emit a filtered posts/videos.json listing only the built videos,
+    # each uri rewritten .mp4 -> its poster .jpg (prefix already stripped). This is the
+    # explicit video marker the downstream ETL needs (media_type=video) — a poster is
+    # otherwise an ordinary .jpg in the feed. Videos with no captured still are omitted.
+    videos_src = export_root / "posts" / "videos.json"
+    if video_ready and videos_src.exists():
+        raw_videos = json.loads(videos_src.read_text(encoding="utf-8"))
+        kept_videos = []
+        for rec in raw_videos.get("videos_v2", []):
+            fbid = photo_fbid(rec["uri"])
+            if fbid not in video_ready:
+                continue
+            out_rec = dict(rec)
+            out_rec["uri"] = video_ready[fbid]
+            kept_videos.append(out_rec)
+        if kept_videos:
+            (dest / "posts").mkdir(parents=True, exist_ok=True)
+            (dest / "posts" / "videos.json").write_text(
+                json.dumps({"videos_v2": kept_videos}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
     return BuildResult(
         ready_root=dest,
