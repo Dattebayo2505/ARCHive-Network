@@ -10,6 +10,7 @@ describe('PhotoTile', () => {
 				photo: { fbid: 'a01', exists: true, selected: false, caption: null },
 				src: '/x.jpg',
 				selectable: true,
+				selectionEnabled: true,
 				onToggle
 			}
 		});
@@ -52,6 +53,7 @@ describe('PhotoTile', () => {
 				src: '/api/video/v01/thumbnail',
 				video: true,
 				selectable: true,
+				selectionEnabled: true,
 				onToggle
 			}
 		});

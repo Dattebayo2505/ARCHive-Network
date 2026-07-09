@@ -43,6 +43,7 @@
 	let undoLimitConfirm = $state({ open: false, album: null });
 	let buildConfirm = $state(false);
 	let selectionOpen = $state(false);
+	let selectionEnabled = $state(false);
 	let albumOpen = $state(true);
 	let albumWidth = $state(240);
 	let albumDragging = $state(false);
@@ -69,6 +70,7 @@
 	$effect(() => {
 		if (activeId !== lastActiveId) {
 			lastActiveId = activeId;
+			selectionEnabled = false;
 			if (gridContainer) {
 				gridContainer.scrollTop = 0;
 			}
@@ -277,26 +279,6 @@
 			]
 		};
 
-		const isLocked = activeFull && !photo.selected;
-		if (isLocked) {
-			if (!activeAlbum.limit_bypassed && activeAlbum.photos?.length > 10) {
-				menu.items.push({
-					label: 'Increase Image Limit',
-					icon: 'unlock',
-					onSelect: () => {
-						increaseLimitConfirm = { open: true, album: activeAlbum };
-					}
-				});
-			} else if (activeAlbum.limit_bypassed) {
-				menu.items.push({
-					label: 'Undo Image Increase',
-					icon: 'lock',
-					onSelect: () => {
-						undoLimitConfirm = { open: true, album: activeAlbum };
-					}
-				});
-			}
-		}
 	}
 
 	function onVideoChosen(fbid, sizeBytes, timestamp) {
@@ -665,6 +647,7 @@
 							thumb={thumbUrl}
 							size={gridSize}
 							selectable={false}
+							selectionEnabled={false}
 							onContextMenu={openArchiveMenu}
 							onDblClick={(photo) => {
 								const index = archive.findIndex((p) => p.fbid === photo.fbid);
@@ -717,6 +700,7 @@
 							thumb={videoTileSrc}
 							size={gridSize}
 							selectable={true}
+							selectionEnabled={true}
 							video
 							onToggle={onVideoToggle}
 							onContextMenu={openVideoMenu}
@@ -756,16 +740,6 @@
 						</div>
 					</div>
 					<div class="flex items-center gap-1">
-						{#if activeAlbum.count_selected > 0}
-							<button
-								type="button"
-								class="mr-2 flex h-[38px] items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-2.5 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-								onclick={onDeselectAll}
-							>
-								<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
-								Deselect All
-							</button>
-						{/if}
 					<ViewControls
 						size={gridSize}
 						onSize={setSize}
@@ -802,6 +776,28 @@
 						Date posted on FB: {formatFBDate(activeAlbum.post_timestamp)}
 					</p>
 				{/if}
+
+				<div class="mt-3 mb-1 flex items-center gap-2">
+					<button
+						type="button"
+						class="flex h-[38px] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 {selectionEnabled ? 'bg-green-100 border-green-300 text-green-800 shadow-inner' : 'border-surface-300 bg-surface-50 text-surface-700 hover:bg-surface-100'}"
+						onclick={() => (selectionEnabled = !selectionEnabled)}
+					>
+						<svg viewBox="0 0 24 24" class="size-3.5 {selectionEnabled ? 'text-green-700' : 'text-surface-500'}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7" /><path d="m9 11 3 3L22 4" /></svg>
+						Enable Selection
+					</button>
+
+					{#if activeAlbum.count_selected > 0}
+						<button
+							type="button"
+							class="flex h-[38px] items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-2.5 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+							onclick={onDeselectAll}
+						>
+							<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+							Deselect All
+						</button>
+					{/if}
+				</div>
 				{#if activeAlbum.description}
 					{@const isLongDesc = activeAlbum.description.length > 120 || activeAlbum.description.split('\n').length > 2}
 					<div class="mt-1.5 rounded-md bg-surface-200 px-2.5 py-1.5 text-xs text-surface-600">
@@ -832,10 +828,12 @@
 						{onToggle}
 						onContextMenu={openPhotoMenu}
 						onDblClick={(photo) => {
+							if (selectionEnabled) return;
 							const index = activeAlbum.photos.findIndex((p) => p.fbid === photo.fbid);
 							if (index !== -1) openPreviewAt(index);
 						}}
 						selectable={!isActiveArchived}
+						selectionEnabled={selectionEnabled}
 						full={activeFull}
 					/>
 				</div>
@@ -859,6 +857,7 @@
 		onClose={() => (selectionOpen = false)}
 		onToggle={onPanelToggle}
 		onDblClick={(photo) => {
+			if (selectionEnabled) return;
 			const index = activeAlbum.photos.findIndex((p) => p.fbid === photo.fbid);
 			if (index !== -1) openPreviewAt(index);
 		}}

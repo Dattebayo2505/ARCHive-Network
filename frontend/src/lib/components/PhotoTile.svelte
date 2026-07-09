@@ -1,5 +1,5 @@
 <script>
-	let { photo, src = '', selectable = true, full = false, video = false, onToggle } = $props();
+	let { photo, src = '', selectable = true, selectionEnabled = false, full = false, video = false, onToggle } = $props();
 
 	// A tile the user can't act on right now: the album is full and this one
 	// isn't already selected. Selected tiles stay clickable so they can be removed.
@@ -19,7 +19,7 @@
 	class:ring-2={photo.selected}
 	class:!ring-primary-600={photo.selected}
 	aria-disabled={!interactive ? 'true' : undefined}
-	onclick={() => interactive && onToggle?.(photo)}
+	onclick={() => interactive && selectionEnabled && onToggle?.(photo)}
 	data-testid={`tile-${photo.fbid}`}
 	aria-pressed={photo.exists ? photo.selected : undefined}
 	aria-label={photo.caption || photo.fbid}
@@ -60,13 +60,13 @@
 				<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="3"
 					stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
 			</span>
-		{:else if interactive}
-			<!-- Affordance: empty ring appears on hover/focus -->
+		{:else if interactive && selectionEnabled}
+			<!-- Affordance: empty ring always present when selection enabled -->
 			<span
-				class="pointer-events-none absolute right-2 top-2 size-6 rounded-full border-2 border-white/90 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+				class="pointer-events-none absolute right-2 top-2 size-6 rounded-full border-2 border-white/90 shadow-sm"
 				aria-hidden="true"
 			></span>
-		{:else if blocked}
+		{:else if blocked && selectionEnabled}
 			<span
 				class="pointer-events-none absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-surface-900/70 text-surface-50"
 				aria-hidden="true"

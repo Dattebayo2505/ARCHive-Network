@@ -2,7 +2,7 @@
 	import PhotoTile from './PhotoTile.svelte';
 	import { sizeMin } from '$lib/viewSizes.js';
 
-	let { album, thumb, size = 'm', selectable = true, video = false, full = false, onToggle, onContextMenu, onDblClick } = $props();
+	let { album, thumb, size = 'm', selectable = true, selectionEnabled = false, video = false, full = false, onToggle, onContextMenu, onDblClick } = $props();
 
 	let isFull = $derived(album?.max_per_album != null ? album.count_selected >= album.max_per_album : full);
 	let min = $derived(sizeMin(size));
@@ -26,7 +26,7 @@
 				onDblClick?.(photo, e);
 			}}
 		>
-			<PhotoTile {photo} src={photo.exists ? thumb(photo.fbid) : ''} {selectable} full={isFull} {video} {onToggle} />
+			<PhotoTile {photo} src={photo.exists ? thumb(photo.fbid) : ''} {selectable} {selectionEnabled} full={isFull} {video} {onToggle} />
 		</div>
 	{/each}
 </div>
