@@ -13,6 +13,7 @@
 	import ContextMenu from '$lib/components/ContextMenu.svelte';
 	import BuildSummary from '$lib/components/BuildSummary.svelte';
 	import SelectionPanel from '$lib/components/SelectionPanel.svelte';
+	import SelectionStrip from '$lib/components/SelectionStrip.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import BuildConfirmDialog from '$lib/components/BuildConfirmDialog.svelte';
 	import { dragScrollY } from '$lib/dragScrollY.js';
@@ -42,7 +43,6 @@
 	let increaseLimitConfirm = $state({ open: false, album: null });
 	let undoLimitConfirm = $state({ open: false, album: null });
 	let buildConfirm = $state(false);
-	let selectionOpen = $state(false);
 	let selectionEnabled = $state(false);
 	let albumOpen = $state(true);
 	let albumWidth = $state(240);
@@ -50,6 +50,65 @@
 	let albumScrollTop = $state(0);
 	let expandedScrollEl = $state(null);
 	let collapsedScrollEl = $state(null);
+
+	let dockPosition = $state('right'); // 'right' or 'header'
+	let isDockDragging = $state(false);
+	let ghostPos = $state({ x: 0, y: 0 });
+	let panelOpen = $state(false);
+	let dockStatus = $state(''); // announced to screen readers on dock changes
+
+	const DOCK_LABEL = { right: 'to the right rail', header: 'above the photos' };
+
+	function handleDockDragStart(e) {
+		isDockDragging = true;
+		ghostPos = { x: e.clientX, y: e.clientY };
+		dockStatus = 'Moving the selection panel. Drop it on a highlighted zone.';
+
+		let frame = 0;
+		let pending = null;
+
+		function cleanup() {
+			cancelAnimationFrame(frame);
+			frame = 0;
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('pointercancel', onCancel);
+		}
+
+		function apply() {
+			frame = 0;
+			if (pending) ghostPos = pending;
+			pending = null;
+		}
+
+		function onMove(ev) {
+			pending = { x: ev.clientX, y: ev.clientY };
+			if (!frame) frame = requestAnimationFrame(apply);
+		}
+
+		function onUp(ev) {
+			isDockDragging = false;
+			const dropZone = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-drop-zone]');
+			if (dropZone) dockPosition = dropZone.getAttribute('data-drop-zone');
+			dockStatus = `Selection panel docked to ${DOCK_LABEL[dockPosition]}.`;
+			cleanup();
+		}
+
+		function onCancel() {
+			isDockDragging = false;
+			dockStatus = 'Move cancelled.';
+			cleanup();
+		}
+
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('pointercancel', onCancel);
+	}
+
+	function toggleDock() {
+		dockPosition = dockPosition === 'right' ? 'header' : 'right';
+		dockStatus = `Selection panel docked to ${DOCK_LABEL[dockPosition]}.`;
+	}
 
 	$effect(() => {
 		if (albumOpen && expandedScrollEl && expandedScrollEl.scrollTop !== albumScrollTop) {
@@ -193,6 +252,18 @@
 	let albumsToBuild = $derived((inventory.albums ?? []).filter((a) => a.count_selected > 0));
 	let totalSelectedVideos = $derived((inventory.videos ?? []).filter((v) => v.selected).length);
 
+	// The surface the selection dock mirrors, whichever category is showing. Without
+	// this the dock vanishes on Videos/Archive and can't be recovered.
+	let panelAlbum = $derived(
+		activeAlbum
+			? activeAlbum
+			: showVideos
+				? { name: 'Videos', photos: videos }
+				: showArchive
+					? { name: 'Archive', photos: archive }
+					: null
+	);
+
 	async function onToggle(photo) {
 		if (!activeAlbum) return;
 		const result = await toggle(activeAlbum.fb_album_id, photo.fbid);
@@ -207,13 +278,25 @@
 		activeAlbum.count_selected = result.count;
 	}
 
-	/** Toggle a photo from the selection panel (always uses the active album). */
+	/**
+	 * Toggle a photo from whichever surface the selection dock is mirroring. The
+	 * dock also serves the Videos category, where there is no `activeAlbum` — the
+	 * album path would silently no-op there.
+	 */
 	async function onPanelToggle(photo) {
-		if (!activeAlbum) return;
+		if (showVideos) return onVideoToggle(photo);
+		if (!activeAlbum) return; // archive is read-only
 		const result = await toggle(activeAlbum.fb_album_id, photo.fbid);
 		if (!result.ok && result.cap) return;
 		photo.selected = result.selected;
 		activeAlbum.count_selected = result.count;
+	}
+
+	/** Open the full-screen preview for a tile double-clicked inside the dock. */
+	function onPanelDblClick(photo) {
+		const arr = activeAlbum ? activeAlbum.photos : showVideos ? videos : archive;
+		const index = arr.findIndex((p) => p.fbid === photo.fbid);
+		if (index !== -1) openPreviewAt(index);
 	}
 
 	async function onVideoToggle(video) {
@@ -399,10 +482,70 @@
 	}
 </script>
 
-<div class="flex gap-5 lg:h-full lg:min-h-0">
+<!--
+	The top ("header") dock. Rendered from every category header via {@render}, so
+	switching to Videos or Archive while docked here doesn't strand the panel with
+	no control to bring it back.
+-->
+{#snippet topDock()}
+	{#if isDockDragging && dockPosition !== 'header'}
+		<div
+			data-drop-zone="header"
+			aria-hidden="true"
+			class="dock-dropzone mt-4 rounded-2xl border-2 border-dashed border-surface-400 bg-surface-50/80 px-6 py-4 text-center"
+		>
+			<p class="font-medium text-surface-600">Dock above the photos</p>
+		</div>
+	{/if}
+
+	{#if !isDockDragging && dockPosition === 'header'}
+		<SelectionStrip
+			album={panelAlbum}
+			bind:open={panelOpen}
+			onToggle={onPanelToggle}
+			onDockDragStart={handleDockDragStart}
+			onDblClick={onPanelDblClick}
+		/>
+	{/if}
+{/snippet}
+
+<!-- Controls that follow the dock wherever it lives: show/hide, and move. -->
+{#snippet dockControls()}
+	<button
+		type="button"
+		class="dock-btn"
+		class:bg-primary-100={panelOpen}
+		class:text-primary-900={panelOpen}
+		onclick={() => (panelOpen = !panelOpen)}
+		title={panelOpen ? 'Hide selection panel' : 'Show selection panel'}
+		aria-pressed={panelOpen}
+		aria-label={panelOpen ? 'Hide selection panel' : 'Show selection panel'}
+	>
+		<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 22H4a2 2 0 0 1-2-2V6" /><path d="m22 13-1.296-1.296a2.41 2.41 0 0 0-3.408 0L11 18" /><circle cx="12" cy="8" r="2" /><rect width="16" height="16" x="6" y="2" rx="2" /></svg>
+	</button>
+	<button
+		type="button"
+		class="dock-btn"
+		onclick={toggleDock}
+		title={dockPosition === 'right' ? 'Move panel above the photos' : 'Move panel to the right rail'}
+		aria-label={dockPosition === 'right'
+			? 'Move selection panel above the photos'
+			: 'Move selection panel to the right rail'}
+	>
+		{#if dockPosition === 'right'}
+			<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /></svg>
+		{:else}
+			<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M15 3v18" /></svg>
+		{/if}
+	</button>
+{/snippet}
+
+<p class="sr-only" role="status" aria-live="polite">{dockStatus}</p>
+
+<div class="flex lg:h-full lg:min-h-0 relative overflow-hidden">
 	<!-- Left rail: the album list scrolls on its own; build + counts stay pinned below it. -->
 	{#if albumOpen}
-		<aside class="album-sidebar" style="width: {albumWidth}px;">
+		<aside class="album-sidebar mr-5" style="width: {albumWidth}px;">
 			<!-- Sidebar header with collapse button -->
 			<div class="album-sidebar-header">
 				<span class="album-sidebar-title">
@@ -495,7 +638,7 @@
 	{:else}
 		<!-- Collapsed album rail: thin icon strip with album shortcodes -->
 		<aside
-			class="album-sidebar-collapsed relative"
+			class="album-sidebar-collapsed relative mr-5"
 			bind:this={collapsedScrollEl}
 			onscroll={(e) => { albumScrollTop = e.currentTarget.scrollTop; }}
 		>
@@ -624,23 +767,32 @@
 
 	<!-- Right pane: active album OR the read-only archive. Header stays put; only the
 	     photo grid below it scrolls (and only when the pointer is over the grid). -->
-	<section class="flex min-w-0 flex-1 flex-col lg:min-h-0">
+	<section class="flex min-w-0 flex-1 flex-col lg:min-h-0 mr-5">
 		{#if showArchive}
 			<header class="mb-2 shrink-0 pt-1 pb-1">
-				<div class="flex min-w-0 items-baseline gap-3">
-					<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Archive</h1>
-					<p class="shrink-0 text-sm font-medium tabular-nums text-surface-600">
-						{archive.length} set aside
-					</p>
+				<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+					<div class="flex min-w-0 items-baseline gap-3">
+						<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Archive</h1>
+						<p class="shrink-0 text-sm font-medium tabular-nums text-surface-600">
+							{archive.length} set aside
+						</p>
+					</div>
+					<div class="flex items-center gap-1">
+						{@render dockControls()}
+					</div>
 				</div>
 				<p class="mt-2 text-sm text-surface-600">
 					Photos posted with a news caption (BREAKING, LOOK, …) from Mobile uploads &amp; Photos.
 					These are excluded from the build. Right-click to preview or open the file.
 				</p>
+				{@render topDock()}
 			</header>
 
 			{#if archive.length}
-				<div class="flex min-h-0 flex-1 gap-2 pr-1">
+				<div class="flex min-h-0 flex-1 gap-2 pl-1">
+					<div class="py-2 shrink-0">
+						<CarouselScrollbar container={gridContainer} vertical={true} />
+					</div>
 					<div bind:this={gridContainer} class="flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 						<PhotoGrid
 							album={{ name: 'Archive', photos: archive }}
@@ -655,29 +807,31 @@
 							}}
 						/>
 					</div>
-					<div class="py-2 shrink-0">
-						<CarouselScrollbar container={gridContainer} vertical={true} />
-					</div>
 				</div>
 			{/if}
 		{:else if showVideos}
 			<header class="mb-2 shrink-0 pt-1 pb-1">
-				<div class="flex min-w-0 items-center gap-3">
-					<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Videos</h1>
-					<div class="flex shrink-0 items-center gap-2">
-						<p class="text-sm font-medium tabular-nums text-surface-600">
-							{videos.filter((v) => v.selected).length} / {videos.length} selected
-						</p>
-						{#if videos.some((v) => v.selected)}
-							<button
-								type="button"
-								class="flex h-[38px] items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-2.5 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-								onclick={onDeselectAll}
-							>
-								<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
-								Deselect All
-							</button>
-						{/if}
+				<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+					<div class="flex min-w-0 items-center gap-3">
+						<h1 class="truncate text-xl font-semibold tracking-tight text-surface-900">Videos</h1>
+						<div class="flex shrink-0 items-center gap-2">
+							<p class="text-sm font-medium tabular-nums text-surface-600">
+								{videos.filter((v) => v.selected).length} / {videos.length} selected
+							</p>
+							{#if videos.some((v) => v.selected)}
+								<button
+									type="button"
+									class="flex h-[38px] items-center gap-1.5 rounded-lg border border-surface-300 bg-surface-50 px-2.5 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+									onclick={onDeselectAll}
+								>
+									<svg viewBox="0 0 24 24" class="size-3.5 text-surface-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+									Deselect All
+								</button>
+							{/if}
+						</div>
+					</div>
+					<div class="flex items-center gap-1">
+						{@render dockControls()}
 					</div>
 				</div>
 				<p class="mt-2 text-sm text-surface-600">
@@ -690,10 +844,14 @@
 					<span class="inline-block rounded bg-primary-900/75 px-1.5 py-0.5 text-[0.6rem] font-semibold text-primary-50">APPLIED</span>
 					hand-picked by you.
 				</p>
+				{@render topDock()}
 			</header>
 
 			{#if videos.length}
-				<div class="flex min-h-0 flex-1 gap-2 pr-1">
+				<div class="flex min-h-0 flex-1 gap-2 pl-1">
+					<div class="py-2 shrink-0">
+						<CarouselScrollbar container={gridContainer} vertical={true} />
+					</div>
 					<div bind:this={gridContainer} class="flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 						<PhotoGrid
 							album={{ name: 'Videos', photos: videos }}
@@ -709,9 +867,6 @@
 								if (index !== -1) openPreviewAt(index);
 							}}
 						/>
-					</div>
-					<div class="py-2 shrink-0">
-						<CarouselScrollbar container={gridContainer} vertical={true} />
 					</div>
 				</div>
 			{/if}
@@ -740,26 +895,12 @@
 						</div>
 					</div>
 					<div class="flex items-center gap-1">
-					<ViewControls
-						size={gridSize}
-						onSize={setSize}
-					/>
-					<button
-						type="button"
-						class="ml-1 inline-flex items-center justify-center rounded-lg p-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-						class:bg-primary-100={selectionOpen}
-						class:text-primary-800={selectionOpen}
-						class:text-surface-600={!selectionOpen}
-						class:hover:bg-surface-200={!selectionOpen}
-						onclick={() => (selectionOpen = !selectionOpen)}
-						title={selectionOpen ? 'Hide selection panel' : 'Show selection panel'}
-						aria-pressed={selectionOpen}
-					>
-						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 22H4a2 2 0 0 1-2-2V6"/><path d="m22 13-1.296-1.296a2.41 2.41 0 0 0-3.408 0L11 18"/><circle cx="12" cy="8" r="2"/><rect width="16" height="16" x="6" y="2" rx="2"/></svg>
-					</button>
+						<ViewControls size={gridSize} onSize={setSize} />
+						{@render dockControls()}
+					</div>
 				</div>
-				</div>
-				<!-- Fill bar (capped albums only) -->
+
+				<!-- Fill bar (capped albums only): how full this album is, at a glance. -->
 				{#if activeCap != null}
 					<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-200">
 						<div
@@ -771,6 +912,7 @@
 						></div>
 					</div>
 				{/if}
+
 				{#if activeAlbum.post_timestamp}
 					<p class="mt-2 text-xs font-medium text-surface-600 uppercase tracking-wide">
 						Date posted on FB: {formatFBDate(activeAlbum.post_timestamp)}
@@ -817,9 +959,14 @@
 						{/if}
 					</div>
 				{/if}
+
+				{@render topDock()}
 			</header>
 
-			<div class="flex min-h-0 flex-1 gap-2 pr-1">
+			<div class="flex min-h-0 flex-1 gap-2 pl-1">
+				<div class="py-2 shrink-0">
+					<CarouselScrollbar container={gridContainer} vertical={true} />
+				</div>
 				<div bind:this={gridContainer} class="flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 					<PhotoGrid
 						album={activeAlbum}
@@ -837,9 +984,6 @@
 						full={activeFull}
 					/>
 				</div>
-				<div class="py-2 shrink-0">
-					<CarouselScrollbar container={gridContainer} vertical={true} />
-				</div>
 			</div>
 		{:else}
 			<div
@@ -850,18 +994,38 @@
 		{/if}
 	</section>
 
-	<!-- Right rail: selection panel (collapsible + resizable) -->
-	<SelectionPanel
-		album={activeAlbum}
-		open={selectionOpen}
-		onClose={() => (selectionOpen = false)}
-		onToggle={onPanelToggle}
-		onDblClick={(photo) => {
-			if (selectionEnabled) return;
-			const index = activeAlbum.photos.findIndex((p) => p.fbid === photo.fbid);
-			if (index !== -1) openPreviewAt(index);
-		}}
-	/>
+	{#if isDockDragging}
+		{#if dockPosition !== 'right'}
+			<div
+				data-drop-zone="right"
+				aria-hidden="true"
+				class="dock-dropzone my-2 mr-5 flex w-64 shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-surface-400 bg-surface-50/80"
+			>
+				<p class="rotate-90 text-lg font-medium whitespace-nowrap text-surface-600">
+					Dock to the right rail
+				</p>
+			</div>
+		{/if}
+
+		<div class="drag-ghost-layer pointer-events-none fixed inset-0">
+			<div
+				class="absolute flex items-center gap-3 rounded-xl border border-surface-300 bg-surface-100 p-4 opacity-90 shadow-xl"
+				style="left: {ghostPos.x}px; top: {ghostPos.y}px; transform: translate(-50%, -50%);"
+			>
+				<span class="font-medium text-surface-900">Moving selection panel…</span>
+			</div>
+		</div>
+	{/if}
+
+	{#if !isDockDragging && dockPosition === 'right'}
+		<SelectionPanel
+			album={panelAlbum}
+			bind:open={panelOpen}
+			onToggle={onPanelToggle}
+			onDockDragStart={handleDockDragStart}
+			onDblClick={onPanelDblClick}
+		/>
+	{/if}
 </div>
 
 {#if previewOpen && showArchive && archive.length}
@@ -1073,6 +1237,40 @@
 <Toaster {toaster}></Toaster>
 
 <style>
+	/* --- Selection dock chrome --- */
+	.dock-btn {
+		display: grid;
+		place-items: center;
+		margin-left: 0.25rem;
+		padding: 0.5rem;
+		border-radius: 0.5rem;
+		border: none;
+		background: none;
+		color: var(--color-surface-600);
+		cursor: pointer;
+		transition: background-color 0.15s, color 0.15s;
+	}
+
+	.dock-btn:hover {
+		background: var(--color-surface-200);
+		color: var(--color-surface-800);
+	}
+
+	.dock-btn:focus-visible {
+		outline: 2px solid var(--color-primary-600);
+		outline-offset: 2px;
+	}
+
+	.dock-dropzone {
+		position: relative;
+		z-index: var(--z-dock-dropzone);
+		transition: border-color 0.15s, background-color 0.15s;
+	}
+
+	.drag-ghost-layer {
+		z-index: var(--z-drag-ghost);
+	}
+
 	/* --- Album sidebar (expanded) --- */
 	.album-sidebar {
 		position: relative;

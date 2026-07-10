@@ -27,6 +27,19 @@ html.dark {
 	color-scheme: dark;
 }
 
+/* Semantic z-index scale. Stacking is a design decision, so it gets names rather
+   than magic numbers: anything that floats must say what kind of thing it is. */
+:root {
+	--z-rail: 10; /* album rail, resize handles, sticky rail chrome */
+	--z-dock-panel: 20; /* the docked SelectionPanel / SelectionStrip */
+	--z-dock-dropzone: 30; /* dock drop targets, shown only while dragging */
+	--z-modal-backdrop: 50;
+	--z-modal: 60;
+	--z-drag-ghost: 70; /* the cursor-following "Moving selection panel…" chip */
+	--z-toast: 80;
+	--z-tooltip: 90;
+}
+
 /* ------------------------------------------------------------------ *
  * Default — Brand-green theme for ARCHive Network.
  * A calm, confident product palette: deep La Salle green carries the
