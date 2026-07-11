@@ -1117,6 +1117,7 @@
 <BuildConfirmDialog
 	open={buildConfirm}
 	{albumsToBuild}
+	defaultMax={inventory.max_per_album ?? 10}
 	totalImages={totalSelected}
 	totalVideos={totalSelectedVideos}
 	totalMB={totalSelectedMB}

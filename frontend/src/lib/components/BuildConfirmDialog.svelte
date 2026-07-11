@@ -8,6 +8,7 @@
 		totalImages = 0,
 		totalVideos = 0,
 		totalMB = "0.00",
+		defaultMax = 10,
 		onConfirm,
 		onCancel
 	} = $props();
@@ -106,37 +107,35 @@
 					</button>
 
 					{#if albumsExpanded}
-						<div class="mt-2 flex-1 min-h-0 overflow-hidden rounded-lg border border-surface-200 bg-white flex flex-col shadow-inner animate-in-slide">
-							<!-- Fixed Header (outside scroll) -->
-							<div class="border-b border-surface-200 bg-surface-100 overflow-y-hidden" style="scrollbar-gutter: stable;">
-								<div class="grid grid-cols-[1fr_6rem_6rem_6rem] px-3 py-2 text-[0.65rem] font-bold uppercase tracking-wider text-surface-500">
-									<div class="pr-4">Album Name</div>
-									<div class="text-center border-l border-surface-200">Image Count</div>
-									<div class="text-center border-l border-surface-200">Date</div>
-									<div class="text-center border-l border-surface-200">Size</div>
-								</div>
+						<div class="mt-2 flex-1 min-h-0 max-h-64 overflow-y-auto overscroll-contain rounded-lg border border-surface-200 bg-surface-50 shadow-inner animate-in-slide">
+							<!-- Sticky header shares the scroll context with the rows, so the
+							     columns stay aligned whether or not a scrollbar appears -->
+							<div class="sticky top-0 z-10 grid grid-cols-[1fr_6rem_6rem_6rem] border-b border-surface-200 bg-surface-100 px-3 py-2 text-[0.65rem] font-bold uppercase tracking-wider text-surface-500">
+								<div class="pr-4">Album Name</div>
+								<div class="text-center border-l border-surface-200">Image Count</div>
+								<div class="text-center border-l border-surface-200">Date</div>
+								<div class="text-center border-l border-surface-200">Size</div>
 							</div>
-							<!-- Scrollable Container -->
-							<div class="max-h-64 overflow-y-auto overscroll-contain pb-1" style="scrollbar-gutter: stable;">
-								{#each albumsToBuild as album, i}
-									<div class="grid grid-cols-[1fr_6rem_6rem_6rem] items-center px-3 py-2 text-sm text-surface-700 {i !== albumsToBuild.length - 1 ? 'border-b border-surface-100' : ''} hover:bg-surface-50 transition-colors">
-										<div class="truncate pr-4 font-medium" title={album.name}>{album.name}</div>
-										<div class="text-center border-l border-surface-100 flex items-center justify-center">
-											{#if album.max_per_album != null && album.count_selected >= album.max_per_album}
-												<span class="inline-block rounded bg-warning-900/75 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning-50">MAX</span>
-											{:else}
-												<span class="text-surface-500 text-xs tabular-nums">{album.count_selected}</span>
-											{/if}
-										</div>
-										<div class="text-center border-l border-surface-100 text-surface-500 text-xs">
-											{formatFBDate(album.post_timestamp)}
-										</div>
-										<div class="text-center border-l border-surface-100 text-surface-500 tabular-nums text-xs">
-											{((album.photos.filter(p => p.selected).reduce((sum, p) => sum + (p.file_size_bytes || 0), 0)) / (1024*1024)).toFixed(1)} MB
-										</div>
+							{#each albumsToBuild as album, i}
+								<div class="grid grid-cols-[1fr_6rem_6rem_6rem] items-center px-3 py-2 text-sm text-surface-700 {i !== albumsToBuild.length - 1 ? 'border-b border-surface-100' : ''} hover:bg-surface-100 transition-colors">
+									<div class="truncate pr-4 font-medium" title={album.name}>{album.name}</div>
+									<div class="text-center border-l border-surface-100 flex items-center justify-center">
+										{#if album.max_per_album != null && album.count_selected >= album.max_per_album}
+											<span class="inline-block rounded bg-warning-900/75 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning-50 tabular-nums whitespace-nowrap">
+												MAX{album.count_selected > defaultMax ? ` +${album.count_selected - defaultMax}` : ''}
+											</span>
+										{:else}
+											<span class="text-surface-500 text-xs tabular-nums">{album.count_selected}</span>
+										{/if}
 									</div>
-								{/each}
-							</div>
+									<div class="text-center border-l border-surface-100 text-surface-500 text-xs">
+										{formatFBDate(album.post_timestamp)}
+									</div>
+									<div class="text-center border-l border-surface-100 text-surface-500 tabular-nums text-xs">
+										{((album.photos.filter(p => p.selected).reduce((sum, p) => sum + (p.file_size_bytes || 0), 0)) / (1024*1024)).toFixed(1)} MB
+									</div>
+								</div>
+							{/each}
 						</div>
 					{/if}
 				</div>
