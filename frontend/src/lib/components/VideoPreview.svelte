@@ -1,5 +1,5 @@
 <script>
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import CarouselScrollbar from './CarouselScrollbar.svelte';
 	import { dragScroll } from '$lib/dragScroll.js';
@@ -21,7 +21,7 @@
 	let saving = $state(false);
 	let ready = $state(false); // a frame is decoded → capture is possible
 	
-	let stillVersion = $state(thumbVersionMap[video?.fbid] ?? 0);
+	let stillVersion = $state(untrack(() => thumbVersionMap[video?.fbid] ?? 0));
 	let stillSrc = $derived(`${videoThumbUrl(video?.fbid)}?v=${stillVersion}`);
 	let hasStill = $state(true); // assume a default exists; onerror flips it off
 
@@ -284,7 +284,7 @@
 
 		<div class="flex items-center" style="height: {videoH}px;">
 			{#if hasStill}
-				<figure class="flex flex-col items-center gap-2">
+				<div class="flex flex-col items-center gap-2">
 					<img
 						class="rounded-lg object-contain shadow-xl ring-1 ring-surface-50/20"
 						style="max-height: {videoH * 0.7}px; max-width: {videoW * 0.7}px;"
@@ -292,9 +292,9 @@
 						alt="Chosen thumbnail"
 						onerror={() => (hasStill = false)}
 					/>
-					<figcaption class="text-sm text-surface-300">
+					<div class="text-sm text-surface-300">
 						Chosen thumbnail {#if video.thumb_timestamp != null} at <button type="button" class="text-primary-400 font-medium hover:text-primary-300 hover:underline" onclick={() => seekTo(video.thumb_timestamp)}>{formatDuration(video.thumb_timestamp)}</button>{/if}
-					</figcaption>
+					</div>
 					<button
 						type="button"
 						class="mt-2 flex h-9 items-center gap-1.5 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-300 disabled:opacity-70"
@@ -305,7 +305,7 @@
 							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" /></svg>
 						{saving ? 'Saving…' : ready ? 'Choose Thumbnail' : 'Loading…'}
 					</button>
-				</figure>
+				</div>
 			{:else}
 				<div class="flex flex-col items-center gap-3">
 					<p class="max-w-[10rem] text-center text-xs text-surface-400">

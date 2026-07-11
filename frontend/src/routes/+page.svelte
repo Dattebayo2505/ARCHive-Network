@@ -13,7 +13,7 @@
 	let dragging = $state(false);
 	let pickerOpen = $state(false);
 	let typedPath = $state('');
-	let fileInput;
+	let fileInput = $state();
 	let workspaces = $state([]);
 	let resolving = $state(true); // true while deciding auto-resume vs. show list
 	let viewMode = $state('list'); // 'list' | 'detailed' | 'content'

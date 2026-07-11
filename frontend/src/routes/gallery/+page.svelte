@@ -1,4 +1,5 @@
 <script>
+	import { untrack } from 'svelte';
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
 	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum, increaseLimit, undoIncreaseLimit } from '$lib/api.js';
 	import { prefetchAlbumThumbs, clearPrefetchCache } from '$lib/imageCache.js';
@@ -19,8 +20,14 @@
 	import { dragScrollY } from '$lib/dragScrollY.js';
 
 	let { data } = $props();
-	let inventory = $state(data.inventory || {});
-	let activeId = $state(inventory.albums?.[0]?.fb_album_id ?? null);
+	let inventory = $state(untrack(() => data.inventory || {}));
+	let activeId = $state(untrack(() => inventory.albums?.[0]?.fb_album_id ?? null));
+
+	$effect(() => {
+		if (data.inventory) {
+			inventory = data.inventory;
+		}
+	});
 	let archive = $derived(inventory.archive ?? []);
 	let showArchive = $derived(activeId === '__archive__');
 	let videos = $derived(inventory.videos ?? []);
@@ -134,7 +141,7 @@
 	const toaster = createToaster();
 
 	let gridContainer = $state();
-	let lastActiveId = $state(activeId);
+	let lastActiveId = $state(untrack(() => activeId));
 
 	$effect(() => {
 		if (activeId !== lastActiveId) {
