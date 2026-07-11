@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -7,8 +10,30 @@ from .config import settings
 from .web.registry import WorkspaceRegistry
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # When the browser aborts a video Range stream mid-flight (it already has
+    # the frame it wanted), Windows' Proactor loop raises ConnectionResetError
+    # inside its own connection_lost callback — outside any request handler, so
+    # only the loop's exception handler sees it. Swallow that one error;
+    # forward everything else to the previous/default handler.
+    loop = asyncio.get_running_loop()
+    previous = loop.get_exception_handler()
+
+    def _quiet_reset(loop, context):
+        if isinstance(context.get("exception"), ConnectionResetError):
+            return
+        (previous or loop.default_exception_handler)(context)
+
+    loop.set_exception_handler(_quiet_reset)
+    try:
+        yield
+    finally:
+        loop.set_exception_handler(previous)
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="ARCHive Network")
+    app = FastAPI(title="ARCHive Network", lifespan=_lifespan)
     app.state.session = None
     app.state.registry = WorkspaceRegistry(settings.workspace_dir / "workspaces.json")
     app.add_middleware(

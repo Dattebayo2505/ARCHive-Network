@@ -2,7 +2,16 @@
 	import { thumbUrl } from '$lib/api.js';
 	import { kineticScroll } from '$lib/kineticScroll.js';
 
-	let { album = null, onToggle, onDblClick, onDockDragStart, open = $bindable(false) } = $props();
+	// `thumb` maps an fbid to its thumbnail URL — see SelectionPanel for why the
+	// page overrides it on the Videos surface.
+	let {
+		album = null,
+		onToggle,
+		onDblClick,
+		onDockDragStart,
+		open = $bindable(false),
+		thumb = thumbUrl
+	} = $props();
 
 	// `panelHeight` is never written below MIN_HEIGHT, so dragging the strip shut
 	// can't leave you with a clipped 60px strip on the next open.
@@ -176,7 +185,7 @@
 						>
 							<img
 								class="thumb-img"
-								src={thumbUrl(photo.fbid)}
+								src={thumb(photo.fbid)}
 								alt={photo.caption || photo.fbid}
 								loading="lazy"
 								onload={(e) => measure(photo.fbid, e)}

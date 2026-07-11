@@ -2,7 +2,17 @@
 	import { thumbUrl } from '$lib/api.js';
 	import { kineticScroll } from '$lib/kineticScroll.js';
 
-	let { album = null, onToggle, onDblClick, onDockDragStart, open = $bindable(false) } = $props();
+	// `thumb` maps an fbid to its thumbnail URL. The page passes the active
+	// surface's function — for Videos that's /api/video/{fbid}/thumbnail with a
+	// cache-bust version, since video stills can be re-picked (photo thumbs can't).
+	let {
+		album = null,
+		onToggle,
+		onDblClick,
+		onDockDragStart,
+		open = $bindable(false),
+		thumb = thumbUrl
+	} = $props();
 
 	// Resize range per DESIGN.md § Selection Panel. `panelWidth` is never written
 	// below MIN_WIDTH, so dragging the panel shut can't shrink the panel you get
@@ -197,7 +207,7 @@
 								{#if photo.exists}
 									<img
 										class="thumb-img"
-										src={thumbUrl(photo.fbid)}
+										src={thumb(photo.fbid)}
 										alt={photo.caption || photo.fbid}
 										loading="lazy"
 										onload={(e) => measure(photo.fbid, e)}
