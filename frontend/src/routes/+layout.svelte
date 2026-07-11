@@ -1,8 +1,9 @@
 <script>
 	import '../app.css';
 	import { page } from '$app/state';
-	import { getSession } from '$lib/api.js';
+	import { getSession, markStatsSeen } from '$lib/api.js';
 	import { theme, toggleTheme } from '$lib/theme.svelte.js';
+	import WorkspaceStats from '$lib/components/WorkspaceStats.svelte';
 
 	let isDark = $derived(theme.mode === 'dark');
 
@@ -20,10 +21,17 @@
 	// The header subtitle shows the active workspace's name. Re-fetch the session
 	// whenever the route changes so it stays in sync after opening/switching.
 	let displayName = $state('');
+	let statsOpen = $state(false);
 	$effect(() => {
-		page.url.pathname; // reactive dependency: re-run on navigation
+		const inGallery = page.url.pathname.startsWith('/gallery'); // reactive dep: re-run on navigation
 		getSession().then((s) => {
 			displayName = s?.loaded ? (s.display_name ?? '') : '';
+			// First gallery visit for this workspace: show the stats popup once,
+			// and persist the seen-flag so a reopened (or handed-off) week stays quiet.
+			if (inGallery && s?.loaded && s.stats_seen === false) {
+				statsOpen = true;
+				markStatsSeen();
+			}
 		});
 	});
 </script>
@@ -67,6 +75,25 @@
 					{displayName || 'From profile archives to production-ready assets'}
 				</p>
 			</div>
+
+			{#if onGallery && displayName}
+				<!-- Workspace stats: scoped to the whole export, so it lives with the
+				     workspace name rather than in the per-album gallery toolbar. -->
+				<button
+					type="button"
+					class="grid size-9 shrink-0 place-items-center rounded-lg text-primary-50 transition-colors hover:bg-primary-50/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-50"
+					aria-label="Workspace stats"
+					title="Workspace stats"
+					onclick={() => (statsOpen = true)}
+				>
+					<svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="10" />
+						<path d="M12 16v-4" />
+						<path d="M12 8h.01" />
+					</svg>
+				</button>
+			{/if}
 
 			<div class="ml-auto flex items-center gap-2 sm:gap-3">
 				<!-- Step indicator -->
@@ -141,6 +168,10 @@
 	<main class="mx-auto w-full min-h-0 flex-1 overflow-y-auto px-3 py-2 sm:px-1 sm:py-5">
 		{@render children()}
 	</main>
+
+	{#if statsOpen}
+		<WorkspaceStats {displayName} onClose={() => (statsOpen = false)} />
+	{/if}
 
 	<!-- theme-toggle icon crossfade lives here (scoped); reduced-motion is
 	     honoured by the global rule in app.css that collapses transitions. -->

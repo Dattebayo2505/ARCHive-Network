@@ -137,6 +137,14 @@ def reveal(request: Request, body: RevealRequest):
     return {"ok": True}
 
 
+@router.post("/api/stats/seen")
+def mark_stats_seen(request: Request) -> dict:
+    """Persist that the workspace-stats popup was shown for this workspace."""
+    session = _session(request)
+    (session.state_dir / "stats_seen.json").write_text('{"seen": true}', encoding="utf-8")
+    return {"ok": True}
+
+
 @router.post("/api/toggle")
 def toggle(request: Request, body: ToggleRequest):
     session = _session(request)

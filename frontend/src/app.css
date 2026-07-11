@@ -35,7 +35,7 @@ html.dark {
 	--z-dock-dropzone: 30; /* dock drop targets, shown only while dragging */
 	--z-modal-backdrop: 50;
 	--z-modal: 60;
-	--z-drag-ghost: 70; /* the cursor-following "Moving selection panel…" chip */
+	--z-drag-ghost: 70; /* the cursor-following photo-stack ghost while moving the dock */
 	--z-toast: 80;
 	--z-tooltip: 90;
 }

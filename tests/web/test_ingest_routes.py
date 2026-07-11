@@ -175,6 +175,7 @@ def test_session_status_includes_display_name(export_root, tmp_path, monkeypatch
         "export_name": "export",
         "workspace_id": "export",
         "display_name": "export",
+        "stats_seen": False,
     }
 
 

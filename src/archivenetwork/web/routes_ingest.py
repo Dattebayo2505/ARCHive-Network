@@ -51,6 +51,7 @@ def session_status(request: Request) -> dict:
         "export_name": session.export_root.name,
         "workspace_id": session.workspace_id,
         "display_name": display_name(session.workspace_id),
+        "stats_seen": (session.state_dir / "stats_seen.json").exists(),
     }
 
 

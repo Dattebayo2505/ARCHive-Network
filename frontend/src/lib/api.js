@@ -245,6 +245,16 @@ export async function undoIncreaseLimit(albumFbid, fetchFn = fetch) {
 	return { ok: true, ...(await res.json()) };
 }
 
+/** Persist that the workspace-stats popup was shown for the open workspace. */
+export async function markStatsSeen(fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/stats/seen'), { method: 'POST' });
+		return { ok: res.ok };
+	} catch {
+		return { ok: false };
+	}
+}
+
 /** List every known workspace, newest-opened first, plus the last-active id. */
 export async function listWorkspaces(fetchFn = fetch) {
 	try {

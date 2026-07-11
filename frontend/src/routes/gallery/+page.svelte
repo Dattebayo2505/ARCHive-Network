@@ -54,6 +54,7 @@
 	let dockPosition = $state('right'); // 'right' or 'header'
 	let isDockDragging = $state(false);
 	let ghostPos = $state({ x: 0, y: 0 });
+	let hoverZone = $state(null); // drop zone under the ghost while dragging, or null
 	let panelOpen = $state(false);
 	let dockStatus = $state(''); // announced to screen readers on dock changes
 
@@ -61,6 +62,7 @@
 
 	function handleDockDragStart(e) {
 		isDockDragging = true;
+		hoverZone = null;
 		ghostPos = { x: e.clientX, y: e.clientY };
 		dockStatus = 'Moving the selection panel. Drop it on a highlighted zone.';
 
@@ -79,6 +81,12 @@
 			frame = 0;
 			if (pending) ghostPos = pending;
 			pending = null;
+			// Hit-test with JS rather than :hover — touch drags keep events targeted
+			// at the tab (implicit pointer capture), so :hover would never fire there.
+			const zone = document
+				.elementFromPoint(ghostPos.x, ghostPos.y)
+				?.closest('[data-drop-zone]');
+			hoverZone = zone ? zone.getAttribute('data-drop-zone') : null;
 		}
 
 		function onMove(ev) {
@@ -88,6 +96,7 @@
 
 		function onUp(ev) {
 			isDockDragging = false;
+			hoverZone = null;
 			const dropZone = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-drop-zone]');
 			if (dropZone) dockPosition = dropZone.getAttribute('data-drop-zone');
 			dockStatus = `Selection panel docked to ${DOCK_LABEL[dockPosition]}.`;
@@ -96,6 +105,7 @@
 
 		function onCancel() {
 			isDockDragging = false;
+			hoverZone = null;
 			dockStatus = 'Move cancelled.';
 			cleanup();
 		}
@@ -262,6 +272,22 @@
 				: showArchive
 					? { name: 'Archive', photos: archive }
 					: null
+	);
+
+	// The drag ghost gathers the current surface's picks into a fanned stack under
+	// the cursor. Resting fan pose + scattered start pose + stagger, per card.
+	const GHOST_FAN = [
+		{ fx: -12, fy: 5, fr: -9, sx: -64, sy: -14, sr: -22, d: 0 },
+		{ fx: 12, fy: 5, fr: 8, sx: 64, sy: -14, sr: 22, d: 45 },
+		{ fx: -5, fy: -2, fr: -4, sx: -44, sy: 30, sr: 14, d: 90 },
+		{ fx: 0, fy: 0, fr: 3, sx: 44, sy: 30, sr: -12, d: 135 }
+	];
+	let dockGhostSelected = $derived(panelAlbum ? panelAlbum.photos.filter((p) => p.selected) : []);
+	let ghostCards = $derived(
+		(dockGhostSelected.length
+			? dockGhostSelected.slice(0, GHOST_FAN.length)
+			: [null, null, null]
+		).map((photo, i) => ({ key: photo ? photo.fbid : `placeholder-${i}`, photo, ...GHOST_FAN[i] }))
 	);
 
 	async function onToggle(photo) {
@@ -492,9 +518,10 @@
 		<div
 			data-drop-zone="header"
 			aria-hidden="true"
-			class="dock-dropzone mt-4 rounded-2xl border-2 border-dashed border-surface-400 bg-surface-50/80 px-6 py-4 text-center"
+			class="dock-dropzone mt-4 flex items-center justify-center rounded-2xl border-2 border-dashed border-surface-400 bg-surface-50/80 px-6 py-4"
+			class:dock-dropzone-hover={hoverZone === 'header'}
 		>
-			<p class="font-medium text-surface-600">Dock above the photos</p>
+			<svg viewBox="0 0 24 24" class="size-8 text-surface-500" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 22H4a2 2 0 0 1-2-2V6" /><path d="m22 13-1.296-1.296a2.41 2.41 0 0 0-3.408 0L11 18" /><circle cx="12" cy="8" r="2" /><rect width="16" height="16" x="6" y="2" rx="2" /></svg>
 		</div>
 	{/if}
 
@@ -942,7 +969,12 @@
 				</div>
 				{#if activeAlbum.description}
 					{@const isLongDesc = activeAlbum.description.length > 120 || activeAlbum.description.split('\n').length > 2}
-					<div class="mt-1.5 rounded-md bg-surface-200 px-2.5 py-1.5 text-xs text-surface-600">
+					<!-- When the selection strip is docked open right below, the caption squares
+					     its bottom corners so the two read as one attached block. -->
+					<div
+						class="mt-1.5 rounded-md bg-surface-200 px-2.5 py-1.5 text-xs text-surface-600 transition-[border-radius] duration-200"
+						class:rounded-b-none={!isDockDragging && dockPosition === 'header' && panelOpen}
+					>
 						<p class="whitespace-pre-wrap break-words leading-relaxed" class:line-clamp-2={isLongDesc && !descExpanded}>
 							{activeAlbum.description}
 						</p>
@@ -1000,19 +1032,29 @@
 				data-drop-zone="right"
 				aria-hidden="true"
 				class="dock-dropzone my-2 mr-5 flex w-64 shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-surface-400 bg-surface-50/80"
+				class:dock-dropzone-hover={hoverZone === 'right'}
 			>
-				<p class="rotate-90 text-lg font-medium whitespace-nowrap text-surface-600">
-					Dock to the right rail
-				</p>
+				<svg viewBox="0 0 24 24" class="size-8 text-surface-500" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 22H4a2 2 0 0 1-2-2V6" /><path d="m22 13-1.296-1.296a2.41 2.41 0 0 0-3.408 0L11 18" /><circle cx="12" cy="8" r="2" /><rect width="16" height="16" x="6" y="2" rx="2" /></svg>
 			</div>
 		{/if}
 
 		<div class="drag-ghost-layer pointer-events-none fixed inset-0">
-			<div
-				class="absolute flex items-center gap-3 rounded-xl border border-surface-300 bg-surface-100 p-4 opacity-90 shadow-xl"
-				style="left: {ghostPos.x}px; top: {ghostPos.y}px; transform: translate(-50%, -50%);"
-			>
-				<span class="font-medium text-surface-900">Moving selection panel…</span>
+			<div class="ghost-stack absolute" style="left: {ghostPos.x}px; top: {ghostPos.y}px;">
+				{#each ghostCards as card, i (card.key)}
+					<div
+						class="ghost-card"
+						style="--fan-x: {card.fx}px; --fan-y: {card.fy}px; --fan-r: {card.fr}deg; --scatter-x: {card.sx}px; --scatter-y: {card.sy}px; --scatter-r: {card.sr}deg; --gather-delay: {card.d}ms; z-index: {i};"
+					>
+						{#if card.photo}
+							<img src={thumbUrl(card.photo.fbid)} alt="" draggable="false" />
+						{:else}
+							<svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
+						{/if}
+					</div>
+				{/each}
+				{#if dockGhostSelected.length > 0}
+					<span class="ghost-badge">{dockGhostSelected.length}</span>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -1267,8 +1309,96 @@
 		transition: border-color 0.15s, background-color 0.15s;
 	}
 
+	/* The zone under the dragged ghost lights up green-soft — the same drag-over
+	   vocabulary as the ingest dropzone (primary-500 border, primary-100 fill). */
+	.dock-dropzone-hover {
+		border-color: var(--color-primary-500);
+		background-color: var(--color-primary-100);
+	}
+
+	.dock-dropzone-hover svg {
+		color: var(--color-primary-600);
+	}
+
 	.drag-ghost-layer {
 		z-index: var(--z-drag-ghost);
+	}
+
+	/* The cursor-following ghost: the picks gather into a fanned stack, like photos
+	   being scooped up to carry. Motion conveys state ("you're holding the
+	   selection"), so it runs once at pickup — the stack itself just follows. */
+	.ghost-stack {
+		transform: translate(-50%, -50%);
+	}
+
+	.ghost-card {
+		position: absolute;
+		left: -28px;
+		top: -28px;
+		width: 56px;
+		height: 56px;
+		display: grid;
+		place-items: center;
+		overflow: hidden;
+		border-radius: 0.5rem;
+		border: 2px solid var(--color-surface-50);
+		background: var(--color-surface-200);
+		color: var(--color-surface-500);
+		box-shadow: 0 6px 16px oklch(0.16 0.006 172 / 0.28);
+		transform: translate(var(--fan-x), var(--fan-y)) rotate(var(--fan-r));
+		animation: ghost-gather 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+		animation-delay: var(--gather-delay);
+	}
+
+	.ghost-card img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	@keyframes ghost-gather {
+		from {
+			opacity: 0;
+			transform: translate(var(--scatter-x), var(--scatter-y)) rotate(var(--scatter-r)) scale(1.08);
+		}
+		to {
+			opacity: 1;
+			transform: translate(var(--fan-x), var(--fan-y)) rotate(var(--fan-r));
+		}
+	}
+
+	.ghost-badge {
+		position: absolute;
+		left: 22px;
+		top: -38px;
+		z-index: 10;
+		background: var(--color-primary-600);
+		color: var(--color-primary-contrast-light);
+		font-size: 0.6875rem;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		padding: 2px 7px;
+		border-radius: 999px;
+		box-shadow: 0 2px 4px oklch(0.16 0.006 172 / 0.2);
+		animation: ghost-badge-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1) 0.18s both;
+	}
+
+	@keyframes ghost-badge-pop {
+		from {
+			opacity: 0;
+			transform: scale(0.5);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.ghost-card,
+		.ghost-badge {
+			animation: none;
+		}
 	}
 
 	/* --- Album sidebar (expanded) --- */
