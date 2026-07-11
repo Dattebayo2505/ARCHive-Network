@@ -1,5 +1,5 @@
 <script>
-	let { photo, src = '', selectable = true, selectionEnabled = false, full = false, video = false, onToggle } = $props();
+	let { photo, src = '', srcset = undefined, sizes = undefined, selectable = true, selectionEnabled = false, full = false, video = false, onToggle } = $props();
 
 	// A tile the user can't act on right now: the album is full and this one
 	// isn't already selected. Selected tiles stay clickable so they can be removed.
@@ -32,6 +32,8 @@
 				loading="lazy"
 				onerror={() => (imgError = true)}
 				{src}
+				{srcset}
+				{sizes}
 				alt={photo.caption || photo.fbid}
 			/>
 		{:else}

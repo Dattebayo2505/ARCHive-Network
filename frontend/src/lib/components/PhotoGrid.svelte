@@ -10,6 +10,18 @@
 	let isFull = $derived(album?.max_per_album != null ? album.count_selected >= album.max_per_album : full);
 	let cols = $derived(Math.round(sizeCols(size)));
 
+	// Responsive tile source: the 512px thumb plus the already-cached 1280px
+	// preview, with a sizes hint from the column count so the browser only pays
+	// for the big render when tiles actually draw large (L/XL). The hint ignores
+	// the side rails — overestimating errs toward sharpness. Descriptors mirror
+	// the backend defaults (thumb_size 512 / preview_size 1280).
+	let sizesHint = $derived(`${Math.round(100 / cols)}vw`);
+
+	function tileSrcset(photo) {
+		if (!preview || !photo.exists) return undefined;
+		return `${thumb(photo.fbid)} 512w, ${preview(photo.fbid)} 1280w`;
+	}
+
 	// Hold-to-peek: a transient blown-up look at a photo while the mouse is held.
 	// Purely visual — never mutates selection — so it's enabled on blocked and
 	// read-only (archive) tiles too. Videos have their own preview flow.
@@ -68,7 +80,7 @@
 				onDblClick?.(photo, e);
 			}}
 		>
-			<PhotoTile {photo} src={photo.exists ? thumb(photo.fbid) : ''} {selectable} {selectionEnabled} full={isFull} {video} {onToggle} />
+			<PhotoTile {photo} src={photo.exists ? thumb(photo.fbid) : ''} srcset={tileSrcset(photo)} sizes={tileSrcset(photo) && sizesHint} {selectable} {selectionEnabled} full={isFull} {video} {onToggle} />
 		</div>
 	{/each}
 </div>
@@ -84,7 +96,7 @@
 		data-testid="peek-overlay"
 	>
 		<img
-			class="max-h-[55vh] max-w-[55vw] rounded-lg object-contain shadow-2xl"
+			class="max-h-[65vh] max-w-[65vw] rounded-lg object-contain shadow-2xl"
 			in:scale={{ duration: peekDuration(180), start: 0.92, opacity: 0.4, easing: quartOut }}
 			src={peek.src}
 			alt={peek.photo.caption || peek.photo.fbid}
