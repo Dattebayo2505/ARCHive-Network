@@ -68,7 +68,14 @@ def thumb(request: Request, fbid: str):
     photo = session.inventory.photo_by_fbid(fbid)
     if photo is None or not photo.exists:
         raise HTTPException(status_code=404, detail="No such photo")
-    path = session.thumbnails.thumbnail_path(fbid, photo.resolved_path)
+        
+    if photo.is_video:
+        path = session.video_thumbs.path(fbid)
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="No thumbnail for video")
+    else:
+        path = session.thumbnails.thumbnail_path(fbid, photo.resolved_path)
+        
     resp = FileResponse(path, media_type="image/jpeg")
     resp.headers["Cache-Control"] = "private, max-age=3600, immutable"
     return resp
@@ -86,8 +93,15 @@ def preview(request: Request, fbid: str):
     photo = session.inventory.photo_by_fbid(fbid)
     if photo is None or not photo.exists:
         raise HTTPException(status_code=404, detail="No such photo")
-    previews = ThumbnailService(session.thumbnails.cache_dir, size=settings.preview_size)
-    path = previews.thumbnail_path(fbid, photo.resolved_path)
+        
+    if photo.is_video:
+        path = session.video_thumbs.path(fbid)
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="No preview for video")
+    else:
+        previews = ThumbnailService(session.thumbnails.cache_dir, size=settings.preview_size)
+        path = previews.thumbnail_path(fbid, photo.resolved_path)
+        
     resp = FileResponse(path, media_type="image/jpeg")
     resp.headers["Cache-Control"] = "private, max-age=3600, immutable"
     return resp
