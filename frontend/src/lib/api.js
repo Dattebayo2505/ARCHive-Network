@@ -266,6 +266,17 @@ export async function listWorkspaces(fetchFn = fetch) {
 	}
 }
 
+/** Get brief stats for a specific workspace without opening it. */
+export async function getWorkspaceStats(id, fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url(`/api/workspaces/${encodeURIComponent(id)}/stats`));
+		if (!res.ok) return null;
+		return res.json();
+	} catch {
+		return null;
+	}
+}
+
 /** Open a workspace by id, rebuilding its session (restores its saved state). */
 export async function openWorkspace(id, fetchFn = fetch) {
 	try {

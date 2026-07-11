@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { ingestFolder, ingestUpload, ingestZip, listWorkspaces, openWorkspace, removeWorkspace } from '$lib/api.js';
+	import { formatSize } from '$lib/stats.js';
 	import FolderPicker from '$lib/components/FolderPicker.svelte';
 	import WorkspaceList from '$lib/components/WorkspaceList.svelte';
 
@@ -15,6 +16,13 @@
 	let fileInput;
 	let workspaces = $state([]);
 	let resolving = $state(true); // true while deciding auto-resume vs. show list
+	let viewMode = $state('list'); // 'list' | 'detailed' | 'content'
+	let workspaceStatsMap = $state({});
+	let totalMediaBytes = $derived(workspaces.reduce((sum, ws) => sum + (workspaceStatsMap[ws.id]?.mediaBytes || 0), 0));
+
+	function handleStatLoad(wsId, stats) {
+		workspaceStatsMap[wsId] = stats;
+	}
 
 	async function handle(promise, label) {
 		busy = true;
@@ -107,8 +115,29 @@
 	{:else}
 		{#if workspaces.length}
 			<div class="mb-8">
-				<h2 class="mb-3 text-lg font-semibold tracking-tight text-surface-900">Your workspaces</h2>
-				<WorkspaceList {workspaces} onOpen={openWs} onRemove={removeWs} />
+				<div class="mb-3 flex items-center justify-between">
+					<h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-surface-900">
+						Your workspaces
+						{#if totalMediaBytes > 0}
+							<span class="text-surface-300 font-normal">|</span>
+							<span class="text-base font-medium text-surface-500 tracking-normal tabular-nums">
+								{formatSize(totalMediaBytes)}
+							</span>
+						{/if}
+					</h2>
+					<div class="flex items-center gap-1 rounded-lg border border-surface-200 bg-surface-50 p-0.5 shadow-sm">
+						<button class="rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 {viewMode === 'detailed' ? 'bg-surface-200 text-surface-900 shadow-sm' : 'text-surface-500 hover:text-surface-700 hover:bg-surface-100'}" title="Detailed list" onclick={() => viewMode = 'detailed'}>
+							<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 6v12M16 6v12" stroke-opacity="0.3" stroke-dasharray="2 2"/></svg>
+						</button>
+						<button class="rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 {viewMode === 'list' ? 'bg-surface-200 text-surface-900 shadow-sm' : 'text-surface-500 hover:text-surface-700 hover:bg-surface-100'}" title="Cards view" onclick={() => viewMode = 'list'}>
+							<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+						</button>
+						<button class="rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 {viewMode === 'content' ? 'bg-surface-200 text-surface-900 shadow-sm' : 'text-surface-500 hover:text-surface-700 hover:bg-surface-100'}" title="Compact list" onclick={() => viewMode = 'content'}>
+							<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+						</button>
+					</div>
+				</div>
+				<WorkspaceList {workspaces} onOpen={openWs} onRemove={removeWs} onStatLoad={handleStatLoad} {viewMode} />
 			</div>
 			<div class="my-6 flex items-center gap-3 text-xs font-medium tracking-wide text-surface-600">
 				<span class="h-px flex-1 bg-surface-300"></span>
@@ -151,9 +180,9 @@
 	<!-- Primary: drag-and-drop .zip -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="relative rounded-2xl border-2 border-dashed bg-surface-50 px-6 py-10 text-center transition-colors {dragging
-			? 'border-primary-500 bg-primary-50 dark:bg-primary-100'
-			: 'border-surface-300'}"
+		class="group relative rounded-2xl border-2 border-dashed bg-surface-50 px-6 py-10 text-center transition-all duration-300 {dragging
+			? 'border-primary-500 bg-primary-50 dark:bg-primary-100 shadow-inner'
+			: 'border-surface-300 hover:border-primary-400 hover:bg-surface-100'}"
 		ondragover={(e) => {
 			e.preventDefault();
 			dragging = true;
@@ -200,10 +229,10 @@
 			</div>
 		{:else}
 			<span
-				class="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-primary-100 text-primary-700"
+				class="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-primary-100 text-primary-700 transition-all duration-300 {dragging ? 'scale-110 shadow-lg ring-4 ring-primary-500/20' : 'group-hover:-translate-y-1 group-hover:bg-primary-200 group-hover:shadow-md'}"
 				aria-hidden="true"
 			>
-				<svg viewBox="0 0 24 24" class="size-7" fill="none" stroke="currentColor" stroke-width="1.75"
+				<svg viewBox="0 0 24 24" class="size-7 transition-transform duration-300 {dragging ? 'animate-bounce' : 'group-hover:scale-105'}" fill="none" stroke="currentColor" stroke-width="1.75"
 					stroke-linecap="round" stroke-linejoin="round">
 					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
 					<path d="M12 3v13M7 8l5-5 5 5" />

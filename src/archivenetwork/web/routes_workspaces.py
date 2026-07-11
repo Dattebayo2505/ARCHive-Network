@@ -39,6 +39,62 @@ def list_workspaces(request: Request) -> dict:
         "last_active": registry.last_active,
     }
 
+import json
+
+@router.get("/api/workspaces/{id}/stats")
+def workspace_stats(id: str, request: Request) -> dict:
+    registry = request.app.state.registry
+    entry = registry.get(id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="No such workspace")
+        
+    export_root = Path(entry.export_root)
+    if not export_root.exists():
+        return {"albumCount": 0, "mediaBytes": 0, "dateStart": None, "dateEnd": None}
+        
+    state_dir = settings.workspace_dir / "state" / id
+    state_dir.mkdir(parents=True, exist_ok=True)
+    stats_file = state_dir / "stats_cache.json"
+    
+    if stats_file.exists():
+        try:
+            import json
+            with open(stats_file, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+            
+    from archivenetwork.inventory.parser import build_inventory
+    try:
+        inv = build_inventory(export_root)
+    except Exception:
+        return {"albumCount": 0, "mediaBytes": 0, "dateStart": None, "dateEnd": None}
+    
+    total_albums = len(inv.albums) + len(inv.archived_albums)
+    size = sum(p.file_size_bytes for p in inv.all_photos())
+    
+    timestamps = []
+    for p in inv.all_photos():
+        ts = p.taken_timestamp or p.post_timestamp or p.creation_at
+        if ts:
+            timestamps.append(ts.timestamp())
+            
+    stats = {
+        "albumCount": total_albums,
+        "mediaBytes": size,
+        "dateStart": min(timestamps) if timestamps else None,
+        "dateEnd": max(timestamps) if timestamps else None,
+    }
+    
+    try:
+        import json
+        with open(stats_file, "w", encoding="utf-8") as f:
+            json.dump(stats, f)
+    except Exception:
+        pass
+        
+    return stats
+
 
 @router.post("/api/workspaces/open")
 def open_workspace(request: Request, body: OpenRequest) -> dict:
