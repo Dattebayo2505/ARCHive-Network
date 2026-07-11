@@ -827,6 +827,7 @@
 						<PhotoGrid
 							album={{ name: 'Archive', photos: archive }}
 							thumb={thumbUrl}
+							preview={previewUrl}
 							size={gridSize}
 							selectable={false}
 							selectionEnabled={false}
@@ -1006,6 +1007,7 @@
 					<PhotoGrid
 						album={activeAlbum}
 						thumb={thumbUrl}
+						preview={previewUrl}
 						size={gridSize}
 						{onToggle}
 						onContextMenu={openPhotoMenu}
