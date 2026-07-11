@@ -808,6 +808,7 @@
 						</p>
 					</div>
 					<div class="flex items-center gap-1">
+						<ViewControls size={gridSize} onSize={setSize} />
 						{@render dockControls()}
 					</div>
 				</div>
@@ -862,6 +863,7 @@
 						</div>
 					</div>
 					<div class="flex items-center gap-1">
+						<ViewControls size={gridSize} onSize={setSize} />
 						{@render dockControls()}
 					</div>
 				</div>

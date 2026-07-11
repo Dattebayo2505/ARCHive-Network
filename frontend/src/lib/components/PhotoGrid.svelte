@@ -1,6 +1,6 @@
 <script>
 	import PhotoTile from './PhotoTile.svelte';
-	import { sizeMin } from '$lib/viewSizes.js';
+	import { sizeCols } from '$lib/viewSizes.js';
 	import { holdPeek } from '$lib/holdPeek.js';
 	import { fade, scale } from 'svelte/transition';
 	import { quartOut } from 'svelte/easing';
@@ -8,7 +8,7 @@
 	let { album, thumb, preview, size = 'm', selectable = true, selectionEnabled = false, video = false, full = false, onToggle, onContextMenu, onDblClick } = $props();
 
 	let isFull = $derived(album?.max_per_album != null ? album.count_selected >= album.max_per_album : full);
-	let min = $derived(sizeMin(size));
+	let cols = $derived(Math.round(sizeCols(size)));
 
 	// Hold-to-peek: a transient blown-up look at a photo while the mouse is held.
 	// Purely visual — never mutates selection — so it's enabled on blocked and
@@ -47,7 +47,7 @@
 
 <!-- Standard CSS Grid: Left-to-right flow. Images will fit into grid cells
      and object-cover will handle any aspect ratio outliers, catering to the 3:2 majority. -->
-<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax({min}, 1fr)); gap: 0.75rem;">
+<div style="display: grid; grid-template-columns: repeat({cols}, 1fr); gap: 0.75rem;">
 	{#each album.photos as photo (photo.fbid)}
 		<!-- contextmenu lives on the wrapper, not the tile button, so right-click
 		     still works on blocked (disabled) and missing tiles. -->

@@ -1,12 +1,13 @@
 // frontend/src/lib/viewSizes.test.js
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SIZE, VIEW_SIZES, sizeMin } from './viewSizes.js';
+import { DEFAULT_SIZE, VIEW_SIZES, sizeCols } from './viewSizes.js';
 
 describe('VIEW_SIZES', () => {
 	it('offers the five density steps in ascending order', () => {
 		expect(VIEW_SIZES.map((s) => s.id)).toEqual(['xs', 's', 'm', 'l', 'xl']);
-		const rems = VIEW_SIZES.map((s) => parseFloat(s.min));
-		expect(rems).toEqual([...rems].sort((a, b) => a - b));
+		const cols = VIEW_SIZES.map((s) => s.cols);
+		// Note cols descend from xs(10) to xl(2)
+		expect(cols).toEqual([...cols].sort((a, b) => b - a));
 	});
 
 	it('defaults to the medium step', () => {
@@ -15,12 +16,12 @@ describe('VIEW_SIZES', () => {
 	});
 });
 
-describe('sizeMin', () => {
-	it('returns the track floor for a known id', () => {
-		expect(sizeMin('xl')).toBe('18rem');
+describe('sizeCols', () => {
+	it('returns the columns for a known id', () => {
+		expect(sizeCols('xl')).toBe(2);
 	});
 
-	it('falls back to the medium floor for an unknown id', () => {
-		expect(sizeMin('bogus')).toBe('11rem');
+	it('falls back to the medium cols for an unknown id', () => {
+		expect(sizeCols('bogus')).toBe(6);
 	});
 });
