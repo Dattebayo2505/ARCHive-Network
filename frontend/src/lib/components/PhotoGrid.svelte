@@ -84,7 +84,7 @@
 		data-testid="peek-overlay"
 	>
 		<img
-			class="max-h-[67vh] max-w-[67vw] rounded-lg object-contain shadow-2xl"
+			class="max-h-[55vh] max-w-[55vw] rounded-lg object-contain shadow-2xl"
 			in:scale={{ duration: peekDuration(180), start: 0.92, opacity: 0.4, easing: quartOut }}
 			src={peek.src}
 			alt={peek.photo.caption || peek.photo.fbid}
