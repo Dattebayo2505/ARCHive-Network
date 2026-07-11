@@ -1,5 +1,6 @@
 <script>
 	import { thumbUrl } from '$lib/api.js';
+	import { kineticScroll } from '$lib/kineticScroll.js';
 
 	let { album = null, onToggle, onDblClick, onDockDragStart, open = $bindable(false) } = $props();
 
@@ -9,7 +10,7 @@
 	const MIN_WIDTH = 200;
 	const MAX_WIDTH = 600;
 	const CLOSE_AT = 100; // release narrower than this and the panel closes
-	const HOLD_MS = 800; // press-and-hold on the tab detaches the dock
+	const HOLD_MS = 400; // press-and-hold on the tab detaches the dock
 	const DBLCLICK_MS = 200; // wait this long before a click counts as "remove"
 
 	let panelWidth = $state(280);
@@ -173,7 +174,7 @@
 				</button>
 			</div>
 
-			<div class="panel-body">
+			<div class="panel-body" use:kineticScroll>
 				{#if selected.length === 0}
 					<div class="panel-empty">
 						<svg viewBox="0 0 24 24" class="size-8 text-surface-400" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg>
@@ -233,7 +234,7 @@
 
 	.panel-absolute-container {
 		position: absolute;
-		left: 0;
+		left: -5px;
 		top: 0;
 		bottom: 0;
 		display: flex;
@@ -247,7 +248,7 @@
 		position: absolute;
 		left: 0;
 		top: 50%;
-		transform: translate(-14px, -50%);
+		transform: translate(-20px, -50%);
 		width: 32px;
 		height: 120px;
 		background: var(--color-surface-50);
@@ -266,7 +267,7 @@
 	}
 
 	.peek-tab:hover {
-		transform: translate(-22px, -50%);
+		transform: translate(-25px, -50%);
 	}
 
 	.peek-tab:focus-visible {

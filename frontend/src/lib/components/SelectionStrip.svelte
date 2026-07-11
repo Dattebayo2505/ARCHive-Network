@@ -1,5 +1,6 @@
 <script>
 	import { thumbUrl } from '$lib/api.js';
+	import { kineticScroll } from '$lib/kineticScroll.js';
 
 	let { album = null, onToggle, onDblClick, onDockDragStart, open = $bindable(false) } = $props();
 
@@ -8,7 +9,7 @@
 	const MIN_HEIGHT = 120;
 	const MAX_HEIGHT = 300; // above this the strip starts swallowing the photo grid
 	const CLOSE_AT = 60; // release shorter than this and the strip closes
-	const HOLD_MS = 800; // press-and-hold on the tab detaches the dock
+	const HOLD_MS = 400; // press-and-hold on the tab detaches the dock
 	const DBLCLICK_MS = 200;
 
 	let panelHeight = $state(130);
@@ -156,7 +157,7 @@
 			</button>
 		</div>
 
-		<div class="strip-body">
+		<div class="strip-body" use:kineticScroll={{ axis: 'x' }}>
 			{#if selected.length === 0}
 				<div class="strip-empty">
 					<p class="text-sm text-surface-600">No photos selected</p>
@@ -293,9 +294,12 @@
 		outline-offset: 2px;
 	}
 
+	/* One left-to-right row: the strip scrolls horizontally (drag, throw, or a
+	   plain vertical wheel via kineticScroll) instead of wrapping into rows. */
 	.strip-body {
 		flex: 1;
-		overflow-y: auto;
+		overflow-x: auto;
+		overflow-y: hidden;
 		overscroll-behavior: contain;
 		padding: 0.5rem;
 		scrollbar-width: none;
@@ -314,8 +318,9 @@
 
 	.thumb-grid {
 		display: flex;
-		flex-wrap: wrap;
+		flex-wrap: nowrap;
 		gap: 0.5rem;
+		width: max-content; /* let the row outgrow the strip so it can scroll */
 	}
 
 	.thumb-item {
