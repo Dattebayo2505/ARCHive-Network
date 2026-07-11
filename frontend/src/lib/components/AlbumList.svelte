@@ -169,7 +169,9 @@
 				class:text-surface-600={a.count_selected === 0}
 				title={capped
 					? full
-						? 'Album is full'
+						? bypassedFull
+							? 'Album is full'
+							: `Complete — at the ${a.max_per_album}-photo cap`
 						: `${a.count_selected} of ${a.max_per_album} selected`
 					: `${a.count_selected} selected · no limit`}
 			>
@@ -178,7 +180,7 @@
 						<svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="11" width="14" height="11" rx="2" /><path d="M4 11V7a4 4 0 0 1 8 0v4" /><rect x="9" y="11" width="14" height="11" rx="2" /><path d="M12 11V7a4 4 0 0 1 8 0v4" /></svg>
 					{:else}
 						<svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2.5"
-							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
 					{/if}
 				{/if}
 				{#if capped}{a.count_selected}/{a.max_per_album}{:else}{a.count_selected}{/if}

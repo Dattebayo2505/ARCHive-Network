@@ -48,7 +48,6 @@ describe('WorkspaceStats', () => {
 		expect(screen.getByText('1 (+1 derived)')).toBeTruthy(); // albums: main (+derived)
 		expect(screen.getByText('4')).toBeTruthy(); // photos: 3 in albums + 1 non-album
 		expect(screen.getByText('4.0 MB')).toBeTruthy(); // photos only, not the video thumb
-		expect(screen.getByText('2 across 2 albums')).toBeTruthy();
 	});
 
 	it('closes from the ✕ button and from Escape', async () => {

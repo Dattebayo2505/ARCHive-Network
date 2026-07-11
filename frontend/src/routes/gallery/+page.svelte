@@ -261,6 +261,9 @@
 	);
 	let albumsToBuild = $derived((inventory.albums ?? []).filter((a) => a.count_selected > 0));
 	let totalSelectedVideos = $derived((inventory.videos ?? []).filter((v) => v.selected).length);
+	let albumsTotal = $derived((inventory.albums ?? []).length);
+	let albumsNoPicks = $derived(albumsTotal - albumsToBuild.length);
+	let albumsPickedPct = $derived(albumsTotal ? (albumsToBuild.length / albumsTotal) * 100 : 0);
 
 	// The surface the selection dock mirrors, whichever category is showing. Without
 	// this the dock vanishes on Videos/Archive and can't be recovered.
@@ -590,6 +593,16 @@
 				</button>
 			</div>
 
+			<!-- Workspace progress: the sidebar's answer to "what's left?" -->
+			<div class="album-progress" role="status">
+				<div class="album-progress-track" aria-hidden="true">
+					<div class="album-progress-fill" style="width: {albumsPickedPct}%"></div>
+				</div>
+				<span class="album-progress-label tabular-nums">
+					{albumsToBuild.length} of {albumsTotal} albums have picks
+				</span>
+			</div>
+
 			<div
 				use:dragScrollY
 				bind:this={expandedScrollEl}
@@ -640,8 +653,15 @@
 				onpointerdown={startAlbumResize}
 			></div>
 
-			<div class="mt-3 flex flex-col px-1 text-center text-xs font-medium text-surface-600">
-				{totalSelected} images | {videos.filter(v => v.selected).length} videos | ~{totalSelectedMB}MB
+			<div class="mt-3 flex flex-col gap-0.5 px-1 text-center text-xs text-surface-600">
+				<span class="font-medium tabular-nums">
+					{totalSelected} photos · {totalSelectedVideos} videos · ~{totalSelectedMB}MB will be copied
+				</span>
+				{#if albumsNoPicks > 0}
+					<span class="tabular-nums">
+						{albumsNoPicks} {albumsNoPicks === 1 ? 'album has' : 'albums have'} no picks yet
+					</span>
+				{/if}
 			</div>
 			<button
 				class="mt-2 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-700 px-4 py-3 font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-progress disabled:opacity-70"
@@ -690,37 +710,30 @@
 
 			<div class="rail-divider" style="height: 1px; background: var(--color-surface-300, #d4d4d4);"></div>
 
-			<!-- Regular albums with group dividers -->
-			{#each inventory.albums as a, i (a.fb_album_id)}
-				{@const group = a.origin || 'Main Albums'}
-				{@const prevGroup = i > 0 ? (inventory.albums[i - 1].origin || 'Main Albums') : null}
-				{#if i > 0 && group !== prevGroup}
-					<div class="rail-divider"></div>
-				{:else if i > 0}
-					<div class="rail-dot"></div>
-				{/if}
-				{@const cleanName = a.name.replace(/^[^a-zA-Z0-9]+/, '').trim() || 'A'}
-				{@const chars = Array.from(cleanName)}
-				{@const shortChars = chars.slice(0, 3)}
-				<button
-					type="button"
-					class="rail-album-btn"
-					class:bg-primary-100={a.fb_album_id === activeId}
-					class:text-primary-900={a.fb_album_id === activeId}
-					class:font-semibold={a.fb_album_id === activeId}
-					class:text-surface-700={a.fb_album_id !== activeId}
-					class:hover:bg-surface-200={a.fb_album_id !== activeId}
-					onclick={() => { activeId = a.fb_album_id; editingAlbumId = null; }}
-					ondblclick={() => (albumOpen = true)}
-					oncontextmenu={(e) => { e.preventDefault(); openAlbumMenu(a, e); }}
-					title={a.name}
-				>
-					<span>{shortChars[0]}</span>
-					{#if shortChars.length > 1}
-						<span class="opacity-50">{shortChars.slice(1).join('')}</span>
-					{/if}
-				</button>
-			{/each}
+			<!-- Workspace progress token: albums with picks / total. Clicking expands the list. -->
+			<button
+				type="button"
+				class="rail-progress-btn"
+				onclick={() => (albumOpen = true)}
+				title="{albumsToBuild.length} of {albumsTotal} albums have picks — show albums"
+				aria-label="{albumsToBuild.length} of {albumsTotal} albums have picks. Expand album sidebar."
+			>
+				<svg viewBox="0 0 28 28" class="size-6" aria-hidden="true">
+					<circle cx="14" cy="14" r="11" fill="none" class="rail-progress-track" stroke-width="3.5" />
+					<circle
+						cx="14" cy="14" r="11" fill="none"
+						class="rail-progress-arc"
+						stroke-width="3.5"
+						stroke-linecap="round"
+						stroke-dasharray={2 * Math.PI * 11}
+						stroke-dashoffset={2 * Math.PI * 11 * (1 - albumsPickedPct / 100)}
+						transform="rotate(-90 14 14)"
+					/>
+				</svg>
+				<span class="rail-progress-count tabular-nums">
+					{albumsToBuild.length}<span class="rail-progress-total">/{albumsTotal}</span>
+				</span>
+			</button>
 
 			{#if videos.length > 0}
 				<div class="rail-divider"></div>
@@ -758,37 +771,27 @@
 				</button>
 			{/if}
 
-			{#if inventory.archived_albums && inventory.archived_albums.length > 0}
-				<div class="rail-divider"></div>
-				{#each inventory.archived_albums as a, i (a.fb_album_id)}
-					{@const cleanName = a.name.replace(/^[^a-zA-Z0-9]+/, '').trim() || 'A'}
-					{@const chars = Array.from(cleanName)}
-					{@const shortChars = chars.slice(0, 3)}
-					{#if i > 0}
-						<div class="rail-dot"></div>
+			<!-- The primary action stays reachable while collapsed. -->
+			<div class="rail-build-wrapper">
+				<button
+					type="button"
+					class="rail-build-btn"
+					onclick={() => (buildConfirm = true)}
+					disabled={building}
+					title={building ? 'Building…' : 'Build ready folder'}
+					aria-label={building ? 'Building ready folder' : 'Build ready folder'}
+				>
+					{#if building}
+						<span
+							class="size-3.5 animate-spin rounded-full border-2 border-primary-200 border-t-primary-50"
+							aria-hidden="true"
+						></span>
+					{:else}
+						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.75"
+							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4" /></svg>
 					{/if}
-					<button
-						type="button"
-						class="rail-album-btn rail-archived transition-opacity duration-150"
-						class:opacity-100={a.fb_album_id === activeId}
-						class:opacity-70={a.fb_album_id !== activeId}
-						class:bg-primary-100={a.fb_album_id === activeId}
-						class:text-primary-900={a.fb_album_id === activeId}
-						class:font-semibold={a.fb_album_id === activeId}
-						class:text-surface-700={a.fb_album_id !== activeId}
-						class:hover:bg-surface-200={a.fb_album_id !== activeId}
-						onclick={() => { activeId = a.fb_album_id; editingAlbumId = null; }}
-						ondblclick={() => (albumOpen = true)}
-						oncontextmenu={(e) => { e.preventDefault(); openAlbumMenu(a, e); }}
-						title={a.name}
-					>
-						<span>{shortChars[0]}</span>
-						{#if shortChars.length > 1}
-							<span class="opacity-50">{shortChars.slice(1).join('')}</span>
-						{/if}
-					</button>
-				{/each}
-			{/if}
+				</button>
+			</div>
 		</aside>
 	{/if}
 
@@ -862,7 +865,7 @@
 					</div>
 				</div>
 				<p class="mt-2 text-sm text-surface-600">
-					Videos aren’t imported — a still frame replaces each one. Click a video to play it and
+					Videos are kept as thumbnails. Click a video to play it and
 					choose the frame, or right-click for “Choose Thumbnail”. They are not auto-kept.
 					<br>
 					<span class="inline-block rounded bg-warning-900/75 px-1.5 py-0.5 text-[0.6rem] font-semibold text-warning-50">AUTO</span>
@@ -1454,6 +1457,39 @@
 		color: var(--color-surface-700, #404040);
 	}
 
+	.album-progress {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		padding: 0 0.25rem 0.625rem;
+		flex-shrink: 0;
+	}
+
+	.album-progress-track {
+		height: 4px;
+		border-radius: 9999px;
+		background: var(--color-surface-300);
+		overflow: hidden;
+	}
+
+	.album-progress-fill {
+		height: 100%;
+		border-radius: 9999px;
+		background: var(--color-primary-600);
+		transition: width 300ms cubic-bezier(0.25, 1, 0.5, 1);
+	}
+
+	.album-progress-label {
+		font-size: 0.75rem;
+		color: var(--color-surface-600);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.album-progress-fill {
+			transition: none;
+		}
+	}
+
 	/* --- Album sidebar (collapsed icon rail) --- */
 	.album-sidebar-collapsed {
 		position: relative;
@@ -1514,39 +1550,99 @@
 
 	.rail-divider {
 		width: 100%;
-		height: 3px;
+		height: 0.5px;
 		background: var(--color-surface-400, #a3a3a3);
 		flex-shrink: 0;
 		margin: 0.125rem 0;
 	}
 
-	.rail-dot {
-		width: 12px;
-		height: 1px;
-		background: var(--color-surface-300, #d4d4d4);
-		flex-shrink: 0;
-	}
-
-	.rail-album-btn {
-		width: 28px;
-		height: 28px;
+	.rail-progress-btn {
 		display: flex;
-		justify-content: center;
+		flex-direction: column;
 		align-items: center;
+		gap: 0.25rem;
+		width: 28px;
+		padding: 0.375rem 0;
+		margin: 0.125rem 0;
 		border-radius: 0.375rem;
-		font-size: 0.6875rem;
-		letter-spacing: -0.01em;
-		transition: all 0.15s;
-		cursor: pointer;
 		border: none;
 		background: transparent;
-		padding: 0;
-		line-height: 1;
+		cursor: pointer;
 		flex-shrink: 0;
+		transition: background-color 0.15s;
 	}
 
-	.rail-archived {
+	.rail-progress-btn:hover {
+		background: var(--color-surface-200);
+	}
+
+	.rail-progress-track {
+		stroke: var(--color-surface-300);
+	}
+
+	.rail-progress-arc {
+		stroke: var(--color-primary-600);
+		transition: stroke-dashoffset 300ms cubic-bezier(0.25, 1, 0.5, 1);
+	}
+
+	.rail-progress-count {
 		font-size: 0.625rem;
+		font-weight: 600;
+		line-height: 1;
+		color: var(--color-surface-700);
+	}
+
+	.rail-progress-total {
+		font-weight: 400;
+		color: var(--color-surface-600);
+	}
+
+	.rail-build-wrapper {
+		position: sticky;
+		bottom: 0;
+		z-index: 10;
+		margin-top: auto;
+		width: 100%;
+		display: flex;
+		justify-content: center;
+		padding-top: 0.375rem;
+		background: var(--color-surface-50);
+	}
+
+	.rail-build-btn {
+		display: grid;
+		place-items: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 0.5rem;
+		border: none;
+		background: var(--color-primary-700);
+		color: var(--color-primary-50);
+		box-shadow: 0 1px 2px oklch(0.23 0.007 171 / 0.06);
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: background-color 0.15s;
+	}
+
+	.rail-build-btn:hover:not(:disabled) {
+		background: var(--color-primary-800);
+	}
+
+	.rail-build-btn:disabled {
+		opacity: 0.7;
+		cursor: progress;
+	}
+
+	.rail-build-btn:focus-visible,
+	.rail-progress-btn:focus-visible {
+		outline: 2px solid var(--color-primary-600);
+		outline-offset: 2px;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.rail-progress-arc {
+			transition: none;
+		}
 	}
 
 	.rail-icon-btn {
