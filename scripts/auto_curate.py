@@ -1,6 +1,10 @@
-"""Headless curation: randomly pick <=N photos per named album, keep all non-album
-photos, and build the filtered ready folder. Mirrors the web UI's selection + build,
-but non-interactive.
+"""Headless curation: randomly pick <=N photos per album, then build the filtered ready
+folder. Mirrors the web UI's selection + build, but non-interactive.
+
+Nothing is auto-kept — exactly as in the UI, only picked photos ship. The synthetic
+`__non_album__` bucket is just another album here, so its photos get the same random
+<=N treatment. Videos are skipped: building one needs a client-captured still, which a
+headless script cannot produce.
 
 Usage:
     uv run python scripts/auto_curate.py <export-path> [--per-album 10] [--seed 0]
@@ -48,7 +52,8 @@ def main() -> int:
 
     inv = build_inventory(root)
 
-    # Randomly select <= per-album existing photos per named album.
+    # Randomly select <= per-album existing photos per album. `__non_album__` is one of
+    # these albums, so its photos are picked the same way — never auto-kept.
     keep: set[str] = set()
     print(f"\nAlbums ({len(inv.albums)}):")
     for album in inv.albums:
@@ -61,11 +66,8 @@ def main() -> int:
         print(f"  - {album.name!r} [{album.fb_album_id}]: "
               f"kept {len(picked)} of {len(album.photos)}{note}")
 
-    # Non-album photos are auto-kept (Decision B).
-    non_album_kept = [p.fbid for p in inv.non_album_photos if p.exists]
-    keep.update(non_album_kept)
-    print(f"\nNon-album photos auto-kept: {len(non_album_kept)} "
-          f"(of {len(inv.non_album_photos)} referenced)")
+    if inv.videos:
+        print(f"\nVideos skipped: {len(inv.videos)} (a build needs a captured still — use the UI)")
 
     dest_base = args.dest or (settings.workspace_dir / "ready")
     dest = dest_base / root.name

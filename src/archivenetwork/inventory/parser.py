@@ -135,7 +135,8 @@ def build_inventory(export_root: Path) -> ExportInventory:
         )
 
     # Non-album media = post media whose fbid is not in any album file (dedup by fbid).
-    # Videos are split off into their own category (auto-kept, thumbnail-replaced).
+    # Videos are split off into their own category (thumbnail-replaced at build time).
+    # Neither is auto-kept — both must be explicitly picked by the user to reach the build.
     non_album: list[Photo] = []
     videos: list[Photo] = []
     seen: set[str] = set()

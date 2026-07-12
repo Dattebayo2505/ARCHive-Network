@@ -91,7 +91,9 @@ def derive_caption_albums(inventory: ExportInventory) -> None:
             description="Photos without an album",
             origin="Non-Album",
             photos=inventory.non_album_photos,
-            uncapped=False,
+            # Uncapped like the derived albums: this bucket is an arbitrary leftover pile,
+            # not a curated set, so the ≤N-per-album cap is meaningless here.
+            uncapped=True,
         )
         for p in inventory.non_album_photos:
             p.album_fbid = "__non_album__"

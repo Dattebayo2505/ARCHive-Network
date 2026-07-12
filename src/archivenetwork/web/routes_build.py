@@ -16,8 +16,9 @@ def build(request: Request) -> dict:
     if session is None:
         raise HTTPException(status_code=404, detail="No export loaded")
 
+    # Nothing is auto-kept: every photo, video and album in the build is one the user
+    # explicitly picked. The selection is the single source of truth for what ships.
     keep = session.selection.selected_fbids()
-    keep |= {p.fbid for p in session.inventory.non_album_photos if p.exists}
 
     ready_root = settings.workspace_dir / "ready"
     # Name the ready folder from the workspace id (the friendly zip-based

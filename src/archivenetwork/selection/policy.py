@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol, Callable
 
 from ..config import settings
@@ -14,16 +14,19 @@ class CapExceeded(Exception):
 
 class SelectionPolicy(Protocol):
     def can_select(self, album_fbid: str, current_count: int) -> bool: ...
-    def non_album_selectable(self) -> bool: ...
 
 
 @dataclass
 class DefaultPolicy:
-    """Named-album cap; non-album photos are auto-kept and not pickable (Decision B).
+    """Per-album selection cap. Nothing is ever auto-kept.
 
-    Albums in `uncapped_albums` (the "Mobile uploads" / "Photos" dumps) have no cap.
-    To make non-album photos deselectable later, add a sibling policy whose
-    `non_album_selectable()` returns True — no change to SelectionState needed.
+    Every photo and video that reaches the build is one the user explicitly picked —
+    including non-album photos (pickable under the synthetic `__non_album__` album) and
+    videos (under `__videos__`). This policy only decides *how many* may be picked, never
+    what ships by default.
+
+    Albums in `uncapped_albums` have no cap; `__videos__` is likewise uncapped. A
+    per-album override from `limits.json` (via `get_limit`) beats `max_per_album`.
     """
 
     max_per_album: int = settings.max_per_album
@@ -35,6 +38,3 @@ class DefaultPolicy:
             return True
         limit = self.get_limit(album_fbid, self.max_per_album) if self.get_limit else self.max_per_album
         return current_count < limit
-
-    def non_album_selectable(self) -> bool:
-        return False

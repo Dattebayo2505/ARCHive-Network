@@ -112,12 +112,20 @@ def _start_session(
             album.name = renames._renames[album.fb_album_id]
     _apply_archive(inventory, archive.archived_ids())
 
+    # The derived caption-albums and the `__non_album__` bucket carry `uncapped=True` — they
+    # are leftover piles, not curated sets, so the ≤N cap is meaningless. Feed them to the
+    # policy so it stops capping them (the model flag is otherwise inert).
+    uncapped = frozenset(a.fb_album_id for a in inventory.albums if a.uncapped)
+
     request.app.state.session = Session(
         workspace_id=entry.id,
         state_dir=state_dir,
         export_root=export_root,
         inventory=inventory,
-        selection=SelectionState(state_dir / "selection.json", DefaultPolicy(get_limit=limits.get_limit)),
+        selection=SelectionState(
+            state_dir / "selection.json",
+            DefaultPolicy(uncapped_albums=uncapped, get_limit=limits.get_limit),
+        ),
         thumbnails=ThumbnailService(state_dir / "thumbs"),
         video_thumbs=VideoThumbnailStore(state_dir / "thumbs" / "videos"),
         renames=renames,

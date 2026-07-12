@@ -1,7 +1,15 @@
+import pytest
+
+from archivenetwork.inventory.limits import LimitState
 from archivenetwork.inventory.models import Album, ExportInventory, Photo
 from archivenetwork.selection.policy import DefaultPolicy
 from archivenetwork.selection.state import SelectionState
 from archivenetwork.web.serializers import inventory_payload
+
+
+@pytest.fixture
+def limits(tmp_path) -> LimitState:
+    return LimitState(tmp_path / "limits.json")
 
 
 def _inv() -> ExportInventory:
@@ -25,10 +33,10 @@ def _inv() -> ExportInventory:
     )
 
 
-def test_payload_shape(tmp_path):
+def test_payload_shape(tmp_path, limits):
     sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
     sel.toggle("111", "a01")
-    payload = inventory_payload("export", _inv(), sel, 10)
+    payload = inventory_payload("export", _inv(), sel, 10, limits)
 
     assert payload["export_name"] == "export"
     assert payload["max_per_album"] == 10
@@ -45,7 +53,7 @@ def test_payload_shape(tmp_path):
     assert subset(payload["non_album"][0]) == {"fbid": "m01", "caption": "k", "exists": True}
 
 
-def test_payload_includes_archive_and_uncapped(tmp_path):
+def test_payload_includes_archive_and_uncapped(tmp_path, limits):
     inv = ExportInventory(
         albums=[
             Album(
@@ -66,11 +74,13 @@ def test_payload_includes_archive_and_uncapped(tmp_path):
         ],
     )
     sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
-    payload = inventory_payload("e", inv, sel, 10)
+    payload = inventory_payload("e", inv, sel, 10, limits)
 
     caps = {a["name"]: a["max_per_album"] for a in payload["albums"]}
-    assert caps["Mobile uploads"] == 1
-    assert caps["Animo Fest"] == 1  # capped
+    # `None` is the wire contract for "uncapped" — the UI renders "no limit" and never
+    # marks the album full.
+    assert caps["Mobile uploads"] is None
+    assert caps["Animo Fest"] == 1  # capped: min(max_per_album=10, len(photos)=1)
     def subset_arch(p):
         return {k: p[k] for k in ["fbid", "caption", "archive_tag", "exists"]}
 
@@ -79,7 +89,7 @@ def test_payload_includes_archive_and_uncapped(tmp_path):
     ]
 
 
-def test_payload_includes_videos(tmp_path):
+def test_payload_includes_videos(tmp_path, limits):
     inv = ExportInventory(
         videos=[
             Photo(fbid="v01", original_uri="posts/media/videos/v01.mp4", resolved_path="x",
@@ -87,7 +97,7 @@ def test_payload_includes_videos(tmp_path):
         ],
     )
     sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
-    payload = inventory_payload("e", inv, sel, 10)
+    payload = inventory_payload("e", inv, sel, 10, limits)
 
     def subset(p):
         return {k: p[k] for k in ["fbid", "caption", "exists", "selected"]}
@@ -95,7 +105,7 @@ def test_payload_includes_videos(tmp_path):
     assert [subset(p) for p in payload["videos"]] == [{"fbid": "v01", "caption": "Watch this clip", "exists": True, "selected": False}]
 
 
-def test_payload_includes_album_origin(tmp_path):
+def test_payload_includes_album_origin(tmp_path, limits):
     inv = ExportInventory(
         albums=[
             Album(
@@ -108,8 +118,11 @@ def test_payload_includes_album_origin(tmp_path):
         ],
     )
     sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
-    payload = inventory_payload("e", inv, sel, 10)
+    payload = inventory_payload("e", inv, sel, 10, limits)
 
     origins = {a["name"]: a["origin"] for a in payload["albums"]}
     assert origins["HEADLINE ONE"] == "Mobile uploads"
     assert origins["Animo Fest"] is None
+    # a derived caption-album is uncapped on the wire
+    caps = {a["name"]: a["max_per_album"] for a in payload["albums"]}
+    assert caps["HEADLINE ONE"] is None

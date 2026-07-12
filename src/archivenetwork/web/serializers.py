@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from ..inventory.models import ExportInventory, Photo
+from ..inventory.models import Album, ExportInventory, Photo
 from ..selection.state import SelectionState
 from ..inventory.limits import LimitState
+from ..thumbnails.video_store import VideoThumbnailStore
 
 
 def _photo(p: Photo, selected: bool | None = None) -> dict:
@@ -35,6 +36,36 @@ def _archive_photo(p: Photo) -> dict:
     }
 
 
+def _album_cap(a: Album, max_per_album: int, limits: LimitState) -> int | None:
+    """The album's selection cap, or **None when uncapped**.
+
+    `None` is the wire contract for "no limit" — the UI renders "N selected · no limit" and
+    never marks the album full. Uncapped albums (the derived caption-albums and the
+    `__non_album__` bucket) short-circuit ahead of any `limits.json` override, exactly as
+    `DefaultPolicy.can_select` does, so the two can never disagree.
+    """
+    if a.uncapped:
+        return None
+    return min(limits.get_limit(a.fb_album_id, max_per_album), len(a.photos))
+
+
+def _album(a: Album, selection: SelectionState, max_per_album: int, limits: LimitState) -> dict:
+    return {
+        "fb_album_id": a.fb_album_id,
+        "name": a.name,
+        "original_name": a.original_name,
+        "description": a.description,
+        "origin": a.origin,
+        "post_timestamp": a.post_timestamp.isoformat() if a.post_timestamp else None,
+        "count_selected": selection.count(a.fb_album_id),
+        "max_per_album": _album_cap(a, max_per_album, limits),
+        "limit_bypassed": limits.get_limit(a.fb_album_id, -1) != -1,
+        "photos": [
+            _photo(p, selected=selection.is_selected(a.fb_album_id, p.fbid)) for p in a.photos
+        ],
+    }
+
+
 def inventory_payload(
     export_name: str,
     inventory: ExportInventory,
@@ -43,47 +74,13 @@ def inventory_payload(
     limits: LimitState,
     video_thumbs: VideoThumbnailStore | None = None,
 ) -> dict:
-    albums = [
-        {
-            "fb_album_id": a.fb_album_id,
-            "name": a.name,
-            "original_name": a.original_name,
-            "description": a.description,
-            "origin": a.origin,
-            "post_timestamp": a.post_timestamp.isoformat() if a.post_timestamp else None,
-            "count_selected": selection.count(a.fb_album_id),
-            "max_per_album": min(limits.get_limit(a.fb_album_id, max_per_album), len(a.photos)),
-            "limit_bypassed": limits.get_limit(a.fb_album_id, -1) != -1,
-            "photos": [
-                _photo(p, selected=selection.is_selected(a.fb_album_id, p.fbid))
-                for p in a.photos
-            ],
-        }
-        for a in inventory.albums
-    ]
-    archived_albums = [
-        {
-            "fb_album_id": a.fb_album_id,
-            "name": a.name,
-            "original_name": a.original_name,
-            "description": a.description,
-            "origin": a.origin,
-            "post_timestamp": a.post_timestamp.isoformat() if a.post_timestamp else None,
-            "count_selected": selection.count(a.fb_album_id),
-            "max_per_album": min(limits.get_limit(a.fb_album_id, max_per_album), len(a.photos)),
-            "limit_bypassed": limits.get_limit(a.fb_album_id, -1) != -1,
-            "photos": [
-                _photo(p, selected=selection.is_selected(a.fb_album_id, p.fbid))
-                for p in a.photos
-            ],
-        }
-        for a in inventory.archived_albums
-    ]
     return {
         "export_name": export_name,
         "max_per_album": max_per_album,
-        "albums": albums,
-        "archived_albums": archived_albums,
+        "albums": [_album(a, selection, max_per_album, limits) for a in inventory.albums],
+        "archived_albums": [
+            _album(a, selection, max_per_album, limits) for a in inventory.archived_albums
+        ],
         "non_album": [_photo(p) for p in inventory.non_album_photos],
         "videos": [
             {

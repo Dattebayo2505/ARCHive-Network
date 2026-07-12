@@ -23,6 +23,18 @@ def test_cap_enforced(tmp_path: Path):
         st.toggle("111", "a03")
 
 
+def test_uncapped_album_accepts_more_than_the_cap(tmp_path: Path):
+    """The `__non_album__` bucket and derived caption-albums must never raise CapExceeded —
+    they're leftover piles, not curated sets."""
+    st = SelectionState(
+        tmp_path / "sel.json",
+        DefaultPolicy(max_per_album=2, uncapped_albums=frozenset({"__non_album__"})),
+    )
+    for n in range(5):  # well past max_per_album=2
+        assert st.toggle("__non_album__", f"m{n:02d}") is True
+    assert st.count("__non_album__") == 5
+
+
 def test_persistence_round_trip(tmp_path: Path):
     path = tmp_path / "sel.json"
     st = SelectionState(path, DefaultPolicy())

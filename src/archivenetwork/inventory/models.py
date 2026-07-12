@@ -34,7 +34,7 @@ class Album(BaseModel):
     original_name: str | None = None
     description: str | None = None
     photos: list[Photo] = []
-    uncapped: bool = False  # True for the special dump albums (no per-album cap)
+    uncapped: bool = False  # no per-album cap: the derived caption-albums + `__non_album__`
     origin: str | None = None  # parent dump name for a derived caption-album (UI subheader)
     media_slug: str | None = None  # derived album's media subdir "<slug>_<id>"; None for FB albums
     post_timestamp: datetime | None = None

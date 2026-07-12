@@ -31,6 +31,23 @@ def test_build_produces_ready_folder(export_root: Path, tmp_path: Path, monkeypa
     assert [p.resolve() for p in revealed] == [ready.parent.resolve()]
 
 
+def test_build_with_no_selection_keeps_nothing(export_root: Path, tmp_path: Path, monkeypatch):
+    """The route must not auto-keep non-album photos (or anything else). Ingest, toggle
+    nothing, build — and get an empty result."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("archivenetwork.web.routes_build.reveal_path", lambda p: None)
+    client = TestClient(create_app())
+    client.post("/api/ingest/folder", json={"folder": str(export_root)})
+
+    body = client.post("/api/build").json()
+    assert body["copied"] == 0
+    assert body["albums_written"] == 0
+    assert body["videos_built"] == 0
+
+    ready = tmp_path / "workspace" / "ready" / "export"
+    assert not any((ready / "posts" / "media").rglob("*.jpg"))
+
+
 def test_build_survives_reveal_failure(export_root: Path, tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 

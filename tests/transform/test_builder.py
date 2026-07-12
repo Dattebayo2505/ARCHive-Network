@@ -41,6 +41,19 @@ def test_build_filtered_mirror(export_root: Path, tmp_path: Path):
     assert (export_root / "posts" / "videos.json").exists()
 
 
+def test_nothing_is_auto_kept(grouping_export_root: Path, tmp_path: Path):
+    """An empty selection must build an empty folder — no photo, video or album ships
+    unless the user picked it. Guards against auto-keep creeping back in."""
+    dest = tmp_path / "ready"
+    result = build_ready_folder(grouping_export_root, dest, keep_fbids=set())
+
+    assert result.copied == 0
+    assert result.videos_built == 0
+    assert result.albums_written == 0
+    assert not (dest / "posts" / "album").exists()
+    assert not any((dest / "posts" / "media").rglob("*.jpg"))
+
+
 def test_idempotent_rerun(export_root: Path, tmp_path: Path):
     dest = tmp_path / "ready"
     build_ready_folder(export_root, dest, {"a01"})

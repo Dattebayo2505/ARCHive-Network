@@ -114,8 +114,16 @@ def test_inventory_exposes_derived_uncapped_albums(grouping_export_root, tmp_pat
 
     derived = [a for a in body["albums"] if a["origin"] == "Mobile uploads"]
     assert {a["name"] for a in derived} == {"HEADLINE ONE", "HEADLINE TWO"}
-    assert {a["name"]: a["max_per_album"] for a in derived} == {"HEADLINE ONE": 2, "HEADLINE TWO": 3}
+    # Derived caption-albums are uncapped on the wire: `None` == "no limit" to the UI.
+    assert {a["name"]: a["max_per_album"] for a in derived} == {
+        "HEADLINE ONE": None, "HEADLINE TWO": None
+    }
     assert {p["fbid"] for p in body["archive"]} == {"t01"}
+
+    # The `__non_album__` leftover bucket is uncapped too; real FB albums stay capped.
+    by_id = {a["fb_album_id"]: a for a in body["albums"]}
+    assert by_id["__non_album__"]["max_per_album"] is None
+    assert by_id["111"]["max_per_album"] == 1  # named FB album: min(10, 1 photo)
 
 
 def test_archive_persists_and_restores_on_reopen(export_root, tmp_path, monkeypatch):
