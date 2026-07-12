@@ -22,13 +22,23 @@ def _default_seven_zip() -> Path | None:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="ARCHIVENETWORK_")
+    # `.env` (gitignored) is where the local Postgres URL lives, so a credential never has to
+    # be exported into the shell or committed. Real env vars still win over the file.
+    model_config = SettingsConfigDict(
+        env_prefix="ARCHIVENETWORK_", env_file=".env", extra="ignore"
+    )
 
     workspace_dir: Path = Path("workspace")
     seven_zip_exe: Path | None = _default_seven_zip()
     max_per_album: int = 10
     thumb_size: int = 512
     preview_size: int = 1280
+
+    # --- Dev-mode: load the built ready/ folder into a local Postgres + local object store. ---
+    # Off unless `database_url` is set; every /api/dev/* route 404s without it.
+    database_url: str | None = None
+    media_root: Path = Path("workspace/media")
+    media_base_url: str = "/media"
     host: str = "127.0.0.1"
     port: int = 8000
     cors_origins: list[str] = [

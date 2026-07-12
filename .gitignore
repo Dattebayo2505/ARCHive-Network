@@ -14,6 +14,9 @@ venv/
 workspace/
 ready/
 
+# Local secrets (dev-mode Postgres URL)
+.env
+
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
 .claude/skills
@@ -30,3 +33,4 @@ Thumbs.db
 CLAUDE.md
 .claude/
 docs/
+.agents/
