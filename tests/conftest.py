@@ -224,3 +224,37 @@ def archive_export_root(tmp_path: Path) -> Path:
         (root / "posts" / name).write_text("[]", encoding="utf-8")
 
     return root
+
+
+@pytest.fixture
+def ready_root(grouping_export_root: Path, tmp_path: Path) -> Path:
+    """A *built* ready folder — the loader's only input, exactly as the real ETL sees it."""
+    from archivenetwork.inventory.parser import build_inventory
+    from archivenetwork.transform.builder import build_ready_folder
+
+    inv = build_inventory(grouping_export_root)
+    keep = {p.fbid for p in inv.all_photos() if p.exists}
+    dest = tmp_path / "ready"
+    build_ready_folder(grouping_export_root, dest, keep)
+    return dest
+
+
+@pytest.fixture
+def pg_conn():
+    """A connection to a scratch Postgres, with the schema freshly recreated.
+
+    Skips unless ARCHIVENETWORK_DATABASE_URL is set. It DROPS tables — never point it at a
+    database you care about.
+    """
+    from archivenetwork.config import Settings
+
+    url = Settings().database_url
+    if not url:
+        pytest.skip("ARCHIVENETWORK_DATABASE_URL not set; skipping Postgres-backed test")
+
+    from archivenetwork.loader import db
+
+    conn = db.connect(url)
+    db.reset_tables(conn)
+    yield conn
+    conn.close()
