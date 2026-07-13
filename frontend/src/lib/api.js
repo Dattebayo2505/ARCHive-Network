@@ -313,6 +313,19 @@ export async function removeWorkspace(id, deleteFiles, fetchFn = fetch) {
 	}
 }
 
+/**
+ * Auto-curate: pick <=N photos per album and select every video, replacing the selection.
+ * A *selection* call, not a dev/DB one — it works with or without Postgres configured.
+ */
+export async function autoCurate(perAlbum = null, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/curate'), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ per_album: perAlbum })
+	});
+	return { ok: res.ok, status: res.status, body: await res.json() };
+}
+
 // --- Dev-mode: the local Postgres + object store. Every route 404s unless the backend has
 // ARCHIVENETWORK_DATABASE_URL set, so the panel must handle `enabled: false` gracefully. ---
 

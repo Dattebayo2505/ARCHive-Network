@@ -1,7 +1,7 @@
 <script>
 	import { untrack } from 'svelte';
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
-	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum, increaseLimit, undoIncreaseLimit } from '$lib/api.js';
+	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum, increaseLimit, undoIncreaseLimit, getInventory } from '$lib/api.js';
 	import { prefetchAlbumThumbs, clearPrefetchCache } from '$lib/imageCache.js';
 	import { seedMissingThumbnails, thumbnailMissing } from '$lib/videoThumbs.js';
 	import { DEFAULT_SIZE, SIZE_STORAGE_KEY, VIEW_SIZES } from '$lib/viewSizes.js';
@@ -36,6 +36,14 @@
 	// The dev pane replaces the photo grid entirely — it is a developer surface, not a
 	// curation one, and is only reachable when the Dev Mode preference is on.
 	let showDev = $derived(activeId === '__dev__');
+
+	// Auto-curate rewrites the whole selection server-side, so the client's copy of the
+	// inventory (which carries every album's count_selected and each photo's `selected`) is
+	// stale the moment it returns. Re-fetch rather than trying to patch it locally.
+	async function reloadInventory() {
+		const fresh = await getInventory();
+		if (fresh) inventory = fresh;
+	}
 	let videoPreview = $state(null); // the video obj being picked, or null
 	// Cache-bust key per video so a freshly-seeded/chosen still reloads in the grid.
 	let thumbVersion = $state({});
@@ -817,7 +825,11 @@
 	     photo grid below it scrolls (and only when the pointer is over the grid). -->
 	<section class="flex min-w-0 flex-1 flex-col lg:min-h-0 mr-5">
 		{#if showDev}
-			<DevPanel />
+			<DevPanel
+				selectedPhotos={totalSelected}
+				selectedVideos={totalSelectedVideos}
+				onCurated={reloadInventory}
+			/>
 		{:else if showArchive}
 			<header class="mb-2 shrink-0 pt-1 pb-1">
 				<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">

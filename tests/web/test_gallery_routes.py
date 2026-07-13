@@ -155,3 +155,31 @@ def test_unarchive_updates_persisted_state(export_root, tmp_path, monkeypatch):
 
     archive_file = tmp_path / "workspace" / "state" / "export" / "archive.json"
     assert json.loads(archive_file.read_text()) == []
+
+
+def test_curate_picks_per_album_and_all_videos(video_export_root, tmp_path, monkeypatch):
+    """Auto-curate writes real picks into the selection — it is not a return of auto-keep."""
+    client = _loaded_client(video_export_root, tmp_path, monkeypatch)
+
+    body = client.post("/api/curate", json={"per_album": 1}).json()
+    assert body["per_album"] == 1
+    assert body["videos_selected"] == 1  # every video is selected
+    for album in body["albums"]:
+        assert album["picked"] == min(1, album["available"])
+
+    # The picks are visible in the inventory, exactly as if a human had clicked them.
+    inv = client.get("/api/inventory").json()
+    assert sum(a["count_selected"] for a in inv["albums"]) == body["photos_selected"]
+    assert all(v["selected"] for v in inv["videos"])
+
+
+def test_curate_replaces_the_previous_selection(export_root, tmp_path, monkeypatch):
+    client = _loaded_client(export_root, tmp_path, monkeypatch)
+    client.post("/api/toggle", json={"album_fbid": "111", "photo_fbid": "a01"})
+    client.post("/api/toggle", json={"album_fbid": "111", "photo_fbid": "a02"})
+
+    client.post("/api/curate", json={"per_album": 1})
+
+    inv = client.get("/api/inventory").json()
+    album = next(a for a in inv["albums"] if a["fb_album_id"] == "111")
+    assert album["count_selected"] == 1  # replaced, not merged

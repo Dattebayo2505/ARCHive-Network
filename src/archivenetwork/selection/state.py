@@ -35,6 +35,16 @@ class SelectionState:
         self._save()
         return True
 
+    def replace_all(self, selections: dict[str, list[str]]) -> None:
+        """Swap the entire selection in a single write.
+
+        Deliberately atomic and total: anything absent from `selections` is dropped, so the
+        caller's mapping *is* the new selection. Used by auto-curate, which replaces rather
+        than merges — a half-applied selection would be worse than either outcome.
+        """
+        self._selected = {k: list(v) for k, v in selections.items() if v}
+        self._save()
+
     def deselect_all(self, album_fbid: str) -> None:
         if album_fbid in self._selected:
             del self._selected[album_fbid]

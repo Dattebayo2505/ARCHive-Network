@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from ..config import settings
 from ..reveal import RevealError, reveal_path
+from ..selection.autocurate import auto_curate
 from ..selection.policy import CapExceeded
 from ..thumbnails.service import ThumbnailService
 from .serializers import inventory_payload
@@ -18,6 +19,10 @@ router = APIRouter()
 class ToggleRequest(BaseModel):
     album_fbid: str
     photo_fbid: str
+
+
+class CurateRequest(BaseModel):
+    per_album: int | None = None
 
 
 class DeselectAllRequest(BaseModel):
@@ -177,6 +182,33 @@ def deselect_all(request: Request, body: DeselectAllRequest):
     session = _session(request)
     session.selection.deselect_all(body.album_fbid)
     return {"ok": True, "count": 0}
+
+
+@router.post("/api/curate")
+def curate(request: Request, body: CurateRequest | None = None):
+    """Auto-curate: pick ≤N photos per album and every video, replacing the selection.
+
+    Lives here, not under `/api/dev/*`: this is a *selection* operation and has nothing to do
+    with Postgres, so gating it on `database_url` (as every dev route is) would be wrong. The
+    Dev panel is merely where the button lives.
+    """
+    session = _session(request)
+    per_album = body.per_album if body and body.per_album else settings.max_per_album
+    result = auto_curate(session.inventory, session.selection, per_album)
+    return {
+        "per_album": per_album,
+        "photos_selected": result.photos_selected,
+        "videos_selected": result.videos_selected,
+        "albums": [
+            {
+                "fb_album_id": a.fb_album_id,
+                "name": a.name,
+                "picked": a.picked,
+                "available": a.available,
+            }
+            for a in result.albums
+        ],
+    }
 
 
 @router.post("/api/album/rename")

@@ -1,18 +1,48 @@
 <script>
-	import { devLoad, devRows, devSchema, devStatus, devValidate, storeUrl } from '$lib/api.js';
+	import {
+		autoCurate,
+		devLoad,
+		devRows,
+		devSchema,
+		devStatus,
+		devValidate,
+		storeUrl
+	} from '$lib/api.js';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 
 	// The dev pane runs the real downstream ETL locally: it reads the built ready/ folder,
 	// copies each image into a local object store, and upserts photo_album + media into
 	// PostgreSQL. Dev-mode is a *backend* capability — every /api/dev/* route 404s unless
 	// ARCHIVENETWORK_DATABASE_URL is set — so this panel must degrade honestly when it isn't.
+	//
+	// Auto-curate is the exception: it is a *selection* action, needs no database, and so lives
+	// outside the DB-gated block below.
+	let { selectedPhotos = 0, selectedVideos = 0, onCurated = () => {} } = $props();
 
 	let status = $state(null); // null while first loading
-	let busy = $state(''); // '' | 'schema' | 'reset' | 'load' | 'validate'
+	let busy = $state(''); // '' | 'schema' | 'reset' | 'load' | 'validate' | 'curate'
 	let loadResult = $state(null);
 	let report = $state(null);
 	let error = $state(''); // an actionable failure from the last action
 	let confirmReset = $state(false);
+	let confirmCurate = $state(false);
+	let curateResult = $state(null);
+	let curateError = $state('');
+
+	const hasSelection = $derived(selectedPhotos + selectedVideos > 0);
+
+	async function runCurate() {
+		busy = 'curate';
+		curateError = '';
+		curateResult = null;
+		const res = await autoCurate();
+		if (!res.ok) curateError = res.body?.detail ?? 'Auto-curate failed.';
+		else {
+			curateResult = res.body;
+			await onCurated(); // the gallery owns the inventory; let it refresh its counts
+		}
+		busy = '';
+	}
 
 	let table = $state('media');
 	let offset = $state(0);
@@ -150,6 +180,89 @@
 				original export is never touched.
 			</p>
 		</header>
+
+		<!-- ── Curation ─────────────────────────────────────────────────────────────────
+		     A sibling panel, not a section of the one below: auto-curate is a *selection*
+		     action and needs no database, so it must stay outside the DB-gated block. -->
+		<section class="mb-4 rounded-xl border border-surface-300 bg-surface-50 p-5">
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div class="max-w-prose">
+					<h2 class="text-sm font-semibold text-surface-900">Auto-curate a selection</h2>
+					<p class="mt-1 text-xs leading-relaxed text-surface-600">
+						Picks up to 10 photos at random from every album — all of them where an album has
+						fewer — and selects every video. Videos already carry an auto-captured first-frame
+						still, so they build as-is.
+					</p>
+					<p class="mt-1.5 text-xs leading-relaxed text-surface-600">
+						These are real picks, not auto-kept photos: they appear selected in the gallery and
+						you can change any of them. Build still ships only what is selected.
+					</p>
+				</div>
+				<div class="flex flex-col items-end gap-1.5">
+					{@render primaryBtn('Auto-curate', 'Picking…', 'curate', () =>
+						hasSelection ? (confirmCurate = true) : runCurate()
+					)}
+					<p class="text-xs tabular-nums text-surface-600">
+						{selectedPhotos} photos · {selectedVideos} videos selected
+					</p>
+				</div>
+			</div>
+
+			{#if curateError}
+				<p
+					class="mt-4 rounded-lg border border-error-200 bg-error-50 px-3 py-2 text-sm text-error-800"
+					role="alert"
+				>
+					{curateError}
+				</p>
+			{/if}
+
+			{#if curateResult}
+				{@const albums = curateResult.albums.filter((a) => a.picked > 0)}
+				<div class="mt-4" aria-live="polite">
+					<p class="text-sm text-surface-800">
+						Picked <span class="font-semibold tabular-nums">{curateResult.photos_selected}</span>
+						photos across
+						<span class="font-semibold tabular-nums">{albums.length}</span>
+						albums, and selected
+						<span class="font-semibold tabular-nums">{curateResult.videos_selected}</span> videos.
+					</p>
+					<p class="mt-1 text-xs text-surface-600">
+						Next: build the ready folder from the gallery, then load it below.
+					</p>
+
+					<details class="group mt-3">
+						<summary
+							class="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-surface-700 select-none"
+						>
+							<svg
+								viewBox="0 0 24 24"
+								class="size-4 transition-transform group-open:rotate-90"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg
+							>
+							Per-album picks
+						</summary>
+						<ul
+							class="mt-2 max-h-56 divide-y divide-surface-200 overflow-y-auto rounded-lg border border-surface-200"
+						>
+							{#each albums as a (a.fb_album_id)}
+								<li class="flex items-center justify-between gap-3 px-3 py-1.5">
+									<span class="min-w-0 flex-1 truncate text-xs text-surface-700">{a.name}</span>
+									<span class="shrink-0 font-mono text-xs tabular-nums text-surface-600"
+										>{a.picked} / {a.available}</span
+									>
+								</li>
+							{/each}
+						</ul>
+					</details>
+				</div>
+			{/if}
+		</section>
 
 		<!-- One panel, hairline-divided. Not four floating cards. -->
 		<div class="overflow-hidden rounded-xl border border-surface-300 bg-surface-50">
@@ -493,6 +606,20 @@
 		</div>
 	</div>
 </div>
+
+<ConfirmDialog
+	open={confirmCurate}
+	title="Replace the current selection?"
+	message="Auto-curate overwrites every pick you have made — {selectedPhotos} photos and {selectedVideos} videos — with a fresh random selection of up to 10 photos per album plus all videos. Your export and any ready folder you have already built are untouched."
+	confirmLabel="Replace selection"
+	cancelLabel="Cancel"
+	destructive
+	onConfirm={() => {
+		confirmCurate = false;
+		runCurate();
+	}}
+	onCancel={() => (confirmCurate = false)}
+/>
 
 <ConfirmDialog
 	open={confirmReset}
