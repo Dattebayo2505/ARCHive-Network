@@ -36,9 +36,14 @@ class Settings(BaseSettings):
 
     # --- Dev-mode: load the built ready/ folder into a local Postgres + local object store. ---
     # Off unless `database_url` is set; every /api/dev/* route 404s without it.
+    #
+    # `media_root` / `media_base_url` are the *object-store root* — the part before the key.
+    # A key already begins with "media/" (see loader.storage.media_key), so the root must not
+    # also be called "media" or every object double-nests (workspace/media/media/2026/...).
+    # Read URL = <media_base_url>/<storage_path>; in prod that base is a CDN domain instead.
     database_url: str | None = None
-    media_root: Path = Path("workspace/media")
-    media_base_url: str = "/media"
+    media_root: Path = Path("workspace/store")
+    media_base_url: str = "/store"
     host: str = "127.0.0.1"
     port: int = 8000
     cors_origins: list[str] = [

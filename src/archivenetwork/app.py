@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .web.registry import WorkspaceRegistry
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     )
 
     from .web.routes_build import router as build_router
+    from .web.routes_dev import router as dev_router
     from .web.routes_gallery import router as gallery_router
     from .web.routes_ingest import router as ingest_router
     from .web.routes_video import router as video_router
@@ -55,4 +57,15 @@ def create_app() -> FastAPI:
     app.include_router(gallery_router)
     app.include_router(video_router)
     app.include_router(build_router)
+    app.include_router(dev_router)
+
+    # Dev-mode object store, served so the Dev panel can render each row straight from its
+    # `storage_path`. In production that same key is fetched from a CDN domain instead — the
+    # DB stores the key, never the base URL.
+    settings.media_root.mkdir(parents=True, exist_ok=True)
+    app.mount(
+        settings.media_base_url,
+        StaticFiles(directory=settings.media_root),
+        name="media",
+    )
     return app

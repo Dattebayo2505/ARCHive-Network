@@ -18,8 +18,10 @@ def test_devmode_settings_default_off(monkeypatch):
     # `.env` at the repo root would otherwise leak a real URL into this assertion.
     s = Settings(_env_file=None)
     assert s.database_url is None  # dev-mode is opt-in
-    assert s.media_root == Path("workspace/media")
-    assert s.media_base_url == "/media"
+    # The store root must not be named "media" — keys already start with "media/", so a
+    # "media" root would double-nest every object (workspace/media/media/2026/...).
+    assert s.media_root == Path("workspace/store")
+    assert s.media_base_url == "/store"
 
 
 def test_database_url_from_env(monkeypatch):
