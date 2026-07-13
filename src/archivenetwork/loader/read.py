@@ -65,6 +65,19 @@ def _read_videos(posts: Path) -> dict[str, dict]:
     return {photo_fbid(v["uri"]): v for v in raw.get("videos_v2", [])}
 
 
+def _read_unanchored(posts: Path) -> list[dict]:
+    """unanchored.json — media belonging to no album.
+
+    A loose photo that was also posted is reachable via the feed too; one that was never posted
+    (no caption) appears **only** here. Without this manifest such a photo is copied into ready/
+    and referenced by nothing, so a manifest-driven ETL would silently drop it.
+    """
+    path = posts / "unanchored.json"
+    if not path.exists():
+        return []
+    return json.loads(path.read_text(encoding="utf-8")).get("photos", [])
+
+
 def _read_feed(posts: Path) -> dict[str, dict]:
     """profile_posts_1.json — the source of captions, post timestamps, and unanchored media."""
     path = posts / "profile_posts_1.json"
@@ -165,6 +178,25 @@ def read_ready(ready_root: Path) -> ReadResult:
             caption=_clean(video.get("description")),
             description=_clean(video.get("description")),
             uri=video["uri"],
+            creation_at=epoch_to_dt(ts) if ts else None,
+        )
+
+    # Unanchored media. Added last, so where a loose photo is *also* in the feed the feed's
+    # richer record (it carries the caption) already won; this only picks up the never-posted
+    # ones, which no other manifest mentions.
+    for rec in _read_unanchored(posts):
+        fbid = photo_fbid(rec["uri"])
+        if fbid in media:
+            continue
+        ts = rec.get("creation_timestamp")
+        media[fbid] = MediaRow(
+            fbid=fbid,
+            media_type="photo",
+            fb_album_id=album_id_from_uri(rec["uri"]),  # None for posts/media/<fbid>.jpg
+            title=_clean(rec.get("title")),
+            caption=None,  # never posted -> there is no post body to hoist
+            description=None,
+            uri=rec["uri"],
             creation_at=epoch_to_dt(ts) if ts else None,
         )
 

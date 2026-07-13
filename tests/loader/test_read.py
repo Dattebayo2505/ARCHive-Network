@@ -85,6 +85,22 @@ def test_creation_at_prefers_the_post_timestamp_over_the_album(tmp_path: Path):
     assert media["p01"].creation_at == datetime.fromtimestamp(post_ts, tz=timezone.utc)
 
 
+def test_never_posted_unanchored_media_is_still_read(ready_root: Path):
+    """`n01` has no caption and no post — it is reachable only via posts/unanchored.json."""
+    media = {m.fbid: m for m in read_ready(ready_root).media}
+
+    assert "n01" in media
+    assert media["n01"].fb_album_id is None  # belongs to no album
+    assert media["n01"].caption is None  # never posted -> no body to hoist
+    assert media["n01"].uri == "posts/media/n01.jpg"
+
+
+def test_unanchored_manifest_does_not_clobber_a_feed_caption(ready_root: Path):
+    """`s01` is in BOTH the feed and unanchored.json; the feed's caption must survive."""
+    media = {m.fbid: m for m in read_ready(ready_root).media}
+    assert media["s01"].caption == "Solo headline\n\nSolo body."
+
+
 def test_archived_media_never_appears(ready_root: Path):
     fbids = {m.fbid for m in read_ready(ready_root).media}
     assert "t01" not in fbids  # BREAKING: news-tagged -> archived out by the builder

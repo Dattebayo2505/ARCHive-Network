@@ -246,6 +246,8 @@ def pg_conn():
     Skips unless ARCHIVENETWORK_DATABASE_URL is set. It DROPS tables — never point it at a
     database you care about.
     """
+    import psycopg
+
     from archivenetwork.config import Settings
 
     url = Settings().database_url
@@ -254,7 +256,11 @@ def pg_conn():
 
     from archivenetwork.loader import db
 
-    conn = db.connect(url)
+    try:
+        conn = db.connect(url)
+    except psycopg.OperationalError as exc:  # not installed / not running / bad credentials
+        pytest.skip(f"Postgres unreachable, skipping: {exc}")
+
     db.reset_tables(conn)
     yield conn
     conn.close()

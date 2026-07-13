@@ -54,6 +54,38 @@ def test_nothing_is_auto_kept(grouping_export_root: Path, tmp_path: Path):
     assert not any((dest / "posts" / "media").rglob("*.jpg"))
 
 
+def test_unanchored_media_is_manifested(grouping_export_root: Path, tmp_path: Path):
+    """Every copied file must be reachable from some JSON manifest.
+
+    `n01` has no caption and was never posted, so it is in no album JSON and no post. Without
+    posts/unanchored.json it would be copied into ready/ and referenced by nothing — a photo the
+    user picked would silently vanish from a manifest-driven ETL.
+    """
+    from archivenetwork.inventory.parser import build_inventory
+
+    dest = tmp_path / "ready"
+    inv = build_inventory(grouping_export_root)
+    keep = {p.fbid for p in inv.all_photos() if p.exists}
+    build_ready_folder(grouping_export_root, dest, keep)
+
+    manifest = json.loads((dest / "posts" / "unanchored.json").read_text(encoding="utf-8"))
+    stems = {Path(p["uri"]).stem for p in manifest["photos"]}
+    assert "n01" in stems  # the never-posted photo
+    assert "s01" in stems  # the captioned singleton
+    assert all(p["uri"].startswith("posts/media/") for p in manifest["photos"])
+
+    # Nothing under posts/media/ is left unreferenced by a manifest.
+    referenced = {p["uri"] for p in manifest["photos"]}
+    for ap in (dest / "posts" / "album").glob("*.json"):
+        referenced |= {p["uri"] for p in json.loads(ap.read_text(encoding="utf-8"))["photos"]}
+    on_disk = {
+        str(p.relative_to(dest)).replace("\\", "/")
+        for p in (dest / "posts" / "media").rglob("*")
+        if p.is_file()
+    }
+    assert not (on_disk - referenced)
+
+
 def test_idempotent_rerun(export_root: Path, tmp_path: Path):
     dest = tmp_path / "ready"
     build_ready_folder(export_root, dest, {"a01"})

@@ -35,7 +35,7 @@ def _copy_media(photo, export_root: Path, dest: Path) -> bool:
 
 
 def _album_photo_record(photo) -> dict:
-    rec: dict = {"uri": photo.ready_uri}
+    rec: dict = {"uri": photo.ready_uri or _rel_from_posts(photo.original_uri)}
     if photo.creation_at is not None:
         rec["creation_timestamp"] = int(photo.creation_at.timestamp())
     if photo.title:
@@ -175,6 +175,29 @@ def build_ready_folder(
         (dest / "posts").mkdir(parents=True, exist_ok=True)
         (dest / "posts" / "profile_posts_1.json").write_text(
             json.dumps(posts, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    # Unanchored manifest: media that belongs to no album. A loose photo that *was* posted is
+    # already reachable via the feed, but one that never was (no caption -> no post, e.g. a photo
+    # dropped straight into "Mobile uploads") would be copied into ready/ and referenced by
+    # NOTHING — invisible to a manifest-driven ETL, so a photo the user explicitly picked would
+    # silently vanish. This manifest guarantees every copied file is reachable from some JSON.
+    unanchored = [
+        p
+        for album in inventory.albums
+        if album.fb_album_id == "__non_album__"
+        for p in album.photos
+        if p.fbid in keep_fbids and p.exists and not p.is_video
+    ]
+    if unanchored:
+        (dest / "posts").mkdir(parents=True, exist_ok=True)
+        (dest / "posts" / "unanchored.json").write_text(
+            json.dumps(
+                {"photos": [_album_photo_record(p) for p in unanchored]},
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
         )
 
     # Videos manifest: emit a filtered posts/videos.json listing only the built videos,
