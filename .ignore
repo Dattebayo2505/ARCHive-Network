@@ -1,0 +1,13 @@
+# Ripgrep-only overrides. Git does NOT read this file — only ripgrep (and therefore
+# Claude Code's Grep tool) does, and it takes precedence over .gitignore.
+#
+# CLAUDE.md and docs/ are gitignored on purpose (they must never reach the remote),
+# but that also made them invisible to repo-wide code search: ripgrep skips
+# gitignored paths by default. Re-including them here restores search without
+# changing anything git does — they stay untracked and unpushable.
+
+# Excluded project docs/config
+!CLAUDE.md
+!docs/
+!.claude/
+!.agents/
