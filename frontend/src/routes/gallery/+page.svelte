@@ -13,6 +13,7 @@
 	import CarouselScrollbar from '$lib/components/CarouselScrollbar.svelte';
 	import ContextMenu from '$lib/components/ContextMenu.svelte';
 	import BuildSummary from '$lib/components/BuildSummary.svelte';
+	import DevPanel from '$lib/components/DevPanel.svelte';
 	import SelectionPanel from '$lib/components/SelectionPanel.svelte';
 	import SelectionStrip from '$lib/components/SelectionStrip.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -32,6 +33,9 @@
 	let showArchive = $derived(activeId === '__archive__');
 	let videos = $derived(inventory.videos ?? []);
 	let showVideos = $derived(activeId === '__videos__');
+	// The dev pane replaces the photo grid entirely — it is a developer surface, not a
+	// curation one, and is only reachable when the Dev Mode preference is on.
+	let showDev = $derived(activeId === '__dev__');
 	let videoPreview = $state(null); // the video obj being picked, or null
 	// Cache-bust key per video so a freshly-seeded/chosen still reloads in the grid.
 	let thumbVersion = $state({});
@@ -812,7 +816,9 @@
 	<!-- Right pane: active album OR the read-only archive. Header stays put; only the
 	     photo grid below it scrolls (and only when the pointer is over the grid). -->
 	<section class="flex min-w-0 flex-1 flex-col lg:min-h-0 mr-5">
-		{#if showArchive}
+		{#if showDev}
+			<DevPanel />
+		{:else if showArchive}
 			<header class="mb-2 shrink-0 pt-1 pb-1">
 				<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
 					<div class="flex min-w-0 items-baseline gap-3">
