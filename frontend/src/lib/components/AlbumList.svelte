@@ -1,5 +1,6 @@
 <script>
 	import { tick } from 'svelte';
+	import { devMode } from '$lib/devmode.svelte.js';
 
 	let {
 		albums, archivedAlbums = [], archiveCount = 0, videosCount = 0, videosSelectedCount = 0,
@@ -23,6 +24,9 @@
 		if (videosCount > 0) groups.push('__videos__');
 		if (archiveCount > 0) groups.push('__archive__');
 		if (archivedAlbums && archivedAlbums.length > 0) groups.push('Archived Albums');
+		// The Dev Mode pane is a sticky group like the others, so it must join this list or the
+		// sticky offsets of everything above it drift.
+		if (devMode.enabled) groups.push('__dev__');
 		return groups;
 	});
 
@@ -343,6 +347,40 @@
 		{/if}
 	{/if}
 
+	{#if devMode.enabled}
+		{@const active = activeId === '__dev__'}
+		{@const gIndex = visibleGroups.indexOf('__dev__')}
+		<div class="my-1 h-px bg-surface-300"></div>
+		<button
+			type="button"
+			class="sticky z-10 flex h-[32px] items-center gap-2 rounded-lg px-2.5 text-left text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+			style="top: {gIndex * 32}px; bottom: {(visibleGroups.length - 1 - gIndex) * 32}px;"
+			class:bg-surface-50={!active}
+			class:bg-primary-100={active}
+			class:text-primary-900={active}
+			class:font-semibold={active}
+			class:text-surface-700={!active}
+			class:hover:bg-surface-200={!active}
+			onclick={() => onSelect('__dev__')}
+			aria-current={active ? 'true' : undefined}
+			title="Load this build into PostgreSQL and inspect the rows."
+		>
+			<svg
+				viewBox="0 0 24 24"
+				class="size-4 shrink-0"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.75"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<ellipse cx="12" cy="5" rx="8" ry="3" />
+				<path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
+			</svg>
+			<span class="truncate">Dev Mode</span>
+		</button>
+	{/if}
 
 </nav>
 

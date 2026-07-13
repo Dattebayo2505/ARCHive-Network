@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import AlbumList from './AlbumList.svelte';
+import { devMode } from '$lib/devmode.svelte.js';
 
 const albums = [
 	{ fb_album_id: '111', name: 'Animo Fest', count_selected: 2, max_per_album: 10 },
@@ -48,5 +49,26 @@ describe('AlbumList', () => {
 		expect(screen.getByText('Mobile uploads')).toBeInTheDocument();
 		expect(screen.getByText('HEADLINE ONE')).toBeInTheDocument();
 		expect(screen.getByText('HEADLINE TWO')).toBeInTheDocument();
+	});
+
+	describe('Dev Mode entry', () => {
+		afterEach(() => devMode.set(false));
+
+		it('is hidden unless dev mode is enabled', () => {
+			devMode.set(false);
+			render(AlbumList, { props: { albums, activeId: '111', onSelect: vi.fn() } });
+			expect(screen.queryByText('Dev Mode')).not.toBeInTheDocument();
+		});
+
+		it('appears and is selectable when dev mode is enabled', async () => {
+			devMode.set(true);
+			const onSelect = vi.fn();
+			render(AlbumList, { props: { albums, activeId: '111', onSelect } });
+
+			const entry = screen.getByText('Dev Mode');
+			expect(entry).toBeInTheDocument();
+			await fireEvent.click(entry);
+			expect(onSelect).toHaveBeenCalledWith('__dev__');
+		});
 	});
 });

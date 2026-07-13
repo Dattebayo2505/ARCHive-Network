@@ -313,4 +313,46 @@ export async function removeWorkspace(id, deleteFiles, fetchFn = fetch) {
 	}
 }
 
+// --- Dev-mode: the local Postgres + object store. Every route 404s unless the backend has
+// ARCHIVENETWORK_DATABASE_URL set, so the panel must handle `enabled: false` gracefully. ---
+
+/** Build the URL an object is served from: <base>/<storage_path>. In prod the base is a CDN. */
+export function storeUrl(storagePath, baseUrl = '/store') {
+	return url(`${baseUrl}/${storagePath}`);
+}
+
+/** Connection + schema status. Never throws on a missing DB — it reports it. */
+export async function devStatus(fetchFn = fetch) {
+	return (await fetchFn(url('/api/dev/status'))).json();
+}
+
+/** Create the tables; `reset` drops and recreates them (destructive). */
+export async function devSchema(reset = false, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/dev/schema'), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ reset })
+	});
+	return { ok: res.ok, status: res.status, body: await res.json() };
+}
+
+/** Run the ETL over the current workspace's ready folder. 409 = not built yet. */
+export async function devLoad(fetchFn = fetch) {
+	const res = await fetchFn(url('/api/dev/load'), { method: 'POST' });
+	return { ok: res.ok, status: res.status, body: await res.json() };
+}
+
+/** Paginated rows from `media` or `photo_album`. */
+export async function devRows(table = 'media', limit = 50, offset = 0, fetchFn = fetch) {
+	const qs = new URLSearchParams({ table, limit: String(limit), offset: String(offset) });
+	const res = await fetchFn(url(`/api/dev/rows?${qs}`));
+	return { ok: res.ok, status: res.status, body: await res.json() };
+}
+
+/** The schema-validation report. */
+export async function devValidate(fetchFn = fetch) {
+	const res = await fetchFn(url('/api/dev/validate'));
+	return { ok: res.ok, status: res.status, body: await res.json() };
+}
+
 export { API_BASE };

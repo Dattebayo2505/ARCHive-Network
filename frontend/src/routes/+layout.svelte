@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { getSession, markStatsSeen } from '$lib/api.js';
 	import { theme, toggleTheme } from '$lib/theme.svelte.js';
+	import SettingsMenu from '$lib/components/SettingsMenu.svelte';
 	import WorkspaceStats from '$lib/components/WorkspaceStats.svelte';
 
 	let isDark = $derived(theme.mode === 'dark');
@@ -121,6 +122,9 @@
 						</span>
 					{/each}
 				</nav>
+
+				<!-- Settings (hosts the Dev Mode toggle) -->
+				<SettingsMenu />
 
 				<!-- Light / dark toggle -->
 				<button
