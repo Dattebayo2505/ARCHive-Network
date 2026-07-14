@@ -136,8 +136,8 @@
 	const pages = $derived(rows ? Math.max(1, Math.ceil(rows.total / rows.limit)) : 1);
 	const columns = $derived(
 		table === 'media'
-			? ['fbid', 'media_type', 'fb_album_id', 'caption', 'creation_at', 'storage_path']
-			: ['fb_album_id', 'title', 'is_derived', 'date', 'description']
+			? ['fbid', 'media_type', 'fb_album_id', 'hashtag', 'caption', 'creation_at', 'storage_path']
+			: ['fb_album_id', 'title', 'hashtag', 'is_derived', 'date', 'description']
 	);
 
 	function cell(value) {

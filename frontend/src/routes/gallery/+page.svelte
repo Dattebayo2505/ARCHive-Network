@@ -18,6 +18,7 @@
 	import SelectionStrip from '$lib/components/SelectionStrip.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import BuildConfirmDialog from '$lib/components/BuildConfirmDialog.svelte';
+	import HashtagPills from '$lib/components/HashtagPills.svelte';
 	import { dragScrollY } from '$lib/dragScrollY.js';
 
 	let { data } = $props();
@@ -988,10 +989,15 @@
 					</div>
 				{/if}
 
-				{#if activeAlbum.post_timestamp}
-					<p class="mt-2 text-xs font-medium text-surface-600 uppercase tracking-wide">
-						Date posted on FB: {formatFBDate(activeAlbum.post_timestamp)}
-					</p>
+				{#if activeAlbum.post_timestamp || activeAlbum.hashtags?.length}
+					<div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+						{#if activeAlbum.post_timestamp}
+							<p class="text-xs font-medium text-surface-600 uppercase tracking-wide">
+								Date posted on FB: {formatFBDate(activeAlbum.post_timestamp)}
+							</p>
+						{/if}
+						<HashtagPills tags={activeAlbum.hashtags ?? []} />
+					</div>
 				{/if}
 
 				<div class="mt-3 mb-1 flex items-center gap-2">
