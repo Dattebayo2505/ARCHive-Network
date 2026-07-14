@@ -148,13 +148,18 @@ def grouping_export_root(tmp_path: Path) -> Path:
     def att(*fbids):
         return [{"data": [{"media": _photo_record("Mobileuploads_777", f, f.upper())}]} for f in fbids]
 
+    # Hashtags sit on the BODY line, never the headline: `caption_headline()` reads the first
+    # non-empty line, so tagging the body leaves every derived album's name — and therefore
+    # grouping.py's clustering and all its tests — completely unchanged.
     posts = [
-        {"data": [{"post": "HEADLINE ONE\n\nBody one."}], "attachments": att("g01", "g02")},
-        {"data": [{"post": "HEADLINE TWO\n\nBody two."}], "attachments": att("g03", "g04", "g05")},
+        {"data": [{"post": "HEADLINE ONE\n\nBody one. #ARCHEVT #ArchersNetwork"}],
+         "attachments": att("g01", "g02")},
+        {"data": [{"post": "HEADLINE TWO\n\nBody two. #ARCHSports"}],
+         "attachments": att("g03", "g04", "g05")},
         {"data": [{"post": "Solo headline\n\nSolo body."}], "attachments": att("s01")},
         {"data": [{"post": "BREAKING: fire"}], "attachments": att("t01")},
         # a01 lives in a non-special album but shares HEADLINE ONE's caption
-        {"data": [{"post": "HEADLINE ONE\n\nBody one."}],
+        {"data": [{"post": "HEADLINE ONE\n\nBody one. #ARCHEVT #ArchersNetwork"}],
          "attachments": [{"data": [{"media": _photo_record("AnimoFest_111", "a01", "A1")}]}]},
     ]
     (root / "posts" / "profile_posts_1.json").write_text(json.dumps(posts), encoding="utf-8")
