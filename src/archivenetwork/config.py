@@ -38,8 +38,7 @@ class Settings(BaseSettings):
     # Off unless `database_url` is set; every /api/dev/* route 404s without it.
     #
     # `media_root` / `media_base_url` are the *object-store root* — the part before the key.
-    # A key already begins with "media/" (see loader.storage.media_key), so the root must not
-    # also be called "media" or every object double-nests (workspace/media/media/2026/...).
+    # A key begins with "fb-exports/<hashtag>/<album-slug>/" (see loader.storage.media_key).
     # Read URL = <media_base_url>/<storage_path>; in prod that base is a CDN domain instead.
     database_url: str | None = None
     media_root: Path = Path("workspace/store")
