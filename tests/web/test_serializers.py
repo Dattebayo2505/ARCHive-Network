@@ -105,6 +105,65 @@ def test_payload_includes_videos(tmp_path, limits):
     assert [subset(p) for p in payload["videos"]] == [{"fbid": "v01", "caption": "Watch this clip", "exists": True, "selected": False}]
 
 
+def test_photo_payload_splits_hashtags_out_of_the_caption(tmp_path, limits):
+    inv = ExportInventory(
+        albums=[
+            Album(
+                fb_album_id="g01", name="HEADLINE ONE",
+                photos=[Photo(fbid="g01", original_uri="p/g01.jpg", resolved_path="x",
+                              caption="Body one. #ARCHEVT #ArchersNetwork", exists=True,
+                              album_fbid="g01")],
+            ),
+        ],
+    )
+    sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
+    photo = inventory_payload("e", inv, sel, 10, limits)["albums"][0]["photos"][0]
+
+    assert photo["caption"] == "Body one."
+    assert photo["hashtags"] == ["ARCHEVT", "ArchersNetwork"]
+
+
+def test_album_payload_splits_hashtags_out_of_the_description(tmp_path, limits):
+    inv = ExportInventory(
+        albums=[
+            Album(fb_album_id="111", name="Animo Fest",
+                  description="Great game today! #ARCHEVT #ARCH", photos=[]),
+        ],
+    )
+    sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
+    album = inventory_payload("e", inv, sel, 10, limits)["albums"][0]
+
+    assert album["description"] == "Great game today!"
+    assert album["hashtags"] == ["ARCHEVT", "ARCH"]
+
+
+def test_album_without_tags_reports_an_empty_list(tmp_path, limits):
+    inv = ExportInventory(
+        albums=[Album(fb_album_id="111", name="Animo Fest",
+                      description="No tags here.", photos=[])],
+    )
+    sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
+    album = inventory_payload("e", inv, sel, 10, limits)["albums"][0]
+
+    assert album["hashtags"] == []
+    assert album["description"] == "No tags here."
+
+
+def test_archive_payload_splits_hashtags_too(tmp_path, limits):
+    inv = ExportInventory(
+        archived_photos=[
+            Photo(fbid="u01", original_uri="p/u01.jpg", resolved_path="x",
+                  caption="BREAKING: fire #ARCHNews", exists=True, archived=True,
+                  archive_tag="BREAKING"),
+        ],
+    )
+    sel = SelectionState(tmp_path / "sel.json", DefaultPolicy())
+    archived = inventory_payload("e", inv, sel, 10, limits)["archive"][0]
+
+    assert archived["caption"] == "BREAKING: fire"
+    assert archived["hashtags"] == ["ARCHNews"]
+
+
 def test_payload_includes_album_origin(tmp_path, limits):
     inv = ExportInventory(
         albums=[

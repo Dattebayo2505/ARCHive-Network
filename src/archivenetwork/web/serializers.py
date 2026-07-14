@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..inventory.hashtags import split_hashtags
 from ..inventory.models import Album, ExportInventory, Photo
 from ..selection.state import SelectionState
 from ..inventory.limits import LimitState
@@ -7,9 +8,13 @@ from ..thumbnails.video_store import VideoThumbnailStore
 
 
 def _photo(p: Photo, selected: bool | None = None) -> dict:
+    # Hashtags leave the backend as structured data, never inline in prose: the caption is
+    # clean everywhere it renders (tiles, preview, alt/title) and the UI parses nothing.
+    caption, hashtags = split_hashtags(p.caption)
     d: dict = {
         "fbid": p.fbid,
-        "caption": p.caption,
+        "caption": caption,
+        "hashtags": hashtags,
         "exists": p.exists,
         "creation_at": p.creation_at.isoformat() if p.creation_at else None,
         "post_timestamp": p.post_timestamp.isoformat() if p.post_timestamp else None,
@@ -24,9 +29,11 @@ def _photo(p: Photo, selected: bool | None = None) -> dict:
 
 
 def _archive_photo(p: Photo) -> dict:
+    caption, hashtags = split_hashtags(p.caption)
     return {
         "fbid": p.fbid,
-        "caption": p.caption,
+        "caption": caption,
+        "hashtags": hashtags,
         "archive_tag": p.archive_tag,
         "exists": p.exists,
         "creation_at": p.creation_at.isoformat() if p.creation_at else None,
@@ -50,11 +57,13 @@ def _album_cap(a: Album, max_per_album: int, limits: LimitState) -> int | None:
 
 
 def _album(a: Album, selection: SelectionState, max_per_album: int, limits: LimitState) -> dict:
+    description, hashtags = split_hashtags(a.description)
     return {
         "fb_album_id": a.fb_album_id,
         "name": a.name,
         "original_name": a.original_name,
-        "description": a.description,
+        "description": description,
+        "hashtags": hashtags,
         "origin": a.origin,
         "post_timestamp": a.post_timestamp.isoformat() if a.post_timestamp else None,
         "count_selected": selection.count(a.fb_album_id),
