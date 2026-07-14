@@ -108,3 +108,33 @@ def test_archived_media_never_appears(ready_root: Path):
 
 def test_every_uri_is_prefix_stripped(ready_root: Path):
     assert all(m.uri.startswith("posts/") for m in read_ready(ready_root).media)
+
+
+def test_captions_reach_the_rows_with_hashtags_stripped(ready_root: Path):
+    data = read_ready(ready_root)
+    g01 = next(m for m in data.media if m.fbid == "g01")
+    assert g01.caption == "HEADLINE ONE\n\nBody one."
+    assert "#" not in g01.caption
+
+
+def test_album_hashtag_is_derived_from_its_photos_captions(ready_root: Path):
+    data = read_ready(ready_root)
+    by_title = {a.title: a for a in data.albums}
+    assert by_title["HEADLINE ONE"].hashtag == "ARCHEVT"
+    assert by_title["HEADLINE TWO"].hashtag == "ARCHSPORTS"
+    assert by_title["Animo Fest"].hashtag == "ARCHEVT"
+
+
+def test_media_inherits_its_albums_hashtag_and_slug_group(ready_root: Path):
+    data = read_ready(ready_root)
+    g01 = next(m for m in data.media if m.fbid == "g01")
+    assert g01.hashtag == "ARCHEVT"
+    assert g01.group == "headline-one"
+
+
+def test_unanchored_media_has_no_tag_and_the_unanchored_group(ready_root: Path):
+    data = read_ready(ready_root)
+    s01 = next(m for m in data.media if m.fbid == "s01")
+    assert s01.fb_album_id is None
+    assert s01.hashtag is None
+    assert s01.group == "unanchored"

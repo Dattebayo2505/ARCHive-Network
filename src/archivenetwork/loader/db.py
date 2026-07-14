@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS photo_album (
     title        text NOT NULL,
     description  text,
     date         timestamptz,
+    hashtag      text,
     is_derived   boolean NOT NULL DEFAULT false
 );
 
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS media (
     title               text,
     caption             text,
     description         text,
+    hashtag             text,
     storage_path        text NOT NULL,
     original_fb_uri     text,
     creation_at         timestamptz,

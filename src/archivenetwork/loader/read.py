@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from ..inventory.hashtags import canonical_tag, slugify, split_hashtags
 from ..inventory.parser import album_id_from_uri, photo_fbid
 from ..inventory.text import epoch_to_dt, fix_mojibake
 
@@ -24,6 +25,7 @@ class AlbumRow:
     description: str | None
     date: datetime | None
     is_derived: bool
+    hashtag: str | None = None
 
 
 @dataclass
@@ -36,6 +38,8 @@ class MediaRow:
     description: str | None
     uri: str  # 'posts/media/...' — both the path under ready/ and the original_fb_uri
     creation_at: datetime | None
+    hashtag: str | None = None
+    group: str = "unanchored"  # the object-key's second segment: album slug | videos | unanchored
 
 
 @dataclass
@@ -45,15 +49,27 @@ class ReadResult:
 
 
 def _clean(s: str | None) -> str | None:
-    """Decode mojibake and normalise empty strings to None.
+    """Decode mojibake, strip hashtags, and normalise empty strings to None.
 
     The ready folder is *mixed*: derived album names are already decoded, while post bodies and
     video descriptions are still raw. `fix_mojibake` is idempotent on already-decoded text, so
     applying it uniformly is safe and we needn't track which is which.
+
+    Hashtags are stripped here, at the ETL's mouth, so Postgres stores clean prose. They are
+    NOT stripped from the ready folder, which stays a faithful FB-shaped mirror.
     """
     if not s:
         return None
-    return fix_mojibake(s) or None
+    prose, _tags_found = split_hashtags(fix_mojibake(s))
+    return prose or None
+
+
+def _tags(s: str | None) -> list[str]:
+    """The hashtags in one raw string, decoded first."""
+    if not s:
+        return []
+    _prose, tags = split_hashtags(fix_mojibake(s))
+    return tags
 
 
 def _read_videos(posts: Path) -> dict[str, dict]:
@@ -98,6 +114,7 @@ def _read_feed(posts: Path) -> dict[str, dict]:
                 feed[photo_fbid(media["uri"])] = {
                     "uri": media["uri"],
                     "caption": _clean(body),
+                    "raw_caption": body,  # tags survive here; `caption` is already stripped
                     "title": _clean(media.get("title")),
                     "post_ts": post_ts,
                     "creation_ts": media.get("creation_timestamp"),
@@ -123,14 +140,27 @@ def read_ready(ready_root: Path) -> ReadResult:
         album_id = album_id_from_uri(photos[0]["uri"])
         if album_id is None:
             continue
+        # The album's tag: from its description when the JSON carries one (the builder writes
+        # only {"name", "photos"}, so it usually does not), else from its photos' post captions.
+        tags = _tags(raw.get("description"))
+        if not tags:
+            for p in photos:
+                tags = _tags(feed.get(photo_fbid(p["uri"]), {}).get("raw_caption"))
+                if tags:
+                    break
+        album_tag = canonical_tag(tags)
+        album_title = _clean(raw.get("name")) or album_id
+        album_group = slugify(album_title) or album_id
+
         albums.append(
             AlbumRow(
                 fb_album_id=album_id,
-                title=_clean(raw.get("name")) or album_id,
+                title=album_title,
                 description=_clean(raw.get("description")),
                 date=None,  # backfilled below from the album's earliest media
                 # A derived caption-album is written as <synthId>.json, so its stem IS its id.
                 is_derived=album_path.stem == album_id,
+                hashtag=album_tag,
             )
         )
         for p in photos:
@@ -146,6 +176,8 @@ def read_ready(ready_root: Path) -> ReadResult:
                 description=None,
                 uri=p["uri"],
                 creation_at=epoch_to_dt(ts) if ts else None,
+                hashtag=album_tag,
+                group=album_group,
             )
 
     # Feed-only media: unanchored photos and the video posters.
@@ -154,6 +186,7 @@ def read_ready(ready_root: Path) -> ReadResult:
             continue
         video = videos.get(fbid)
         ts = hit.get("post_ts") or hit.get("creation_ts")
+        own_tags = _tags(hit.get("raw_caption")) or _tags((video or {}).get("description"))
         media[fbid] = MediaRow(
             fbid=fbid,
             media_type="video" if video else "photo",
@@ -163,6 +196,8 @@ def read_ready(ready_root: Path) -> ReadResult:
             description=_clean(video["description"]) if video else None,
             uri=hit["uri"],
             creation_at=epoch_to_dt(ts) if ts else None,
+            hashtag=canonical_tag(own_tags),
+            group="videos" if video else "unanchored",
         )
 
     # Videos listed in videos.json but absent from the feed (defensive; not seen in practice).
@@ -179,6 +214,8 @@ def read_ready(ready_root: Path) -> ReadResult:
             description=_clean(video.get("description")),
             uri=video["uri"],
             creation_at=epoch_to_dt(ts) if ts else None,
+            hashtag=canonical_tag(_tags(video.get("description"))),
+            group="videos",
         )
 
     # Unanchored media. Added last, so where a loose photo is *also* in the feed the feed's

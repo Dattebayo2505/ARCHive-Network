@@ -16,22 +16,25 @@ from .read import read_ready
 from .storage import Storage
 
 _UPSERT_ALBUM = """
-INSERT INTO photo_album (fb_album_id, title, description, date, is_derived)
-VALUES (%s, %s, %s, %s, %s)
+INSERT INTO photo_album (fb_album_id, title, description, date, is_derived, hashtag)
+VALUES (%s, %s, %s, %s, %s, %s)
 ON CONFLICT (fb_album_id) DO UPDATE SET
     title       = EXCLUDED.title,
     description = EXCLUDED.description,
     date        = EXCLUDED.date,
-    is_derived  = EXCLUDED.is_derived
+    is_derived  = EXCLUDED.is_derived,
+    hashtag     = EXCLUDED.hashtag
 RETURNING (xmax = 0) AS inserted
 """
 
 # `storage_path` is deliberately ABSENT from the UPDATE set — this is what enforces the key
-# freeze at the SQL level. Do not add it.
+# freeze at the SQL level, and it is what makes the hashtag/album-grouped key safe: an album
+# rename yields a stale-but-valid key instead of a stranded object. Do not add it.
+# (`hashtag` IS updatable — the *tag* may be corrected on a re-load; the *key* may not.)
 _UPSERT_MEDIA = """
 INSERT INTO media (fbid, media_type, fb_album_id, title, caption, description,
-                   storage_path, original_fb_uri, creation_at, source_workspace_id)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   storage_path, original_fb_uri, creation_at, source_workspace_id, hashtag)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 ON CONFLICT (fbid) DO UPDATE SET
     media_type          = EXCLUDED.media_type,
     fb_album_id         = EXCLUDED.fb_album_id,
@@ -41,6 +44,7 @@ ON CONFLICT (fbid) DO UPDATE SET
     original_fb_uri     = EXCLUDED.original_fb_uri,
     creation_at         = EXCLUDED.creation_at,
     source_workspace_id = EXCLUDED.source_workspace_id,
+    hashtag             = EXCLUDED.hashtag,
     updated_at          = now()
 RETURNING (xmax = 0) AS inserted
 """
@@ -84,7 +88,9 @@ def load(
     # 3. Store the bytes (idempotent), reusing the frozen key where one exists.
     keyed: list[tuple] = []
     for row, src in resolved:
-        key = existing.get(row.fbid) or storage.key_for(row.fbid, row.creation_at, src.suffix)
+        key = existing.get(row.fbid) or storage.key_for(
+            row.fbid, row.hashtag, row.group, src.suffix
+        )
         try:
             if storage.put(src, key):
                 result.files_stored += 1
@@ -100,7 +106,14 @@ def load(
         for album in data.albums:
             cur.execute(
                 _UPSERT_ALBUM,
-                (album.fb_album_id, album.title, album.description, album.date, album.is_derived),
+                (
+                    album.fb_album_id,
+                    album.title,
+                    album.description,
+                    album.date,
+                    album.is_derived,
+                    album.hashtag,
+                ),
             )
             if cur.fetchone()[0]:
                 result.albums_inserted += 1
@@ -121,6 +134,7 @@ def load(
                     row.uri,
                     row.creation_at,
                     workspace_id,
+                    row.hashtag,
                 ),
             )
             if cur.fetchone()[0]:
