@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from ..config import settings
 from ..reveal import RevealError, reveal_path
-from ..transform.ready_index import scan_ready_builds
+from ..transform.ready_index import scan_ready_builds, summarise_build
 
 router = APIRouter()
 
@@ -24,6 +24,19 @@ def _ready_root():
 def list_ready(request: Request) -> dict:
     builds = scan_ready_builds(_ready_root())
     return {"builds": [asdict(b) for b in builds]}
+
+
+@router.get("/api/ready/current")
+def current_ready(request: Request) -> dict:
+    """The ready build for the *loaded* workspace, or ``{"build": null}`` if it has
+    never been built. Drives the gallery's "already built" indicator and the
+    overwrite warning on the Build button — the build always writes to
+    ``ready/<workspace_id>/``, so that one folder is the only one at risk."""
+    session = request.app.state.session
+    if session is None:
+        raise HTTPException(status_code=404, detail="No export loaded")
+    build = summarise_build(_ready_root() / session.workspace_id)
+    return {"build": asdict(build) if build is not None else None}
 
 
 @router.post("/api/ready/reveal")

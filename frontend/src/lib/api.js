@@ -324,6 +324,21 @@ export async function listReadyBuilds(fetchFn = fetch) {
 	}
 }
 
+/**
+ * The ready build for the loaded workspace, or `null` if it has never been built.
+ * Never throws — an unreachable server reads as "no build", which only costs the
+ * user the overwrite warning, never a wrong one.
+ */
+export async function getCurrentReadyBuild(fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/ready/current'));
+		if (!res.ok) return null;
+		return (await res.json()).build ?? null;
+	} catch {
+		return null;
+	}
+}
+
 /** Ask the local server to open the OS file manager on a specific ready build. */
 export async function revealReadyBuild(id, fetchFn = fetch) {
 	try {

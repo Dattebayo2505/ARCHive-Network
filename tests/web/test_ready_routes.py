@@ -34,6 +34,48 @@ def test_list_ready_empty_when_no_ready_dir(tmp_path: Path, monkeypatch):
     assert client.get("/api/ready").json() == {"builds": []}
 
 
+def test_current_ready_404s_without_a_session(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_app())
+    assert client.get("/api/ready/current").status_code == 404
+
+
+def test_current_ready_is_null_before_a_build(export_root: Path, tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_app())
+    client.post("/api/ingest/folder", json={"folder": str(export_root)})
+    assert client.get("/api/ready/current").json() == {"build": None}
+
+
+def test_current_ready_reports_the_build_after_building(
+    export_root: Path, tmp_path: Path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("archivenetwork.web.routes_build.reveal_path", lambda p: None)
+    client = TestClient(create_app())
+    client.post("/api/ingest/folder", json={"folder": str(export_root)})
+    client.post("/api/toggle", json={"album_fbid": "111", "photo_fbid": "a01"})
+    client.post("/api/build")
+
+    build = client.get("/api/ready/current").json()["build"]
+    # Named from the workspace id, not the generic extracted-root name.
+    assert build["id"] == "export"
+    assert build["size_bytes"] > 0
+    assert build["photos"] >= 1
+
+
+def test_current_ready_ignores_other_workspaces_builds(
+    export_root: Path, tmp_path: Path, monkeypatch
+):
+    """A build belonging to a *different* workspace must not read as "already built"
+    for the loaded one — the overwrite warning would be a lie."""
+    monkeypatch.chdir(tmp_path)
+    _build_into_ready(export_root, tmp_path, name="someone-elses-build")
+    client = TestClient(create_app())
+    client.post("/api/ingest/folder", json={"folder": str(export_root)})
+    assert client.get("/api/ready/current").json() == {"build": None}
+
+
 def test_reveal_build_ok(export_root: Path, tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _build_into_ready(export_root, tmp_path)

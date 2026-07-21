@@ -1,7 +1,8 @@
 <script>
 	import { trapFocus } from '$lib/focusTrap.js';
+	import { formatSize } from '$lib/stats.js';
 	import ConfirmDialog from './ConfirmDialog.svelte';
-	
+
 	let {
 		open = false,
 		albumsToBuild = [],
@@ -9,6 +10,9 @@
 		totalVideos = 0,
 		totalMB = "0.00",
 		defaultMax = 10,
+		// The existing ready build for this workspace (from GET /api/ready/current), or
+		// null. When set, the build is an *overwrite* and says so — twice.
+		existingBuild = null,
 		onConfirm,
 		onCancel
 	} = $props();
@@ -32,6 +36,17 @@
 			day: 'numeric',
 			year: 'numeric'
 		}).format(date);
+	}
+
+	// built_ts is a Unix timestamp in seconds (Python's st_mtime), not ms.
+	function formatBuiltAt(ts) {
+		return new Intl.DateTimeFormat('en-US', {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		}).format(new Date(ts * 1000));
 	}
 </script>
 
@@ -59,10 +74,35 @@
 					</svg>
 				</span>
 				<div class="mt-0.5 w-full">
-					<h2 id="confirm-title" class="text-lg font-semibold text-surface-900">Build ready folder</h2>
+					<h2 id="confirm-title" class="text-lg font-semibold text-surface-900">
+						{existingBuild ? 'Rebuild ready folder' : 'Build ready folder'}
+					</h2>
 					<p class="mt-1 text-sm leading-relaxed text-surface-600">Review your selection before building the ready directory.</p>
 				</div>
 			</div>
+
+			<!-- Overwrite warning. Both warning tokens are theme-stable (only primary-100 is
+			     re-declared under .dark), so this pale-tint/dark-ink pairing reads the same
+			     in light and dark. -->
+			{#if existingBuild}
+				<div
+					class="mx-6 mb-4 flex items-start gap-3 rounded-xl border border-warning-300 bg-warning-100 px-4 py-3 shrink-0"
+					data-testid="overwrite-warning"
+				>
+					<svg viewBox="0 0 24 24" class="mt-0.5 size-5 shrink-0 text-warning-900" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+						<line x1="12" y1="9" x2="12" y2="13" />
+						<line x1="12" y1="17" x2="12.01" y2="17" />
+					</svg>
+					<div class="min-w-0 text-sm leading-relaxed text-warning-900">
+						<p class="font-semibold">A ready folder already exists for this workspace.</p>
+						<p class="mt-0.5">
+							Built {formatBuiltAt(existingBuild.built_ts)} · {formatSize(existingBuild.size_bytes)}{#if existingBuild.photos != null} · {existingBuild.photos} photo{existingBuild.photos === 1 ? '' : 's'}{/if}. Building again
+							<strong class="font-semibold">overwrites</strong> it with your current selection.
+						</p>
+					</div>
+				</div>
+			{/if}
 
 			<!-- Body summary -->
 			<div class="px-6 pb-4 shrink-0">
@@ -155,7 +195,7 @@
 					class="rounded-lg px-4 py-2 text-sm font-semibold text-primary-50 bg-primary-700 hover:bg-primary-800 shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
 					onclick={() => (finalConfirmOpen = true)}
 				>
-					Yes, build it
+					{existingBuild ? 'Yes, overwrite it' : 'Yes, build it'}
 				</button>
 			</div>
 		</div>
@@ -164,9 +204,11 @@
 
 <ConfirmDialog
 	open={finalConfirmOpen}
-	title="Confirm Build"
-	message="Are you sure you want to proceed with building the ready folder? This process will organize all selected media."
-	confirmLabel="Confirm"
+	title={existingBuild ? 'Overwrite existing build?' : 'Confirm Build'}
+	message={existingBuild
+		? `The ready folder "${existingBuild.display_name}" was built ${formatBuiltAt(existingBuild.built_ts)}. Building again replaces it with your current selection — the previous build cannot be recovered.`
+		: 'Are you sure you want to proceed with building the ready folder? This process will organize all selected media.'}
+	confirmLabel={existingBuild ? 'Overwrite' : 'Confirm'}
 	cancelLabel="Cancel"
 	destructive={true}
 	onCancel={() => (finalConfirmOpen = false)}

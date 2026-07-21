@@ -1,7 +1,8 @@
 <script>
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
-	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum, increaseLimit, undoIncreaseLimit, getInventory } from '$lib/api.js';
+	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum, increaseLimit, undoIncreaseLimit, getInventory, getCurrentReadyBuild, revealReadyBuild } from '$lib/api.js';
+	import { formatSize } from '$lib/stats.js';
 	import { prefetchAlbumThumbs, clearPrefetchCache } from '$lib/imageCache.js';
 	import { seedMissingThumbnails, thumbnailMissing } from '$lib/videoThumbs.js';
 	import { DEFAULT_SIZE, SIZE_STORAGE_KEY, VIEW_SIZES } from '$lib/viewSizes.js';
@@ -59,6 +60,16 @@
 	}
 	let buildResult = $state(null);
 	let building = $state(false);
+	// The ready folder already on disk for this workspace, or null. The build always
+	// writes to ready/<workspace_id>/, so a second build overwrites this one — the UI
+	// says so before and during the confirm.
+	let existingBuild = $state(null);
+
+	async function refreshExistingBuild() {
+		existingBuild = await getCurrentReadyBuild();
+	}
+
+	onMount(refreshExistingBuild);
 	let gridSize = $state(DEFAULT_SIZE);
 	let previewOpen = $state(false);
 	let previewStart = $state(0);
@@ -383,6 +394,26 @@
 		building = true;
 		buildResult = await build();
 		building = false;
+		// The folder that just landed is the one the *next* build would overwrite.
+		await refreshExistingBuild();
+	}
+
+	async function revealExistingBuild() {
+		if (!existingBuild) return;
+		const result = await revealReadyBuild(existingBuild.id);
+		if (!result.ok) {
+			toaster.error({ title: "Couldn't open the file manager", description: result.error });
+		}
+	}
+
+	// built_ts is a Unix timestamp in seconds (Python's st_mtime), not ms.
+	function formatBuiltAt(ts) {
+		return new Intl.DateTimeFormat(undefined, {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		}).format(new Date(ts * 1000));
 	}
 
 	function openPreviewAt(index) {
@@ -690,6 +721,28 @@
 					</span>
 				{/if}
 			</div>
+			{#if existingBuild}
+				<!-- A ready folder already exists for this workspace: say so, and make it
+				     reachable, before the user builds over it. -->
+				<div class="mt-2 shrink-0 rounded-xl border border-surface-300 bg-surface-100 px-3 py-2 text-xs">
+					<p class="flex items-center gap-1.5 font-medium text-surface-800">
+						<svg viewBox="0 0 24 24" class="size-4 shrink-0 text-primary-700" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M20 6 9 17l-5-5" />
+						</svg>
+						Ready folder built
+					</p>
+					<p class="mt-0.5 tabular-nums text-surface-600">
+						{formatBuiltAt(existingBuild.built_ts)} · {formatSize(existingBuild.size_bytes)}
+					</p>
+					<button
+						type="button"
+						class="mt-1.5 w-full rounded-lg border border-surface-300 bg-surface-50 px-2 py-1 font-medium text-surface-800 transition-colors hover:bg-surface-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+						onclick={revealExistingBuild}
+					>
+						Open folder
+					</button>
+				</div>
+			{/if}
 			<button
 				class="mt-2 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-700 px-4 py-3 font-semibold text-primary-50 shadow-sm transition-colors hover:bg-primary-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-progress disabled:opacity-70"
 				type="button"
@@ -705,7 +758,7 @@
 				{:else}
 					<svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="1.75"
 						stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4" /></svg>
-					Build ready folder
+					{existingBuild ? 'Rebuild ready folder' : 'Build ready folder'}
 				{/if}
 			</button>
 		</aside>
@@ -802,11 +855,19 @@
 			<div class="rail-build-wrapper">
 				<button
 					type="button"
-					class="rail-build-btn"
+					class="rail-build-btn relative"
 					onclick={() => (buildConfirm = true)}
 					disabled={building}
-					title={building ? 'Building…' : 'Build ready folder'}
-					aria-label={building ? 'Building ready folder' : 'Build ready folder'}
+					title={building
+						? 'Building…'
+						: existingBuild
+							? `Rebuild ready folder — one already exists (built ${formatBuiltAt(existingBuild.built_ts)}) and will be overwritten`
+							: 'Build ready folder'}
+					aria-label={building
+						? 'Building ready folder'
+						: existingBuild
+							? 'Rebuild ready folder, overwriting the existing one'
+							: 'Build ready folder'}
 				>
 					{#if building}
 						<span
@@ -816,6 +877,13 @@
 					{:else}
 						<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.75"
 							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4" /></svg>
+						{#if existingBuild}
+							<!-- "already built" dot; the collapsed rail has no room for words. -->
+							<span
+								class="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-primary-700 bg-warning-400"
+								aria-hidden="true"
+							></span>
+						{/if}
 					{/if}
 				</button>
 			</div>
@@ -1177,6 +1245,7 @@
 	totalImages={totalSelected}
 	totalVideos={totalSelectedVideos}
 	totalMB={totalSelectedMB}
+	{existingBuild}
 	onCancel={() => (buildConfirm = false)}
 	onConfirm={async () => {
 		buildConfirm = false;

@@ -39,35 +39,38 @@ def _tree_size(root: Path) -> int:
     return total
 
 
+def summarise_build(path: Path) -> ReadyBuild | None:
+    """Summarise one ``ready/<id>/`` folder, or ``None`` if it isn't a real build.
+
+    A real build is a directory containing a ``posts/`` manifest folder; stray files,
+    empty dirs and missing paths all read as "no build here".
+    """
+    if not path.is_dir() or not (path / "posts").is_dir():
+        return None
+    photos = videos = albums = None
+    try:
+        result = read_ready(path)
+        albums = len(result.albums)
+        photos = sum(1 for m in result.media if m.media_type == "photo")
+        videos = sum(1 for m in result.media if m.media_type == "video")
+    except Exception:
+        # A malformed build is still reported (with null counts) so the user can see
+        # and reveal it; it must never break the caller.
+        pass
+    return ReadyBuild(
+        id=path.name,
+        display_name=display_name(path.name),
+        built_ts=path.stat().st_mtime,
+        size_bytes=_tree_size(path),
+        photos=photos,
+        videos=videos,
+        albums=albums,
+    )
+
+
 def scan_ready_builds(ready_root: Path) -> list[ReadyBuild]:
     if not ready_root.is_dir():
         return []
-    builds: list[ReadyBuild] = []
-    for child in sorted(ready_root.iterdir()):
-        # A real build is a directory containing a ``posts/`` manifest folder;
-        # stray files or empty dirs are ignored.
-        if not child.is_dir() or not (child / "posts").is_dir():
-            continue
-        photos = videos = albums = None
-        try:
-            result = read_ready(child)
-            albums = len(result.albums)
-            photos = sum(1 for m in result.media if m.media_type == "photo")
-            videos = sum(1 for m in result.media if m.media_type == "video")
-        except Exception:
-            # A malformed build is still listed (with null counts) so the user can
-            # see and reveal it; it must never break the whole listing.
-            pass
-        builds.append(
-            ReadyBuild(
-                id=child.name,
-                display_name=display_name(child.name),
-                built_ts=child.stat().st_mtime,
-                size_bytes=_tree_size(child),
-                photos=photos,
-                videos=videos,
-                albums=albums,
-            )
-        )
+    builds = [b for child in sorted(ready_root.iterdir()) if (b := summarise_build(child))]
     builds.sort(key=lambda b: b.built_ts, reverse=True)
     return builds
