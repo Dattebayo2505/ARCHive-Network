@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     database_url: str | None = None
     media_root: Path = Path("workspace/store")
     media_base_url: str = "/store"
+
+    # --- S3 upload (on-demand). Independent of dev-mode/Postgres. AWS S3 only. ---
+    # Credentials are optional: passed to boto3 only when both are set, else boto3's
+    # default credential chain (env / ~/.aws / SSO / instance role) resolves them.
+    s3_bucket: str | None = None
+    s3_region: str = "ap-southeast-1"
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+
     host: str = "127.0.0.1"
     port: int = 8000
     cors_origins: list[str] = [

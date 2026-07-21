@@ -397,4 +397,25 @@ export async function devValidate(fetchFn = fetch) {
 	return { ok: res.ok, status: res.status, body: await res.json() };
 }
 
+// --- On-demand S3 upload. Gated on the backend having ARCHIVENETWORK_S3_BUCKET set;
+// GET status 200s regardless (enabled:false when unset) so the panel can reveal itself. ---
+
+/** Whether S3 upload is configured, and against which bucket/region. Never throws. */
+export async function s3Status(fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/s3/status'));
+		if (!res.ok) return { enabled: false };
+		return res.json();
+	} catch {
+		return { enabled: false };
+	}
+}
+
+/** Push the current built workspace's ready folder to S3. 404=not configured, 409=not built,
+ *  502=S3 unreachable. */
+export async function uploadToS3(fetchFn = fetch) {
+	const res = await fetchFn(url('/api/s3/upload'), { method: 'POST' });
+	return { ok: res.ok, status: res.status, body: await res.json() };
+}
+
 export { API_BASE };

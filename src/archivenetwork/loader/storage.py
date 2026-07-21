@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import mimetypes
 import shutil
 from pathlib import Path
 from typing import Protocol
+
+import boto3
+from botocore.exceptions import ClientError
 
 UNCATEGORIZED = "uncategorized"
 
@@ -38,6 +42,7 @@ class Storage(Protocol):
     def key_for(self, fbid: str, hashtag: str | None, group: str, suffix: str) -> str: ...
     def exists(self, key: str) -> bool: ...
     def put(self, src: Path, key: str) -> bool: ...
+    def ensure_ready(self) -> None: ...
 
 
 class LocalStorage:
@@ -59,4 +64,59 @@ class LocalStorage:
             return False
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
+        return True
+
+    def ensure_ready(self) -> None:
+        """No-op preflight for the local store beyond making sure the root exists."""
+        self.root.mkdir(parents=True, exist_ok=True)
+
+
+class S3Storage:
+    """AWS S3 backend. Computes the SAME key as LocalStorage — only the destination
+    differs, so the DB/store stays backend-agnostic. `client` is injectable for tests."""
+
+    def __init__(
+        self,
+        bucket: str,
+        region: str,
+        access_key_id: str | None = None,
+        secret_access_key: str | None = None,
+        client=None,
+    ) -> None:
+        self.bucket = bucket
+        if client is not None:
+            self.client = client
+        else:
+            kwargs = {"region_name": region}
+            # Pass explicit creds only when both are set; otherwise boto3's default
+            # credential chain (env / ~/.aws / SSO / instance role) resolves them.
+            if access_key_id and secret_access_key:
+                kwargs["aws_access_key_id"] = access_key_id
+                kwargs["aws_secret_access_key"] = secret_access_key
+            self.client = boto3.client("s3", **kwargs)
+
+    def key_for(self, fbid: str, hashtag: str | None, group: str, suffix: str) -> str:
+        return media_key(fbid, hashtag, group, suffix)
+
+    def ensure_ready(self) -> None:
+        """Preflight: fail fast on a whole-run blocker (bad creds, missing bucket,
+        no network) before we touch a single file."""
+        self.client.head_bucket(Bucket=self.bucket)
+
+    def exists(self, key: str) -> bool:
+        try:
+            self.client.head_object(Bucket=self.bucket, Key=key)
+            return True
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if code in ("404", "NoSuchKey", "NotFound"):
+                return False
+            raise
+
+    def put(self, src: Path, key: str) -> bool:
+        """Upload `src` to `key`. Returns False if the object already exists (idempotent)."""
+        if self.exists(key):
+            return False
+        ctype = mimetypes.guess_type(key)[0] or "application/octet-stream"
+        self.client.upload_file(str(src), self.bucket, key, ExtraArgs={"ContentType": ctype})
         return True

@@ -6,7 +6,9 @@
 		devSchema,
 		devStatus,
 		devValidate,
-		storeUrl
+		s3Status,
+		storeUrl,
+		uploadToS3
 	} from '$lib/api.js';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 
@@ -20,7 +22,7 @@
 	let { selectedPhotos = 0, selectedVideos = 0, onCurated = () => {} } = $props();
 
 	let status = $state(null); // null while first loading
-	let busy = $state(''); // '' | 'schema' | 'reset' | 'load' | 'validate' | 'curate'
+	let busy = $state(''); // '' | 'schema' | 'reset' | 'load' | 'validate' | 'curate' | 's3'
 	let loadResult = $state(null);
 	let report = $state(null);
 	let error = $state(''); // an actionable failure from the last action
@@ -28,6 +30,26 @@
 	let confirmCurate = $state(false);
 	let curateResult = $state(null);
 	let curateError = $state('');
+
+	let s3 = $state(null); // null while loading; { enabled, bucket?, region? }
+	let s3Result = $state(null);
+	let s3Error = $state('');
+	let confirmS3 = $state(false);
+
+	async function refreshS3() {
+		s3 = await s3Status();
+	}
+
+	async function runUpload() {
+		busy = 's3';
+		s3Error = '';
+		s3Result = null;
+		const res = await uploadToS3();
+		// 409 (not built) and 502 (S3 unreachable) are expected, actionable cases — not crashes.
+		if (!res.ok) s3Error = res.body?.detail ?? 'The S3 upload failed.';
+		else s3Result = res.body;
+		busy = '';
+	}
 
 	const hasSelection = $derived(selectedPhotos + selectedVideos > 0);
 
@@ -68,6 +90,11 @@
 	// First paint: ask the backend what it can actually do.
 	$effect(() => {
 		refreshStatus();
+	});
+
+	// Independent of dev-mode: S3 is gated on its own setting, not the database.
+	$effect(() => {
+		refreshS3();
 	});
 
 	// Re-page / re-table whenever the browser's inputs change, and once the schema appears.
@@ -261,6 +288,98 @@
 						</ul>
 					</details>
 				</div>
+			{/if}
+		</section>
+
+		<!-- ── Upload to S3 ───────────────────────────────────────────────────────────
+		     A sibling panel like auto-curate: an object-store push with NO database
+		     involvement, so it must stay outside the DB-gated block below. Gated on the
+		     backend having a bucket configured. -->
+		<section class="mb-4 rounded-xl border border-surface-300 bg-surface-50 p-5">
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div class="max-w-prose">
+					<h2 class="text-sm font-semibold text-surface-900">Upload to S3</h2>
+					{#if s3?.enabled}
+						<p class="mt-1 text-xs leading-relaxed text-surface-600">
+							Pushes this workspace's built <code
+								class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800">ready/</code
+							> media to
+							<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
+								>s3://{s3.bucket}</code
+							>
+							({s3.region}). Re-running is safe — objects already there are skipped.
+						</p>
+					{:else}
+						<p class="mt-1 text-xs leading-relaxed text-surface-600">
+							Not configured. Set <code
+								class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
+								>ARCHIVENETWORK_S3_BUCKET</code
+							> in <code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
+								>.env</code
+							> and restart the API.
+						</p>
+					{/if}
+				</div>
+				{#if s3?.enabled}
+					<div class="flex flex-col items-end gap-1.5">
+						{@render primaryBtn('Upload to S3', 'Uploading…', 's3', () => (confirmS3 = true))}
+					</div>
+				{/if}
+			</div>
+
+			{#if s3Error}
+				<p
+					class="mt-4 rounded-lg border border-error-200 bg-error-50 px-3 py-2 text-sm text-error-800"
+					role="alert"
+				>
+					{s3Error}
+				</p>
+			{/if}
+
+			{#if s3Result}
+				<div
+					class="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-surface-200 bg-surface-200"
+					aria-live="polite"
+				>
+					{#each [{ label: 'Uploaded', value: s3Result.uploaded }, { label: 'Skipped', value: s3Result.skipped, sub: 'already there' }, { label: 'Orphans', value: s3Result.orphans.length, sub: s3Result.orphans.length ? 'uri with no file' : 'none', warn: s3Result.orphans.length > 0 }] as stat (stat.label)}
+						<div class="bg-surface-50 px-4 py-3">
+							<p
+								class="text-lg font-semibold tabular-nums {stat.warn
+									? 'text-warning-700'
+									: 'text-surface-900'}"
+							>
+								{stat.value}
+							</p>
+							<p class="mt-0.5 text-xs font-medium text-surface-800">{stat.label}</p>
+							{#if stat.sub}<p class="text-xs text-surface-600">{stat.sub}</p>{/if}
+						</div>
+					{/each}
+				</div>
+
+				{#if s3Result.orphans.length || s3Result.errors.length}
+					<details class="group mt-3">
+						<summary
+							class="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-surface-700 select-none"
+						>
+							<svg
+								viewBox="0 0 24 24"
+								class="size-4 transition-transform group-open:rotate-90"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg
+							>
+							What was skipped
+						</summary>
+						<pre
+							class="mt-2 max-h-44 overflow-auto rounded-lg bg-surface-100 p-3 font-mono text-xs leading-relaxed text-surface-700">{[
+								...s3Result.orphans,
+								...s3Result.errors
+							].join('\n')}</pre>
+					</details>
+				{/if}
 			{/if}
 		</section>
 
@@ -633,4 +752,17 @@
 		createSchema(true);
 	}}
 	onCancel={() => (confirmReset = false)}
+/>
+
+<ConfirmDialog
+	open={confirmS3}
+	title="Upload this build to S3?"
+	message="Copies this workspace's built ready/ media to s3://{s3?.bucket} ({s3?.region}). Objects already present are skipped; nothing is deleted. Your export, ready folder, and local store are untouched."
+	confirmLabel="Upload to S3"
+	cancelLabel="Cancel"
+	onConfirm={() => {
+		confirmS3 = false;
+		runUpload();
+	}}
+	onCancel={() => (confirmS3 = false)}
 />

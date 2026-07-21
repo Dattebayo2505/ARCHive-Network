@@ -10,6 +10,7 @@ dependencies = [
     "pydantic-settings>=2.4",
     "pillow>=10.4",
     "psycopg[binary]>=3.2",
+    "boto3>=1.34",
 ]
 
 [project.scripts]
@@ -17,11 +18,11 @@ archivenetwork = "archivenetwork.main:run"
 
 # Dev/test extras for plain-pip users: `pip install -e ".[dev]"`.
 [project.optional-dependencies]
-dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.6"]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.6", "moto[s3]>=5"]
 
 # The same set as a PEP 735 dependency group so `uv sync` installs it by default.
 [dependency-groups]
-dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.6"]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.6", "moto[s3]>=5"]
 
 [build-system]
 requires = ["hatchling"]
