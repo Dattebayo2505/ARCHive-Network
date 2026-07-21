@@ -49,6 +49,7 @@ def create_app() -> FastAPI:
     from .web.routes_dev import router as dev_router
     from .web.routes_gallery import router as gallery_router
     from .web.routes_ingest import router as ingest_router
+    from .web.routes_ready import router as ready_router
     from .web.routes_video import router as video_router
     from .web.routes_workspaces import router as workspaces_router
 
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(gallery_router)
     app.include_router(video_router)
     app.include_router(build_router)
+    app.include_router(ready_router)
     app.include_router(dev_router)
 
     # Dev-mode object store, served so the Dev panel can render each row straight from its

@@ -1,9 +1,10 @@
 <script>
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { ingestFolder, ingestUpload, ingestZip, listWorkspaces, openWorkspace, removeWorkspace } from '$lib/api.js';
+	import { ingestFolder, ingestUpload, ingestZip, listReadyBuilds, listWorkspaces, openWorkspace, removeWorkspace, revealReadyBuild } from '$lib/api.js';
 	import { formatSize } from '$lib/stats.js';
 	import FolderPicker from '$lib/components/FolderPicker.svelte';
+	import ReadyBuildList from '$lib/components/ReadyBuildList.svelte';
 	import WorkspaceList from '$lib/components/WorkspaceList.svelte';
 
 	let busy = $state(false);
@@ -18,10 +19,16 @@
 	let resolving = $state(true); // true while deciding auto-resume vs. show list
 	let viewMode = $state('list'); // 'list' | 'detailed' | 'content'
 	let workspaceStatsMap = $state({});
+	let readyBuilds = $state([]);
 	let totalMediaBytes = $derived(workspaces.reduce((sum, ws) => sum + (workspaceStatsMap[ws.id]?.mediaBytes || 0), 0));
 
 	function handleStatLoad(wsId, stats) {
 		workspaceStatsMap[wsId] = stats;
+	}
+
+	async function revealBuild(id) {
+		const result = await revealReadyBuild(id);
+		if (!result.ok) errors = [result.error ?? 'Could not open the file manager.'];
 	}
 
 	async function handle(promise, label) {
@@ -85,6 +92,8 @@
 				return;
 			}
 		}
+		const ready = await listReadyBuilds();
+		readyBuilds = ready.builds ?? [];
 		resolving = false;
 	});
 
@@ -139,6 +148,16 @@
 				</div>
 				<WorkspaceList {workspaces} onOpen={openWs} onRemove={removeWs} onStatLoad={handleStatLoad} {viewMode} />
 			</div>
+		{/if}
+
+		{#if readyBuilds.length}
+			<div class="mb-8">
+				<h2 class="mb-3 text-lg font-semibold tracking-tight text-surface-900">Ready builds</h2>
+				<ReadyBuildList builds={readyBuilds} onReveal={revealBuild} />
+			</div>
+		{/if}
+
+		{#if workspaces.length || readyBuilds.length}
 			<div class="my-6 flex items-center gap-3 text-xs font-medium tracking-wide text-surface-600">
 				<span class="h-px flex-1 bg-surface-300"></span>
 				OR ADD A NEW EXPORT

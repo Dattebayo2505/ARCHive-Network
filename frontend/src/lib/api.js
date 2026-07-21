@@ -313,6 +313,35 @@ export async function removeWorkspace(id, deleteFiles, fetchFn = fetch) {
 	}
 }
 
+/** List every built ready folder, newest-built first. Never throws. */
+export async function listReadyBuilds(fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/ready'));
+		if (!res.ok) return { builds: [] };
+		return res.json();
+	} catch {
+		return { builds: [] };
+	}
+}
+
+/** Ask the local server to open the OS file manager on a specific ready build. */
+export async function revealReadyBuild(id, fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/ready/reveal'), {
+			method: 'POST',
+			headers: jsonHeaders,
+			body: JSON.stringify({ id })
+		});
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({}));
+			return { ok: false, error: data.detail ?? 'Could not open the file manager.' };
+		}
+		return { ok: true };
+	} catch {
+		return { ok: false, error: UNREACHABLE };
+	}
+}
+
 /**
  * Auto-curate: pick <=N photos per album and select every video, replacing the selection.
  * A *selection* call, not a dev/DB one — it works with or without Postgres configured.
