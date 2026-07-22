@@ -1,6 +1,9 @@
 <script>
 	import {
 		autoCurate,
+		devDatabase,
+		devDatabaseCreate,
+		devDatabaseDrop,
 		devLoad,
 		devRows,
 		devSchema,
@@ -22,7 +25,15 @@
 	let { selectedPhotos = 0, selectedVideos = 0, onCurated = () => {} } = $props();
 
 	let status = $state(null); // null while first loading
+	// The *database*, as opposed to its tables. A failed connection cannot tell you which of
+	// two very different things went wrong, so /api/dev/status now carries a server probe
+	// (`server_up`, `database`, `database_exists`) alongside the raw error. That probe is the
+	// single source of truth here — these two hold only the outcome of the last db action.
+	let dbError = $state('');
+	let dbNotice = $state('');
+	let confirmDropDb = $state(false);
 	let busy = $state(''); // '' | 'schema' | 'reset' | 'load' | 'validate' | 'curate' | 's3'
+	//                     | 'db-status' | 'db-create' | 'db-drop'
 	let loadResult = $state(null);
 	let report = $state(null);
 	let error = $state(''); // an actionable failure from the last action
@@ -77,6 +88,50 @@
 	async function refreshStatus() {
 		status = await devStatus();
 	}
+
+	/** The explicit "is it there?" check. Re-reads the probe that /api/dev/status carries. */
+	async function checkDatabase() {
+		busy = 'db-status';
+		dbError = '';
+		dbNotice = '';
+		const found = await devDatabase();
+		if (!found.server_up) dbError = found.reason ?? "Can't reach the PostgreSQL server.";
+		else
+			dbNotice = found.database_exists
+				? `Database "${found.database}" exists.`
+				: `The server is up, but database "${found.database}" does not exist yet.`;
+		await refreshStatus();
+		busy = '';
+	}
+
+	// Create/drop, then re-read status: a freshly created database still has no tables, and a
+	// dropped one takes the tables and rows with it — both change what the rest of this panel
+	// may offer.
+	async function runDatabase(action, key, describe) {
+		busy = key;
+		dbError = '';
+		dbNotice = '';
+		const res = await action();
+		if (!res.ok) dbError = res.body?.detail ?? 'The database operation failed.';
+		else dbNotice = describe(res.body);
+		await refreshStatus();
+		await refreshRows();
+		busy = '';
+	}
+
+	const createDatabase = () =>
+		runDatabase(devDatabaseCreate, 'db-create', (b) =>
+			b.created
+				? `Created database "${b.database}". Create the tables next.`
+				: `Database "${b.database}" was already there.`
+		);
+
+	const dropDatabase = () =>
+		runDatabase(devDatabaseDrop, 'db-drop', (b) =>
+			b.dropped
+				? `Dropped database "${b.database}".`
+				: `Database "${b.database}" was already gone.`
+		);
 
 	async function refreshRows() {
 		if (!ready) {
@@ -409,16 +464,56 @@
 						</p>
 					</div>
 				{:else if !status.connected}
+					<!-- Two very different failures arrive as the same libpq error, so the probe in
+					     /api/dev/status splits them. A missing database is one button away from
+					     fixed; a dead server is not something this panel can repair. -->
+					{@const missing = status.server_up && !status.database_exists}
 					<div class="max-w-prose">
 						<div class="flex items-center gap-2.5">
-							<span class="size-2.5 rounded-full bg-error-500" aria-hidden="true"></span>
-							<p class="text-sm font-medium text-surface-900">Can't reach PostgreSQL</p>
+							<span
+								class="size-2.5 rounded-full {missing ? 'bg-warning-500' : 'bg-error-500'}"
+								aria-hidden="true"
+							></span>
+							<p class="text-sm font-medium text-surface-900">
+								{#if missing}
+									The database doesn't exist yet
+								{:else if status.server_up}
+									Can't open the database
+								{:else}
+									Can't reach the PostgreSQL server
+								{/if}
+							</p>
 						</div>
-						<p class="mt-2 font-mono text-xs leading-relaxed break-words text-error-700">
-							{status.reason}
-						</p>
+
+						{#if missing}
+							<p class="mt-2 text-sm leading-relaxed text-surface-600">
+								The server at <code
+									class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
+									>127.0.0.1:5432</code
+								>
+								is running and accepted your credentials, but it has no database named
+								<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
+									>{status.database}</code
+								>. Create it here, then create the tables.
+							</p>
+						{:else}
+							<p class="mt-2 text-sm leading-relaxed text-surface-600">
+								{status.server_up
+									? 'The server is up but refused this database.'
+									: 'Nothing answered on that host and port. Start PostgreSQL, then check again.'}
+							</p>
+							<p class="mt-2 font-mono text-xs leading-relaxed break-words text-error-700">
+								{status.reason}
+							</p>
+						{/if}
 					</div>
-					{@render secondaryBtn('Retry', 'Retrying…', 'schema', refreshStatus)}
+
+					<div class="flex gap-2">
+						{@render secondaryBtn('Check status', 'Checking…', 'db-status', checkDatabase)}
+						{#if missing}
+							{@render primaryBtn('Create database', 'Creating…', 'db-create', createDatabase)}
+						{/if}
+					</div>
 				{:else}
 					<div>
 						<div class="flex items-center gap-2.5">
@@ -433,8 +528,11 @@
 							</p>
 						</div>
 						<p class="mt-2 text-xs text-surface-600">
-							Object store <code
-								class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
+							Database <code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
+								>{status.database}</code
+							>
+							· object store
+							<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
 								>{status.media_root}</code
 							>
 							· served at
@@ -443,13 +541,38 @@
 							>
 						</p>
 					</div>
-					<div class="flex gap-2">
+					<div class="flex flex-wrap justify-end gap-2">
+						{@render secondaryBtn('Check status', 'Checking…', 'db-status', checkDatabase)}
 						{#if !status.tables_exist}
 							{@render primaryBtn('Create tables', 'Creating…', 'schema', () => createSchema(false))}
 						{:else}
 							{@render secondaryBtn('Reset tables', 'Resetting…', 'reset', () => (confirmReset = true))}
 						{/if}
+						<!-- Drop the whole database, not just its tables. Sits last and behind a named
+						     confirm: it is the widest-blast-radius control on this panel. -->
+						{@render secondaryBtn(
+							'Drop database',
+							'Dropping…',
+							'db-drop',
+							() => (confirmDropDb = true)
+						)}
 					</div>
+				{/if}
+
+				{#if dbError}
+					<p
+						class="w-full rounded-lg border border-error-200 bg-error-50 px-3 py-2 font-mono text-xs break-words text-error-800"
+						role="alert"
+					>
+						{dbError}
+					</p>
+				{:else if dbNotice}
+					<p
+						class="w-full rounded-lg border border-surface-200 bg-surface-100 px-3 py-2 text-sm text-surface-800"
+						aria-live="polite"
+					>
+						{dbNotice}
+					</p>
 				{/if}
 			</section>
 
@@ -752,6 +875,20 @@
 		createSchema(true);
 	}}
 	onCancel={() => (confirmReset = false)}
+/>
+
+<ConfirmDialog
+	open={confirmDropDb}
+	title="Drop the {status?.database} database?"
+	message="This deletes the entire database — the photo_album and media tables and every row in them — not just their contents. Any open connections to it are closed first. The files already in the object store, your export, and your ready folder are all left alone. You can create it again from this panel."
+	confirmLabel="Drop database"
+	cancelLabel="Cancel"
+	destructive
+	onConfirm={() => {
+		confirmDropDb = false;
+		dropDatabase();
+	}}
+	onCancel={() => (confirmDropDb = false)}
 />
 
 <ConfirmDialog

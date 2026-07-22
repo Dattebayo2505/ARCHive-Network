@@ -63,15 +63,70 @@ def status() -> dict:
             ready = db.tables_exist(conn)
             row_counts = db.counts(conn) if ready else {}
     except psycopg.Error as exc:
-        return {"enabled": True, "connected": False, "reason": str(exc)}
+        # A failure here is ambiguous on its face — "server down" and "database missing" are
+        # the same libpq error. Probe the server so the UI can offer the right next step
+        # (start Postgres vs. press Create database) instead of just printing the error.
+        found = db.probe(settings.database_url)
+        return {
+            "enabled": True,
+            "connected": False,
+            "reason": str(exc),
+            "server_up": found.server_up,
+            "database": found.database,
+            "database_exists": found.database_exists,
+        }
     return {
         "enabled": True,
         "connected": True,
+        "server_up": True,
+        "database": db.database_name(settings.database_url),
+        "database_exists": True,
         "tables_exist": ready,
         "counts": row_counts,
         "media_root": str(settings.media_root),
         "media_base_url": settings.media_base_url,
     }
+
+
+def _database_state() -> dict:
+    found = db.probe(_require_db())
+    return {
+        "server_up": found.server_up,
+        "database": found.database,
+        "database_exists": found.database_exists,
+        "reason": found.reason,
+    }
+
+
+@router.get("/api/dev/database")
+def database_status() -> dict:
+    """Is the server up, and does our database exist? Never 500s on a down server."""
+    return _database_state()
+
+
+@router.post("/api/dev/database")
+def database_create() -> dict:
+    url = _require_db()
+    found = db.probe(url)
+    if not found.server_up:
+        raise HTTPException(
+            status_code=502, detail=f"Can't reach the PostgreSQL server — {found.reason}"
+        )
+    created = db.create_database(url)
+    return {**_database_state(), "created": created}
+
+
+@router.delete("/api/dev/database")
+def database_drop() -> dict:
+    """Destructive — drops the whole database, tables and rows with it. Dev only."""
+    url = _require_db()
+    found = db.probe(url)
+    if not found.server_up:
+        raise HTTPException(
+            status_code=502, detail=f"Can't reach the PostgreSQL server — {found.reason}"
+        )
+    dropped = db.drop_database(url)
+    return {**_database_state(), "dropped": dropped}
 
 
 @router.post("/api/dev/schema")

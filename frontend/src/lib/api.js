@@ -444,6 +444,33 @@ export async function devValidate(fetchFn = fetch) {
 	return { ok: res.ok, status: res.status, body: await res.json() };
 }
 
+// --- The database itself (not its tables). `devSchema` above needs the database to already
+// exist; these three are what you reach for when it does not. The backend answers them via
+// the `postgres` maintenance database, so they work when /api/dev/status cannot connect. ---
+
+/** Is the server up, and does our database exist? Never throws. */
+export async function devDatabase(fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/dev/database'));
+		if (!res.ok) return { server_up: false, database_exists: false, reason: 'dev mode is off' };
+		return res.json();
+	} catch {
+		return { server_up: false, database_exists: false, reason: UNREACHABLE };
+	}
+}
+
+/** CREATE DATABASE. Idempotent — `created: false` means it was already there. */
+export async function devDatabaseCreate(fetchFn = fetch) {
+	const res = await fetchFn(url('/api/dev/database'), { method: 'POST' });
+	return { ok: res.ok, status: res.status, body: await res.json() };
+}
+
+/** DROP DATABASE — destructive, takes every table and row with it. */
+export async function devDatabaseDrop(fetchFn = fetch) {
+	const res = await fetchFn(url('/api/dev/database'), { method: 'DELETE' });
+	return { ok: res.ok, status: res.status, body: await res.json() };
+}
+
 // --- On-demand S3 upload. Gated on the backend having ARCHIVENETWORK_S3_BUCKET set;
 // GET status 200s regardless (enabled:false when unset) so the panel can reveal itself. ---
 
