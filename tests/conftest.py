@@ -280,28 +280,68 @@ def legacy_unanchored_ready_root(ready_root: Path, grouping_export_root: Path) -
     return ready_root
 
 
-@pytest.fixture
-def pg_conn():
-    """A connection to a scratch Postgres, with the schema freshly recreated.
+TEST_DB_SUFFIX = "_test"
 
-    Skips unless ARCHIVENETWORK_DATABASE_URL is set. It DROPS tables — never point it at a
-    database you care about.
+
+def _scratch_url() -> str:
+    """The configured server, pointed at a *derived* scratch database — never the real one.
+
+    `pg_conn` drops tables, so it must not touch the database the app runs on. Asking for a
+    second env var would be safer still, but an unset one makes every Postgres test skip
+    silently, and a skipped test reads as a passing one. Deriving the name instead keeps the
+    suite running unattended while making `archivenetwork_dev` unreachable from it.
     """
-    import psycopg
-
     from archivenetwork.config import Settings
+    from archivenetwork.loader import db
 
     url = Settings().database_url
     if not url:
         pytest.skip("ARCHIVENETWORK_DATABASE_URL not set; skipping Postgres-backed test")
 
+    configured = db.database_name(url)
+    if not configured:
+        pytest.skip("ARCHIVENETWORK_DATABASE_URL carries no database name")
+
+    scratch = configured + TEST_DB_SUFFIX
+    # Belt and braces: if someone points the env var straight at the scratch database, the
+    # derivation would be a no-op and we would be dropping tables in the configured one.
+    assert scratch != configured, "scratch database must differ from the configured one"
+    return db.with_database(url, scratch)
+
+
+@pytest.fixture(scope="session")
+def scratch_database() -> str:
+    """Ensure the derived scratch database exists; return its URL. Skips if the server is down."""
+    from archivenetwork.loader import db
+
+    url = _scratch_url()
+    probe = db.probe(url)
+    if not probe.server_up:
+        pytest.skip(f"Postgres unreachable, skipping: {probe.reason}")
+    db.create_database(url)  # idempotent
+    return url
+
+
+@pytest.fixture
+def pg_conn(scratch_database: str):
+    """A connection to the scratch Postgres, with the schema freshly recreated.
+
+    Skips unless ARCHIVENETWORK_DATABASE_URL is set. It DROPS tables — which is why it runs
+    against `<dbname>_test` (see `_scratch_url`), never the configured database itself.
+    """
+    import psycopg
+
     from archivenetwork.loader import db
 
     try:
-        conn = db.connect(url)
+        conn = db.connect(scratch_database)
     except psycopg.OperationalError as exc:  # not installed / not running / bad credentials
         pytest.skip(f"Postgres unreachable, skipping: {exc}")
 
     db.reset_tables(conn)
-    yield conn
-    conn.close()
+    try:
+        yield conn
+    finally:
+        # Leave nothing committed behind, so a stray row can never outlive the run.
+        db.reset_tables(conn)
+        conn.close()
