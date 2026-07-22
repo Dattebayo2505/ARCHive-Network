@@ -41,7 +41,12 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_origin_regex=settings.cors_origin_regex,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        # Must cover every method the routers serve — a method missing here fails the browser's
+        # *preflight* with `400 Disallowed CORS method`, so the route is never reached and the
+        # failure looks like a broken endpoint rather than a CORS policy. `DELETE` was the
+        # casualty (`/api/dev/database`). `*` keeps the list from drifting as routes are added;
+        # it is not a widening — `allow_origins`/`allow_origin_regex` still gate who may ask.
+        allow_methods=["*"],
         allow_headers=["*"],
     )
 

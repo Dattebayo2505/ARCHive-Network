@@ -16,14 +16,14 @@ from .read import read_ready
 from .storage import Storage
 
 _UPSERT_ALBUM = """
-INSERT INTO photo_album (fb_album_id, title, description, date, is_derived, hashtag)
+INSERT INTO photo_album (fb_album_id, title, caption, date, is_derived, hashtag)
 VALUES (%s, %s, %s, %s, %s, %s)
 ON CONFLICT (fb_album_id) DO UPDATE SET
-    title       = EXCLUDED.title,
-    description = EXCLUDED.description,
-    date        = EXCLUDED.date,
-    is_derived  = EXCLUDED.is_derived,
-    hashtag     = EXCLUDED.hashtag
+    title      = EXCLUDED.title,
+    caption    = EXCLUDED.caption,
+    date       = EXCLUDED.date,
+    is_derived = EXCLUDED.is_derived,
+    hashtag    = EXCLUDED.hashtag
 RETURNING (xmax = 0) AS inserted
 """
 
@@ -32,15 +32,14 @@ RETURNING (xmax = 0) AS inserted
 # rename yields a stale-but-valid key instead of a stranded object. Do not add it.
 # (`hashtag` IS updatable — the *tag* may be corrected on a re-load; the *key* may not.)
 _UPSERT_MEDIA = """
-INSERT INTO media (fbid, media_type, fb_album_id, title, caption, description,
+INSERT INTO media (fbid, media_type, fb_album_id, title, caption,
                    storage_path, original_fb_uri, creation_at, source_workspace_id, hashtag)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 ON CONFLICT (fbid) DO UPDATE SET
     media_type          = EXCLUDED.media_type,
     fb_album_id         = EXCLUDED.fb_album_id,
     title               = EXCLUDED.title,
     caption             = EXCLUDED.caption,
-    description         = EXCLUDED.description,
     original_fb_uri     = EXCLUDED.original_fb_uri,
     creation_at         = EXCLUDED.creation_at,
     source_workspace_id = EXCLUDED.source_workspace_id,
@@ -109,7 +108,7 @@ def load(
                 (
                     album.fb_album_id,
                     album.title,
-                    album.description,
+                    album.caption,
                     album.date,
                     album.is_derived,
                     album.hashtag,
@@ -129,7 +128,6 @@ def load(
                     row.fb_album_id,
                     row.title,
                     row.caption,
-                    row.description,
                     key,
                     row.uri,
                     row.creation_at,

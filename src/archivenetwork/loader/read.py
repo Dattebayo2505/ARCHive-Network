@@ -22,7 +22,10 @@ from ..inventory.text import epoch_to_dt, fix_mojibake
 class AlbumRow:
     fb_album_id: str
     title: str
-    description: str | None
+    # The post body every member photo shares, or the caption editor's override when one
+    # exists. It rides into the ready folder as the album JSON's `description` key — the
+    # FB-shaped wire name — but here it is what it means: the album's caption.
+    caption: str | None
     date: datetime | None
     is_derived: bool
     hashtag: str | None = None
@@ -34,8 +37,9 @@ class MediaRow:
     media_type: str  # 'photo' | 'video'
     fb_album_id: str | None
     title: str | None
+    # An *override*, not the usual home. Album-anchored media leaves this NULL and inherits
+    # `AlbumRow.caption`; only album-less media (videos, legacy unanchored) fills it in.
     caption: str | None
-    description: str | None
     uri: str  # 'posts/media/...' — both the path under ready/ and the original_fb_uri
     creation_at: datetime | None
     hashtag: str | None = None
@@ -140,9 +144,23 @@ def read_ready(ready_root: Path) -> ReadResult:
         album_id = album_id_from_uri(photos[0]["uri"])
         if album_id is None:
             continue
-        # The album's tag: from its description when the JSON carries one (the builder writes
-        # only {"name", "photos"}, so it usually does not), else from its photos' post captions.
-        tags = _tags(raw.get("description"))
+        # The album's caption and tag come from the same raw string: its `description` when the
+        # JSON carries one — the builder writes only {"name", "photos"} unless a volunteer
+        # edited the caption, so that key present *means* an override — else the shared post
+        # body of its member photos.
+        raw_caption = raw.get("description")
+        if not raw_caption:
+            raw_caption = next(
+                (
+                    body
+                    for p in photos
+                    if (body := feed.get(photo_fbid(p["uri"]), {}).get("raw_caption"))
+                ),
+                None,
+            )
+        # Tags are re-scanned across every photo rather than read off `raw_caption` alone: a
+        # first photo whose body happens to be untagged must not cost the album its section.
+        tags = _tags(raw_caption)
         if not tags:
             for p in photos:
                 tags = _tags(feed.get(photo_fbid(p["uri"]), {}).get("raw_caption"))
@@ -156,7 +174,7 @@ def read_ready(ready_root: Path) -> ReadResult:
             AlbumRow(
                 fb_album_id=album_id,
                 title=album_title,
-                description=_clean(raw.get("description")),
+                caption=_clean(raw_caption),
                 date=None,  # backfilled below from the album's earliest media
                 # A derived caption-album is written as <synthId>.json, so its stem IS its id.
                 is_derived=album_path.stem == album_id,
@@ -172,28 +190,32 @@ def read_ready(ready_root: Path) -> ReadResult:
                 media_type="photo",
                 fb_album_id=album_id,
                 title=_clean(p.get("title")),
-                caption=hit.get("caption"),  # album-only photos legitimately have none
-                description=None,
+                caption=None,  # inherits the album's; the override is for album-less media
                 uri=p["uri"],
                 creation_at=epoch_to_dt(ts) if ts else None,
                 hashtag=album_tag,
                 group=album_group,
             )
 
-    # Feed-only media: unanchored photos and the video posters.
+    # Feed-only media: unanchored photos and the video posters. These are the rows the caption
+    # override exists for — a video is never album-anchored in practice, so there is nothing to
+    # inherit from. Guard on the album ids actually emitted above, not merely on a parsed id:
+    # an id with no AlbumRow behind it would drop the caption into a hole.
+    known_albums = {a.fb_album_id for a in albums}
     for fbid, hit in feed.items():
         if fbid in media:
             continue
         video = videos.get(fbid)
         ts = hit.get("post_ts") or hit.get("creation_ts")
         own_tags = _tags(hit.get("raw_caption")) or _tags((video or {}).get("description"))
+        album_id = album_id_from_uri(hit["uri"])  # None for posts/media/<fbid>.jpg
+        own_caption = hit.get("caption") or _clean((video or {}).get("description"))
         media[fbid] = MediaRow(
             fbid=fbid,
             media_type="video" if video else "photo",
-            fb_album_id=album_id_from_uri(hit["uri"]),  # None for posts/media/<fbid>.jpg
+            fb_album_id=album_id,
             title=hit.get("title"),
-            caption=hit.get("caption") or _clean((video or {}).get("description")),
-            description=_clean(video["description"]) if video else None,
+            caption=None if album_id in known_albums else own_caption,
             uri=hit["uri"],
             creation_at=epoch_to_dt(ts) if ts else None,
             hashtag=canonical_tag(own_tags),
@@ -211,7 +233,6 @@ def read_ready(ready_root: Path) -> ReadResult:
             fb_album_id=None,
             title=_clean(video.get("title")),
             caption=_clean(video.get("description")),
-            description=_clean(video.get("description")),
             uri=video["uri"],
             creation_at=epoch_to_dt(ts) if ts else None,
             hashtag=canonical_tag(_tags(video.get("description"))),
@@ -232,7 +253,6 @@ def read_ready(ready_root: Path) -> ReadResult:
             fb_album_id=album_id_from_uri(rec["uri"]),  # None for posts/media/<fbid>.jpg
             title=_clean(rec.get("title")),
             caption=None,  # never posted -> there is no post body to hoist
-            description=None,
             uri=rec["uri"],
             creation_at=epoch_to_dt(ts) if ts else None,
         )

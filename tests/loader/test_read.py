@@ -29,9 +29,84 @@ def test_album_id_comes_from_the_path_and_non_album_media_is_absent(ready_root: 
     assert "s01" not in media
 
 
-def test_caption_is_hoisted_from_the_post_body(ready_root: Path):
-    media = {m.fbid: m for m in read_ready(ready_root).media}
-    assert media["g01"].caption == "HEADLINE ONE\n\nBody one."
+def test_the_hoisted_post_body_lands_on_the_album_not_each_photo(ready_root: Path):
+    """Every photo in an album shares one caption, so it is stored once — on the album.
+
+    Verified on the real 2026-07-03 build: 137 photos carried just 22 distinct captions,
+    exactly one per album. `media.caption` is now an *override*, left NULL whenever the
+    photo is album-anchored; a consumer reads COALESCE(media.caption, album.caption).
+    """
+    r = read_ready(ready_root)
+    by_id = {a.fb_album_id: a for a in r.albums}
+    media = {m.fbid: m for m in r.media}
+
+    assert by_id["g01"].caption == "HEADLINE ONE\n\nBody one."
+    assert media["g01"].caption is None  # inherited, never duplicated
+    assert media["g02"].caption is None
+
+
+def test_media_no_longer_carries_a_description(ready_root: Path):
+    """`media.description` only ever duplicated `caption` (0 photos had one; every video's
+    matched its caption byte-for-byte), so it is gone rather than kept as dead weight."""
+    assert not hasattr(next(iter(read_ready(ready_root).media)), "description")
+
+
+def test_an_edited_album_caption_wins_over_the_hoisted_post_body(
+    grouping_export_root: Path, tmp_path: Path
+):
+    """The caption editor's override is the album's caption — not a separate `description`.
+
+    It rides into the ready folder as the album JSON's `description` key (the FB-shaped wire
+    name the builder writes), but in Postgres it *is* the caption: one field, one meaning.
+    """
+    from archivenetwork.inventory.parser import build_inventory
+    from archivenetwork.transform.builder import build_ready_folder
+
+    inv = build_inventory(grouping_export_root)
+    dest = tmp_path / "edited-ready"
+    build_ready_folder(
+        grouping_export_root,
+        dest,
+        {p.fbid for p in inv.all_photos() if p.exists},
+        captions={"g01": "Fixed headline\n\nFixed body. #ARCHEVT"},
+    )
+
+    by_id = {a.fb_album_id: a for a in read_ready(dest).albums}
+    assert by_id["g01"].caption == "Fixed headline\n\nFixed body."  # override, tags stripped
+    assert by_id["g01"].hashtag == "ARCHEVT"  # still the tag source
+
+
+def test_an_album_less_video_keeps_its_own_caption(tmp_path: Path):
+    """The reason caption is *not* moved wholesale onto `photo_album`.
+
+    Videos are never album-anchored (all 21 in the real build had `fb_album_id` NULL — they
+    key into `fb-exports/<tag>/videos/`, outside any album slug). With no album to inherit
+    from, the per-media override is their only home.
+    """
+    posts = tmp_path / "posts"
+    (posts / "album").mkdir(parents=True)
+    (posts / "media" / "videos").mkdir(parents=True)
+    (posts / "media" / "videos" / "v01.jpg").write_bytes(b"\xff\xd8\xff\xdbJPEG")
+    (posts / "videos.json").write_text(
+        json.dumps(
+            {
+                "videos_v2": [
+                    {
+                        "uri": "posts/media/videos/v01.jpg",
+                        "creation_timestamp": 1_700_000_500,
+                        "description": "Watch this clip #ARCHENT",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    media = {m.fbid: m for m in read_ready(tmp_path).media}
+    assert media["v01"].media_type == "video"
+    assert media["v01"].fb_album_id is None  # no album to inherit a caption from
+    assert media["v01"].caption == "Watch this clip"
+    assert media["v01"].hashtag == "ARCHENT"
 
 
 def test_creation_at_is_set_and_utc_aware(ready_root: Path):
@@ -118,7 +193,7 @@ def test_every_uri_is_prefix_stripped(ready_root: Path):
 
 def test_captions_reach_the_rows_with_hashtags_stripped(ready_root: Path):
     data = read_ready(ready_root)
-    g01 = next(m for m in data.media if m.fbid == "g01")
+    g01 = next(a for a in data.albums if a.fb_album_id == "g01")
     assert g01.caption == "HEADLINE ONE\n\nBody one."
     assert "#" not in g01.caption
 

@@ -18,7 +18,7 @@ SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS photo_album (
     fb_album_id  text PRIMARY KEY,
     title        text NOT NULL,
-    description  text,
+    caption      text,          -- the post body every member photo shares (PLAN.md §3.1)
     date         timestamptz,
     hashtag      text,
     is_derived   boolean NOT NULL DEFAULT false
@@ -30,8 +30,7 @@ CREATE TABLE IF NOT EXISTS media (
     media_type          text NOT NULL CHECK (media_type IN ('photo', 'video')),
     fb_album_id         text REFERENCES photo_album(fb_album_id),
     title               text,
-    caption             text,
-    description         text,
+    caption             text,          -- an OVERRIDE: NULL whenever fb_album_id is set
     hashtag             text,
     storage_path        text NOT NULL,
     original_fb_uri     text,
@@ -43,6 +42,24 @@ CREATE TABLE IF NOT EXISTS media (
 
 CREATE INDEX IF NOT EXISTS media_album_idx ON media(fb_album_id);
 CREATE INDEX IF NOT EXISTS media_type_idx  ON media(media_type);
+
+-- Migration for a database created before the caption move. `CREATE TABLE IF NOT EXISTS` is a
+-- no-op on an existing table, so without this an older dev DB keeps `photo_album.description`
+-- and the INSERT below fails on a column that isn't there. RENAME (not ADD + DROP) so a
+-- volunteer's edited caption survives the upgrade.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'photo_album' AND column_name = 'description')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'photo_album' AND column_name = 'caption') THEN
+        ALTER TABLE photo_album RENAME COLUMN description TO caption;
+    END IF;
+END $$;
+ALTER TABLE photo_album ADD COLUMN IF NOT EXISTS caption text;
+ALTER TABLE photo_album DROP COLUMN IF EXISTS description;
+-- `media.description` only ever duplicated `media.caption`; it is gone, not deprecated.
+ALTER TABLE media DROP COLUMN IF EXISTS description;
 """
 
 DROP_SQL = "DROP TABLE IF EXISTS media; DROP TABLE IF EXISTS photo_album;"

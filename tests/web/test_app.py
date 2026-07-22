@@ -36,6 +36,42 @@ def test_cors_allows_any_localhost_port():
         assert pre.status_code == 200, origin
 
 
+def test_cors_allows_every_method_the_api_actually_serves():
+    """The preflight allow-list must be derived from the routes, not guessed.
+
+    `allow_methods` used to be a hardcoded ["GET", "POST", "OPTIONS"], so `DELETE
+    /api/dev/database` — the API's only DELETE — failed its preflight with
+    `400 Disallowed CORS method` and the Dev panel's "Drop database" button did nothing.
+    The backend route was fine; the browser never got to call it.
+
+    Asserting against the live route table (rather than hardcoding DELETE) means the next
+    PUT/PATCH route added anywhere is covered the moment it exists.
+    """
+    app = create_app()
+    client = TestClient(app)
+    # Read the methods off the OpenAPI schema, not `app.routes`: since FastAPI 0.138 an
+    # included router is wrapped in a private `_IncludedRouter` that exposes neither `.methods`
+    # nor `.routes`, so walking the route table silently sees only the four built-in docs
+    # endpoints — a false pass. The schema is public API and lists every path it serves.
+    served = {
+        m.upper()
+        for methods in app.openapi()["paths"].values()
+        for m in methods
+        if m.upper() not in ("HEAD", "OPTIONS")
+    }
+    assert "DELETE" in served, "guard: the route this regression is about must still exist"
+
+    for method in sorted(served):
+        pre = client.options(
+            "/api/dev/database",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": method,
+            },
+        )
+        assert pre.status_code == 200, f"{method} preflight: {pre.status_code} {pre.text}"
+
+
 def test_cors_blocks_foreign_origin():
     """A non-local origin must NOT get CORS access (don't open to the world)."""
     client = TestClient(create_app())
