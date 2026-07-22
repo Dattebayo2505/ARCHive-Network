@@ -1,7 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { ingestFolder, ingestUpload, ingestZip, listReadyBuilds, listWorkspaces, openWorkspace, removeWorkspace, revealReadyBuild } from '$lib/api.js';
+	import { deleteReadyBuild, ingestFolder, ingestUpload, ingestZip, listReadyBuilds, listWorkspaces, openWorkspace, removeWorkspace, revealReadyBuild } from '$lib/api.js';
 	import { formatSize } from '$lib/stats.js';
 	import FolderPicker from '$lib/components/FolderPicker.svelte';
 	import ReadyBuildList from '$lib/components/ReadyBuildList.svelte';
@@ -29,6 +29,17 @@
 	async function revealBuild(id) {
 		const result = await revealReadyBuild(id);
 		if (!result.ok) errors = [result.error ?? 'Could not open the file manager.'];
+	}
+
+	// ReadyBuildList confirms inline (the workspace rows' pattern), so by the time this
+	// runs the user has already said yes — just do it.
+	async function deleteBuild(id) {
+		const result = await deleteReadyBuild(id);
+		if (result.ok) {
+			readyBuilds = readyBuilds.filter((b) => b.id !== id);
+		} else {
+			errors = [result.error ?? 'Could not delete that ready folder.'];
+		}
 	}
 
 	async function handle(promise, label) {
@@ -153,7 +164,7 @@
 		{#if readyBuilds.length}
 			<div class="mb-8">
 				<h2 class="mb-3 text-lg font-semibold tracking-tight text-surface-900">Ready builds</h2>
-				<ReadyBuildList builds={readyBuilds} onReveal={revealBuild} />
+				<ReadyBuildList builds={readyBuilds} onReveal={revealBuild} onDelete={deleteBuild} />
 			</div>
 		{/if}
 

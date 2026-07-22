@@ -396,6 +396,27 @@ export async function revealReadyBuild(id, fetchFn = fetch) {
 }
 
 /**
+ * Delete one built ready folder from disk. Only the output is removed — the export
+ * and the workspace's saved picks survive, so the folder can be rebuilt verbatim.
+ */
+export async function deleteReadyBuild(id, fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/ready/delete'), {
+			method: 'POST',
+			headers: jsonHeaders,
+			body: JSON.stringify({ id })
+		});
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({}));
+			return { ok: false, error: data.detail ?? 'Could not delete that ready folder.' };
+		}
+		return { ok: true };
+	} catch {
+		return { ok: false, error: UNREACHABLE };
+	}
+}
+
+/**
  * Auto-curate: pick <=N photos per album and select every video, replacing the selection.
  * A *selection* call, not a dev/DB one — it works with or without Postgres configured.
  */

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import shutil
-import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from ..config import settings
+from ..fsops import remove_tree
 from .routes_ingest import _start_session
 
 router = APIRouter()
@@ -110,18 +109,6 @@ def open_workspace(request: Request, body: OpenRequest) -> dict:
     return _start_session(request, root, managed=entry.managed, source_name=entry.id)
 
 
-def _remove_tree(path: Path, attempts: int = 5) -> bool:
-    """Delete a directory tree, tolerating Windows file locks. Returns True iff gone."""
-    for _ in range(attempts):
-        if not path.exists():
-            return True
-        shutil.rmtree(path, ignore_errors=True)
-        if not path.exists():
-            return True
-        time.sleep(0.2)
-    return not path.exists()
-
-
 @router.post("/api/workspaces/remove")
 def remove_workspace(request: Request, body: RemoveRequest) -> dict:
     registry = request.app.state.registry
@@ -137,13 +124,13 @@ def remove_workspace(request: Request, body: RemoveRequest) -> dict:
         root = Path(entry.export_root).resolve()
         imports_base = (settings.workspace_dir / "imports").resolve()
         state_dir = settings.workspace_dir / "state" / entry.id
-        ok_state = _remove_tree(state_dir)
+        ok_state = remove_tree(state_dir)
         ok_import = True
         if imports_base in root.parents:
             import_child = root
             while import_child.parent != imports_base:
                 import_child = import_child.parent
-            ok_import = _remove_tree(import_child)
+            ok_import = remove_tree(import_child)
         if not (ok_import and ok_state):
             raise HTTPException(
                 status_code=500,

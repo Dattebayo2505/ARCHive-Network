@@ -1,7 +1,7 @@
 <script>
 	import { onMount, untrack } from 'svelte';
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
-	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum, increaseLimit, undoIncreaseLimit, setAlbumCaption, resetAlbumCaption, getInventory, getCurrentReadyBuild, revealReadyBuild } from '$lib/api.js';
+	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum, increaseLimit, undoIncreaseLimit, setAlbumCaption, resetAlbumCaption, getInventory, getCurrentReadyBuild, revealReadyBuild, deleteReadyBuild } from '$lib/api.js';
 	import { formatSize } from '$lib/stats.js';
 	import { prefetchAlbumThumbs, clearPrefetchCache } from '$lib/imageCache.js';
 	import { seedMissingThumbnails, thumbnailMissing } from '$lib/videoThumbs.js';
@@ -65,6 +65,7 @@
 	// writes to ready/<workspace_id>/, so a second build overwrites this one — the UI
 	// says so before and during the confirm.
 	let existingBuild = $state(null);
+	let deleteBuildConfirm = $state(false);
 
 	async function refreshExistingBuild() {
 		existingBuild = await getCurrentReadyBuild();
@@ -445,6 +446,24 @@
 		}
 	}
 
+	// Deleting the ready folder clears only the *output*: the export and this
+	// workspace's picks survive, so Build writes the same folder again. That's why the
+	// card drops back to "not built yet" rather than warning about anything lost.
+	async function confirmDeleteExistingBuild() {
+		deleteBuildConfirm = false;
+		if (!existingBuild) return;
+		const result = await deleteReadyBuild(existingBuild.id);
+		if (result.ok) {
+			existingBuild = null;
+			toaster.success({
+				title: 'Ready folder deleted',
+				description: 'Your picks are unchanged — build again whenever you like.'
+			});
+		} else {
+			toaster.error({ title: "Couldn't delete the ready folder", description: result.error });
+		}
+	}
+
 	// built_ts is a Unix timestamp in seconds (Python's st_mtime), not ms.
 	function formatBuiltAt(ts) {
 		return new Intl.DateTimeFormat(undefined, {
@@ -773,13 +792,30 @@
 					<p class="mt-0.5 tabular-nums text-surface-600">
 						{formatBuiltAt(existingBuild.built_ts)} · {formatSize(existingBuild.size_bytes)}
 					</p>
-					<button
-						type="button"
-						class="mt-1.5 w-full rounded-lg border border-surface-300 bg-surface-50 px-2 py-1 font-medium text-surface-800 transition-colors hover:bg-surface-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-						onclick={revealExistingBuild}
-					>
-						Open folder
-					</button>
+					<div class="mt-1.5 flex items-stretch gap-1">
+						<button
+							type="button"
+							class="flex-1 rounded-lg border border-surface-300 bg-surface-50 px-2 py-1 font-medium text-surface-800 transition-colors hover:bg-surface-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+							onclick={revealExistingBuild}
+						>
+							Open folder
+						</button>
+						<!-- Quiet at rest, red only on hover/focus: the danger is in the act,
+						     not in having a build. -->
+						<button
+							type="button"
+							class="grid w-7 shrink-0 place-items-center rounded-lg text-surface-500 transition-colors hover:bg-error-100 hover:text-error-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-error-600"
+							onclick={() => (deleteBuildConfirm = true)}
+							title="Delete this ready folder"
+							aria-label="Delete this ready folder"
+						>
+							<svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+								<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+								<path d="M10 11v6M14 11v6" />
+							</svg>
+						</button>
+					</div>
 				</div>
 			{/if}
 			<button
@@ -1302,6 +1338,19 @@
 		buildConfirm = false;
 		await runBuild();
 	}}
+/>
+
+<ConfirmDialog
+	open={deleteBuildConfirm}
+	title="Delete this ready folder?"
+	message={existingBuild
+		? `The ${formatSize(existingBuild.size_bytes)} folder built ${formatBuiltAt(existingBuild.built_ts)} will be deleted from disk. Your picks stay exactly as they are — you can build it again any time.`
+		: ''}
+	confirmLabel="Delete folder"
+	cancelLabel="Keep it"
+	destructive
+	onCancel={() => (deleteBuildConfirm = false)}
+	onConfirm={confirmDeleteExistingBuild}
 />
 
 <ConfirmDialog

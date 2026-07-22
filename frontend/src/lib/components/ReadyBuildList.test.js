@@ -42,4 +42,44 @@ describe('ReadyBuildList', () => {
 		await fireEvent.click(screen.getByRole('button', { name: /open in explorer/i }));
 		expect(onReveal).toHaveBeenCalledWith('b1');
 	});
+
+	// Destructive, so the trash must arm the inline band and never delete on its own —
+	// the same two-click shape the workspace rows use.
+	it('does not call onDelete until the inline confirm is accepted', async () => {
+		const onDelete = vi.fn();
+		render(ReadyBuildList, { builds: [BUILDS[0]], onReveal: () => {}, onDelete });
+
+		await fireEvent.click(
+			screen.getByRole('button', { name: /delete the ready folder MyPage Export \| 2026-07-20/i })
+		);
+		expect(onDelete).not.toHaveBeenCalled();
+		expect(screen.getByText('Delete ready folder?')).toBeTruthy();
+
+		await fireEvent.click(screen.getByRole('button', { name: /^delete folder$/i }));
+		expect(onDelete).toHaveBeenCalledWith('b1');
+	});
+
+	it('cancelling the confirm restores the row and deletes nothing', async () => {
+		const onDelete = vi.fn();
+		render(ReadyBuildList, { builds: [BUILDS[0]], onReveal: () => {}, onDelete });
+
+		await fireEvent.click(screen.getByRole('button', { name: /^delete the ready folder/i }));
+		await fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+		expect(onDelete).not.toHaveBeenCalled();
+		expect(screen.queryByText('Delete ready folder?')).toBeNull();
+		expect(screen.getByRole('button', { name: /^delete the ready folder/i })).toBeTruthy();
+	});
+
+	// Two rows armed at once would put two identical "Delete folder" buttons on screen
+	// with nothing to tell them apart — the second arm has to disarm the first.
+	it('only ever arms one row at a time', async () => {
+		render(ReadyBuildList, { builds: BUILDS, onReveal: () => {}, onDelete: () => {} });
+		const [first, second] = screen.getAllByRole('button', { name: /^delete the ready folder/i });
+
+		await fireEvent.click(first);
+		await fireEvent.click(second);
+
+		expect(screen.getAllByText('Delete ready folder?')).toHaveLength(1);
+	});
 });
