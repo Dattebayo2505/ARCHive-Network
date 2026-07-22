@@ -33,6 +33,13 @@ class Album(BaseModel):
     name: str
     original_name: str | None = None
     description: str | None = None
+    # The description as the export shipped it, captured before any caption override is
+    # applied (see `web/routes_ingest._start_session`). Reset restores it.
+    original_description: str | None = None
+    # True once a volunteer's caption override is in force. A stored flag, not a
+    # `description != original_description` comparison: an inventory built outside a session
+    # has no `original_description`, and that must not read as "edited".
+    caption_edited: bool = False
     photos: list[Photo] = []
     uncapped: bool = False  # no per-album cap: the derived caption-albums + `__non_album__`
     origin: str | None = None  # parent dump name for a derived caption-album (UI subheader)

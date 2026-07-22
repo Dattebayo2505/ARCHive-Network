@@ -63,6 +63,9 @@ def _album(a: Album, selection: SelectionState, max_per_album: int, limits: Limi
         "name": a.name,
         "original_name": a.original_name,
         "description": description,
+        # `description` is prose only, hashtags stripped — exactly what the caption editor
+        # round-trips. `caption_edited` drives the "Reset caption" affordance.
+        "caption_edited": a.caption_edited,
         "hashtags": hashtags,
         "origin": a.origin,
         "post_timestamp": a.post_timestamp.isoformat() if a.post_timestamp else None,

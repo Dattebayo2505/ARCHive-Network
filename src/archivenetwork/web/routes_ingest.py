@@ -16,6 +16,7 @@ from ..ingest.validate import find_export_root, validate_export
 from ..inventory.models import ExportInventory
 from ..inventory.naming import display_name
 from ..inventory.parser import build_inventory
+from ..inventory.captions import CaptionState
 from ..inventory.renames import RenameState
 from ..selection.archive_state import ArchiveState
 from ..selection.policy import DefaultPolicy
@@ -106,10 +107,15 @@ def _start_session(
     renames = RenameState(state_dir / "renames.json")
     archive = ArchiveState(state_dir / "archive.json")
     limits = LimitState(state_dir / "limits.json")
+    captions = CaptionState(state_dir / "captions.json")
     for album in inventory.albums + inventory.archived_albums:
         album.original_name = album.name
+        album.original_description = album.description
         if album.fb_album_id in renames._renames:
             album.name = renames._renames[album.fb_album_id]
+        if album.fb_album_id in captions._captions:
+            album.description = captions._captions[album.fb_album_id]
+            album.caption_edited = True
     _apply_archive(inventory, archive.archived_ids())
 
     # The derived caption-albums and the `__non_album__` bucket carry `uncapped=True` — they
@@ -131,6 +137,7 @@ def _start_session(
         renames=renames,
         archive=archive,
         limits=limits,
+        captions=captions,
     )
     return {
         "ok": True,

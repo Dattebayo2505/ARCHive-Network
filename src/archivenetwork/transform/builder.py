@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..inventory.archive import is_special_album
-from ..inventory.parser import build_inventory, photo_fbid, resolve_uri
+from ..inventory.parser import album_id_from_uri, build_inventory, photo_fbid, resolve_uri
 
 @dataclass
 class BuildResult:
@@ -34,6 +34,15 @@ def _copy_media(photo, export_root: Path, dest: Path) -> bool:
     return True
 
 
+def _album_key(raw: dict, stem: str) -> str:
+    """The album's `fb_album_id`, derived from its media exactly as the parser derives it."""
+    for rec in raw.get("photos", []):
+        album_id = album_id_from_uri(rec["uri"])
+        if album_id:
+            return album_id
+    return stem
+
+
 def _album_photo_record(photo) -> dict:
     rec: dict = {"uri": photo.ready_uri or _rel_from_posts(photo.original_uri)}
     if photo.creation_at is not None:
@@ -45,13 +54,19 @@ def _album_photo_record(photo) -> dict:
 
 def build_ready_folder(
     export_root: Path, dest: Path, keep_fbids: set[str], video_thumb_dir: Path | None = None,
-    renames: dict[str, str] | None = None
+    renames: dict[str, str] | None = None, captions: dict[str, str] | None = None
 ) -> BuildResult:
     inventory = build_inventory(export_root)
     if renames:
         for album in inventory.albums:
             if album.fb_album_id in renames:
                 album.name = renames[album.fb_album_id]
+    # Caption overrides are stored **raw** (prose + the album's original hashtags), so the
+    # ready folder stays the faithful FB-shaped mirror the loader expects to re-read.
+    if captions:
+        for album in inventory.albums:
+            if album.fb_album_id in captions:
+                album.description = captions[album.fb_album_id]
     # Archived (news-caption) photos and manually archived albums are set aside — never
     # carried into the build, even if a stale selection.json still names one.
     keep_fbids = keep_fbids - {p.fbid for p in inventory.archived_photos}
@@ -106,12 +121,15 @@ def build_ready_folder(
         if not kept:
             continue
         album_dst_dir.mkdir(parents=True, exist_ok=True)
+        # A derived album normally carries no `description` (its caption lives on the member
+        # photos), so one is written only when a volunteer edited it — and then it is the
+        # album's tag source for the ETL, exactly as an FB album's own description is.
+        record: dict = {"name": album.name}
+        if captions and album.fb_album_id in captions:
+            record["description"] = album.description
+        record["photos"] = [_album_photo_record(p) for p in kept]
         (album_dst_dir / f"{album.fb_album_id}.json").write_text(
-            json.dumps(
-                {"name": album.name, "photos": [_album_photo_record(p) for p in kept]},
-                ensure_ascii=False,
-                indent=2,
-            ),
+            json.dumps(record, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         albums_written += 1
@@ -137,8 +155,16 @@ def build_ready_folder(
             continue
         album_dst_dir.mkdir(parents=True, exist_ok=True)
         out = dict(raw)
-        if renames and album_path.stem in renames:
-            out["name"] = renames[album_path.stem]
+        # Overrides are keyed by `fb_album_id` — the trailing id of the media subdir
+        # (`AnimoFest_111` -> `111`), which is what the API hands the UI. That is NOT the
+        # album JSON's filename stem (`0.json`), so keying on the stem here silently dropped
+        # every rename. Derive the same id the parser does, and keep the stem as the
+        # fallback the parser also uses (an album whose media dir carries no id).
+        album_key = _album_key(raw, album_path.stem)
+        if renames and album_key in renames:
+            out["name"] = renames[album_key]
+        if captions and album_key in captions:
+            out["description"] = captions[album_key]
         out["photos"] = kept
         (album_dst_dir / album_path.name).write_text(
             json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8"

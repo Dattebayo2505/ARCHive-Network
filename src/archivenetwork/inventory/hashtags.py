@@ -1,9 +1,14 @@
 """Canonical Archers Network hashtags: extraction, matching, and slugs.
 
-Pure functions only — no I/O, no state. Imported by exactly two callers, the two points
-where data leaves the backend: `web/serializers.py` (the JSON API) and `loader/read.py`
-(the ETL). The ready folder in between keeps its raw, hashtag-bearing captions, so it
-stays a faithful FB-shaped mirror that can be re-read if these rules ever change.
+Pure functions only — no I/O, no state. Imported at the points where data leaves the
+backend: `web/serializers.py` (the JSON API) and `loader/read.py` (the ETL). The ready
+folder in between keeps its raw, hashtag-bearing captions, so it stays a faithful
+FB-shaped mirror that can be re-read if these rules ever change.
+
+`web/routes_gallery.py` is the one *inbound* caller: a volunteer edits an album caption as
+clean prose, and `join_hashtags` — the exact inverse of `split_hashtags` — puts the tags
+back before the override is stored. Editing prose can therefore never delete the canonical
+section tag that routes an album's photos downstream.
 """
 
 from __future__ import annotations
@@ -41,6 +46,19 @@ def split_hashtags(text: str | None) -> tuple[str | None, list[str]]:
     prose = "\n".join(line.strip() for line in prose.splitlines())
     prose = _BLANK_LINES.sub("\n\n", prose).strip()
     return (prose or None), tags
+
+
+def join_hashtags(prose: str | None, tags: list[str]) -> str | None:
+    """Re-attach `tags` to `prose` as a trailing block. The inverse of `split_hashtags`.
+
+    Round-trips: `join_hashtags(*split_hashtags(raw))` yields prose + tags in written order,
+    normalised. Returns None only when there is neither prose nor a tag.
+    """
+    prose = (prose or "").strip()
+    block = " ".join(f"#{t.lstrip('#')}" for t in tags)
+    if prose and block:
+        return f"{prose}\n\n{block}"
+    return prose or block or None
 
 
 def canonical_tag(tags: list[str]) -> str | None:

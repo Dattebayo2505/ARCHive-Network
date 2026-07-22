@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from ..config import settings
+from ..inventory.hashtags import join_hashtags, split_hashtags
 from ..reveal import RevealError, reveal_path
 from ..selection.autocurate import auto_curate
 from ..selection.policy import CapExceeded
@@ -32,6 +33,13 @@ class DeselectAllRequest(BaseModel):
 class RenameAlbumRequest(BaseModel):
     album_fbid: str
     name: str
+
+
+class CaptionAlbumRequest(BaseModel):
+    album_fbid: str
+    # Prose only, no hashtags — the tags are re-attached server-side from the export's own
+    # caption, so editing prose can never delete the canonical section tag.
+    caption: str = ""
 
 
 class ArchiveAlbumRequest(BaseModel):
@@ -248,6 +256,67 @@ def reset_album(request: Request, body: RenameAlbumRequest):
         album.name = album.original_name
     session.renames.remove_name(album.fb_album_id)
     return {"ok": True, "name": album.name}
+
+
+MAX_CAPTION_LEN = 2000
+
+
+def _find_album(session, album_fbid: str):
+    album = next((a for a in session.inventory.albums if a.fb_album_id == album_fbid), None)
+    if album is None:
+        raise HTTPException(status_code=404, detail="No such album")
+    return album
+
+
+@router.post("/api/album/caption")
+def set_album_caption(request: Request, body: CaptionAlbumRequest):
+    """Override an album's caption (display + build only — the export on disk is untouched).
+
+    The request carries **prose**; the album's original hashtags are re-attached here before
+    the raw caption is stored, so `#ARCHNews` — which decides the album's storage key and its
+    `hashtag` column downstream — survives every edit. Clearing the prose leaves a
+    tags-only caption rather than dropping the tags.
+    """
+    session = _session(request)
+    album = _find_album(session, body.album_fbid)
+
+    prose = body.caption.strip()
+    if len(prose) > MAX_CAPTION_LEN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Caption must be {MAX_CAPTION_LEN} characters or fewer.",
+        )
+
+    _, tags = split_hashtags(album.original_description)
+    raw = join_hashtags(prose, tags)
+    if raw is None:
+        # Nothing left to say and no tags to keep: that is a reset, not an empty override.
+        session.captions.remove_caption(album.fb_album_id)
+        album.description = album.original_description
+        album.caption_edited = False
+    else:
+        session.captions.set_caption(album.fb_album_id, raw)
+        album.description = raw
+        album.caption_edited = True
+    description, hashtags = split_hashtags(album.description)
+    return {
+        "ok": True,
+        "description": description,
+        "hashtags": hashtags,
+        "caption_edited": album.caption_edited,
+    }
+
+
+@router.post("/api/album/caption/reset")
+def reset_album_caption(request: Request, body: ArchiveAlbumRequest):
+    """Drop the caption override and restore the caption the export shipped with."""
+    session = _session(request)
+    album = _find_album(session, body.album_fbid)
+    session.captions.remove_caption(album.fb_album_id)
+    album.description = album.original_description
+    album.caption_edited = False
+    description, hashtags = split_hashtags(album.description)
+    return {"ok": True, "description": description, "hashtags": hashtags, "caption_edited": False}
 
 
 @router.post("/api/album/increase_limit")

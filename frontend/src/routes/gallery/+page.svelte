@@ -1,7 +1,7 @@
 <script>
 	import { onMount, untrack } from 'svelte';
 	import { Toaster, createToaster } from '@skeletonlabs/skeleton-svelte';
-	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum, increaseLimit, undoIncreaseLimit, getInventory, getCurrentReadyBuild, revealReadyBuild } from '$lib/api.js';
+	import { build, reveal, thumbUrl, previewUrl, toggle, deselectAll, videoThumbUrl, videoUrl, renameAlbum, resetAlbumName, archiveAlbum, unarchiveAlbum, increaseLimit, undoIncreaseLimit, setAlbumCaption, resetAlbumCaption, getInventory, getCurrentReadyBuild, revealReadyBuild } from '$lib/api.js';
 	import { formatSize } from '$lib/stats.js';
 	import { prefetchAlbumThumbs, clearPrefetchCache } from '$lib/imageCache.js';
 	import { seedMissingThumbnails, thumbnailMissing } from '$lib/videoThumbs.js';
@@ -20,6 +20,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import BuildConfirmDialog from '$lib/components/BuildConfirmDialog.svelte';
 	import HashtagPills from '$lib/components/HashtagPills.svelte';
+	import AlbumCaption from '$lib/components/AlbumCaption.svelte';
 	import { dragScrollY } from '$lib/dragScrollY.js';
 
 	let { data } = $props();
@@ -167,7 +168,6 @@
 	});
 
 	let editingAlbumId = $state(null);
-	let descExpanded = $state(false);
 	const toaster = createToaster();
 
 	let gridContainer = $state();
@@ -196,13 +196,6 @@
 			hour12: true
 		}).format(date).replace('\u202f', ' '); // standardize space for AM/PM
 	}
-
-	$effect(() => {
-		// track activeId to reset description expansion when switching albums
-		if (activeId !== undefined) {
-			descExpanded = false;
-		}
-	});
 
 	// When an album is activated, eagerly prefetch all its thumbnails so that
 	// switching back later loads images from the browser cache instantly.
@@ -388,6 +381,38 @@
 				}
 			}
 		}
+	}
+
+	/**
+	 * Caption edits are prose-only: the backend re-attaches the album's hashtags and hands
+	 * back the split result, so we write both fields from the response rather than guessing
+	 * locally what the tags became.
+	 */
+	async function onCaptionSave(caption) {
+		if (!activeAlbum) return;
+		const album = activeAlbum;
+		const result = await setAlbumCaption(album.fb_album_id, caption);
+		if (!result.ok) {
+			toaster.error({ title: 'Caption not saved', description: result.error });
+			return;
+		}
+		album.description = result.description ?? '';
+		album.hashtags = result.hashtags ?? [];
+		album.caption_edited = result.caption_edited;
+	}
+
+	async function onCaptionReset() {
+		if (!activeAlbum) return;
+		const album = activeAlbum;
+		const result = await resetAlbumCaption(album.fb_album_id);
+		if (!result.ok) {
+			toaster.error({ title: 'Caption not reset', description: result.error });
+			return;
+		}
+		album.description = result.description ?? '';
+		album.hashtags = result.hashtags ?? [];
+		album.caption_edited = false;
+		toaster.success({ title: 'Caption reset', description: "Back to the export's own caption." });
 	}
 
 	async function runBuild() {
@@ -1089,30 +1114,16 @@
 						</button>
 					{/if}
 				</div>
-				{#if activeAlbum.description}
-					{@const isLongDesc = activeAlbum.description.length > 120 || activeAlbum.description.split('\n').length > 2}
-					<!-- When the selection strip is docked open right below, the caption squares
-					     its bottom corners so the two read as one attached block. -->
-					<div
-						class="mt-1.5 rounded-md bg-surface-200 px-2.5 py-1.5 text-xs text-surface-600 transition-[border-radius] duration-200"
-						class:rounded-b-none={!isDockDragging && dockPosition === 'header' && panelOpen}
-					>
-						<p class="whitespace-pre-wrap break-words leading-relaxed" class:line-clamp-2={isLongDesc && !descExpanded}>
-							{activeAlbum.description}
-						</p>
-						{#if isLongDesc}
-							{#if !descExpanded}
-								<button type="button" class="mt-0.5 font-medium text-primary-600 hover:text-primary-700 dark:text-primary-300 dark:hover:text-primary-200 hover:underline" onclick={() => (descExpanded = true)}>
-									Read more
-								</button>
-							{:else}
-								<button type="button" class="mt-0.5 font-medium text-primary-600 hover:text-primary-700 dark:text-primary-300 dark:hover:text-primary-200 hover:underline" onclick={() => (descExpanded = false)}>
-									See less
-								</button>
-							{/if}
-						{/if}
-					</div>
-				{/if}
+				<!-- When the selection strip is docked open right below, the caption squares
+				     its bottom corners so the two read as one attached block. Archived albums
+				     are read-only, so they show the caption with no edit affordance. -->
+				<AlbumCaption
+					album={activeAlbum}
+					editable={!isActiveArchived}
+					attached={!isDockDragging && dockPosition === 'header' && panelOpen}
+					onSave={onCaptionSave}
+					onReset={onCaptionReset}
+				/>
 
 				{@render topDock()}
 			</header>

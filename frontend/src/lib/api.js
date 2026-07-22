@@ -189,6 +189,38 @@ export async function resetAlbumName(albumFbid, fetchFn = fetch) {
 	return { ok: true, ...(await res.json()) };
 }
 
+/**
+ * Override an album's caption. `caption` is **prose only** — the album's hashtags are
+ * re-attached server-side, so an edit can never delete the canonical `#ARCH…` section tag
+ * that decides where the album's photos land downstream.
+ */
+export async function setAlbumCaption(albumFbid, caption, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/album/caption'), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ album_fbid: albumFbid, caption })
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		return { ok: false, error: data.detail ?? 'Could not save the caption.' };
+	}
+	return { ok: true, ...(await res.json()) };
+}
+
+/** Drop the caption override and restore the caption the export shipped with. */
+export async function resetAlbumCaption(albumFbid, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/album/caption/reset'), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ album_fbid: albumFbid })
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		return { ok: false, error: data.detail ?? 'Could not reset the caption.' };
+	}
+	return { ok: true, ...(await res.json()) };
+}
+
 /** Move every photo in an album to the archive, then remove the album. */
 export async function archiveAlbum(albumFbid, fetchFn = fetch) {
 	const res = await fetchFn(url('/api/album/archive'), {

@@ -27,7 +27,12 @@ def build(request: Request) -> dict:
     # export folder name for plain folder imports, where ``workspace_id == export_root.name``.
     dest = ready_root / session.workspace_id
     result = build_ready_folder(
-        session.export_root, dest, keep, session.video_thumbs.dir, session.renames._renames
+        session.export_root,
+        dest,
+        keep,
+        session.video_thumbs.dir,
+        session.renames._renames,
+        session.captions._captions,
     )
 
     # ARCHive Network owns the local desktop, so pop the OS file manager open on the

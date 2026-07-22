@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..inventory.captions import CaptionState
 from ..inventory.models import ExportInventory
 from ..inventory.renames import RenameState
 from ..selection.archive_state import ArchiveState
@@ -24,3 +25,4 @@ class Session:
     renames: RenameState
     archive: ArchiveState
     limits: LimitState
+    captions: CaptionState
