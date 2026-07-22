@@ -10,7 +10,7 @@ from ..config import settings
 from ..inventory.hashtags import join_hashtags, split_hashtags
 from ..reveal import RevealError, reveal_path
 from ..selection.autocurate import auto_curate
-from ..selection.policy import CapExceeded
+from ..selection.policy import CapExceeded, NotSelectable
 from ..thumbnails.service import ThumbnailService
 from .serializers import inventory_payload
 
@@ -177,6 +177,16 @@ def toggle(request: Request, body: ToggleRequest):
     session = _session(request)
     try:
         selected = session.selection.toggle(body.album_fbid, body.photo_fbid)
+    except NotSelectable:
+        # Separate from "cap": this album can never ship, so there is no swap to offer.
+        return JSONResponse(
+            {
+                "error": "disregarded",
+                "detail": "Photos without an album cannot be part of the ready folder.",
+                "count": session.selection.count(body.album_fbid),
+            },
+            status_code=409,
+        )
     except CapExceeded:
         return JSONResponse(
             {"error": "cap", "count": session.selection.count(body.album_fbid)},

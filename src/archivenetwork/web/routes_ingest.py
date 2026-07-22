@@ -122,16 +122,30 @@ def _start_session(
     # are leftover piles, not curated sets, so the ≤N cap is meaningless. Feed them to the
     # policy so it stops capping them (the model flag is otherwise inert).
     uncapped = frozenset(a.fb_album_id for a in inventory.albums if a.uncapped)
+    # Disregarded buckets (`__non_album__`) are refused by the policy outright: a photo with
+    # no album has nowhere to land in the ready folder, so it must not be pickable.
+    disregarded = frozenset(a.fb_album_id for a in inventory.albums if a.disregarded)
+
+    selection = SelectionState(
+        state_dir / "selection.json",
+        DefaultPolicy(
+            uncapped_albums=uncapped,
+            disregarded_albums=disregarded,
+            get_limit=limits.get_limit,
+        ),
+    )
+    # A selection.json written before non-album photos were disregarded may still name
+    # them. Drop those picks at load time so the gallery, the counters and the build all
+    # agree from the first paint — the builder would discard them anyway.
+    for album_fbid in disregarded:
+        selection.deselect_all(album_fbid)
 
     request.app.state.session = Session(
         workspace_id=entry.id,
         state_dir=state_dir,
         export_root=export_root,
         inventory=inventory,
-        selection=SelectionState(
-            state_dir / "selection.json",
-            DefaultPolicy(uncapped_albums=uncapped, get_limit=limits.get_limit),
-        ),
+        selection=selection,
         thumbnails=ThumbnailService(state_dir / "thumbs"),
         video_thumbs=VideoThumbnailStore(state_dir / "thumbs" / "videos"),
         renames=renames,

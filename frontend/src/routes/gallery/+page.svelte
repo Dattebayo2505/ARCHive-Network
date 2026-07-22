@@ -278,6 +278,12 @@
 	let allAlbumsList = $derived([...(inventory.albums ?? []), ...(inventory.archived_albums ?? [])]);
 	let activeAlbum = $derived(allAlbumsList.find((a) => a.fb_album_id === activeId) ?? null);
 	let isActiveArchived = $derived(inventory.archived_albums?.some(a => a.fb_album_id === activeId) ?? false);
+	// A disregarded album (the Non-Album bucket) can never reach the ready folder, so it is
+	// browsable but not selectable — the server refuses the toggle either way (409).
+	let isActiveDisregarded = $derived(activeAlbum?.disregarded === true);
+	// The photos the build will drop for belonging to no album. Server-computed so the
+	// number quoted in the confirm dialog is the one the builder actually subtracts.
+	let disregardedCount = $derived(inventory.disregarded_count ?? 0);
 	let activeCap = $derived(activeAlbum ? activeAlbum.max_per_album : null); // null = no limit
 	let activeFull = $derived(
 		activeAlbum && activeCap != null ? activeAlbum.count_selected >= activeCap : false
@@ -326,6 +332,14 @@
 	async function onToggle(photo) {
 		if (!activeAlbum) return;
 		const result = await toggle(activeAlbum.fb_album_id, photo.fbid);
+		if (!result.ok && result.disregarded) {
+			toaster.error({
+				title: 'Not part of the ready folder',
+				description:
+					result.detail ?? 'Photos without an album cannot be part of the ready folder.'
+			});
+			return;
+		}
 		if (!result.ok && result.cap) {
 			toaster.error({
 				title: 'Album is full',
@@ -1094,9 +1108,15 @@
 				{/if}
 
 				<div class="mt-3 mb-1 flex items-center gap-2">
+					<!-- Disabled outright on a disregarded album: there is nothing here the build
+					     could ship, so offering selection would promise something we cannot keep. -->
 					<button
 						type="button"
-						class="flex h-[38px] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 {selectionEnabled ? 'bg-green-100 border-green-300 text-green-800 shadow-inner' : 'border-surface-300 bg-surface-50 text-surface-700 hover:bg-surface-100'}"
+						disabled={isActiveDisregarded}
+						title={isActiveDisregarded
+							? 'These photos belong to no album, so they cannot be part of the ready folder.'
+							: undefined}
+						class="flex h-[38px] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface-50 {selectionEnabled ? 'bg-green-100 border-green-300 text-green-800 shadow-inner' : 'border-surface-300 bg-surface-50 text-surface-700 hover:bg-surface-100'}"
 						onclick={() => (selectionEnabled = !selectionEnabled)}
 					>
 						<svg viewBox="0 0 24 24" class="size-3.5 {selectionEnabled ? 'text-green-700' : 'text-surface-500'}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7" /><path d="m9 11 3 3L22 4" /></svg>
@@ -1114,6 +1134,25 @@
 						</button>
 					{/if}
 				</div>
+				{#if isActiveDisregarded}
+					<!-- Warning tokens are theme-stable (only primary-100 is re-declared under
+					     .dark), so this pale-tint/dark-ink pairing reads the same in both themes. -->
+					<div
+						class="mt-2 flex items-start gap-2.5 rounded-xl border border-warning-300 bg-warning-100 px-3.5 py-2.5"
+						data-testid="disregarded-notice"
+					>
+						<svg viewBox="0 0 24 24" class="mt-0.5 size-4 shrink-0 text-warning-900" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+						</svg>
+						<p class="min-w-0 text-sm leading-relaxed text-warning-900">
+							These {activeAlbum.photos.length} photo{activeAlbum.photos.length === 1 ? '' : 's'}
+							belong to no album, so they <strong class="font-semibold">cannot be part of the
+							ready folder</strong>. They are shown for reference only and are excluded from
+							every build.
+						</p>
+					</div>
+				{/if}
+
 				<!-- When the selection strip is docked open right below, the caption squares
 				     its bottom corners so the two read as one attached block. Archived albums
 				     are read-only, so they show the caption with no edit affordance. -->
@@ -1145,8 +1184,8 @@
 							const index = activeAlbum.photos.findIndex((p) => p.fbid === photo.fbid);
 							if (index !== -1) openPreviewAt(index);
 						}}
-						selectable={!isActiveArchived}
-						selectionEnabled={selectionEnabled}
+						selectable={!isActiveArchived && !isActiveDisregarded}
+						selectionEnabled={selectionEnabled && !isActiveDisregarded}
 						full={activeFull}
 					/>
 				</div>
@@ -1230,7 +1269,7 @@
 		thumb={thumbUrl}
 		preview={previewUrl}
 		full={activeFull}
-		selectable={!isActiveArchived}
+		selectable={!isActiveArchived && !isActiveDisregarded}
 		startIndex={previewStart}
 		{onToggle}
 		onClose={() => (previewOpen = false)}
@@ -1256,6 +1295,7 @@
 	totalImages={totalSelected}
 	totalVideos={totalSelectedVideos}
 	totalMB={totalSelectedMB}
+	nonAlbumSkipped={disregardedCount}
 	{existingBuild}
 	onCancel={() => (buildConfirm = false)}
 	onConfirm={async () => {

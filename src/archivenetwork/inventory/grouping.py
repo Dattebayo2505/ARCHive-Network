@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections import OrderedDict, Counter
 
-from .models import Album, ExportInventory, Photo
+from .models import NON_ALBUM_ID, Album, ExportInventory, Photo
 
 _NON_ALNUM = re.compile(r"[^A-Za-z0-9]+")
 
@@ -86,17 +86,19 @@ def derive_caption_albums(inventory: ExportInventory) -> None:
     
     if inventory.non_album_photos:
         non_album_album = Album(
-            fb_album_id="__non_album__",
+            fb_album_id=NON_ALBUM_ID,
             name="Non-Album",
-            description="Photos without an album",
+            description="Photos without an album — excluded from the ready folder",
             origin="Non-Album",
             photos=inventory.non_album_photos,
             # Uncapped like the derived albums: this bucket is an arbitrary leftover pile,
-            # not a curated set, so the ≤N-per-album cap is meaningless here.
+            # not a curated set, so the ≤N-per-album cap is meaningless here. It is also
+            # `disregarded` — the cap is moot because nothing here may be picked at all.
             uncapped=True,
+            disregarded=True,
         )
         for p in inventory.non_album_photos:
-            p.album_fbid = "__non_album__"
+            p.album_fbid = NON_ALBUM_ID
         inventory.albums.append(non_album_album)
         inventory.non_album_photos = []
 

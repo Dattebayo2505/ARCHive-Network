@@ -68,6 +68,9 @@ def _album(a: Album, selection: SelectionState, max_per_album: int, limits: Limi
         "caption_edited": a.caption_edited,
         "hashtags": hashtags,
         "origin": a.origin,
+        # `true` for the `__non_album__` bucket: visible, but never selectable and never
+        # built. The UI disables selection on it; the server refuses the toggle anyway (409).
+        "disregarded": a.disregarded,
         "post_timestamp": a.post_timestamp.isoformat() if a.post_timestamp else None,
         "count_selected": selection.count(a.fb_album_id),
         "max_per_album": _album_cap(a, max_per_album, limits),
@@ -86,9 +89,14 @@ def inventory_payload(
     limits: LimitState,
     video_thumbs: VideoThumbnailStore | None = None,
 ) -> dict:
+    # How many photos the build will drop for belonging to no album. Computed here rather
+    # than in the UI so the number the volunteer is warned with is the same one the builder
+    # subtracts from `keep_fbids`.
+    disregarded_count = sum(len(a.photos) for a in inventory.albums if a.disregarded)
     return {
         "export_name": export_name,
         "max_per_album": max_per_album,
+        "disregarded_count": disregarded_count,
         "albums": [_album(a, selection, max_per_album, limits) for a in inventory.albums],
         "archived_albums": [
             _album(a, selection, max_per_album, limits) for a in inventory.archived_albums

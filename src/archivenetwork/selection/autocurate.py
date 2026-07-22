@@ -47,7 +47,9 @@ def auto_curate(
     under `skipped_videos` rather than shipping silently.
 
     Archived photos and archived albums are absent from `inventory.albums`, so they can't be
-    picked here — the same exclusion the builder enforces.
+    picked here — the same exclusion the builder enforces. The `__non_album__` bucket *is*
+    present in `inventory.albums` (it is shown in the gallery) but is `disregarded`, so it is
+    skipped explicitly: picking from it would write a selection the builder then throws away.
 
     The whole selection is **replaced**, not merged, in one atomic write.
     """
@@ -56,6 +58,8 @@ def auto_curate(
     selections: dict[str, list[str]] = {}
 
     for album in inventory.albums:
+        if album.disregarded:
+            continue
         usable = [p for p in album.photos if p.exists and not p.is_video]
         n = min(per_album, len(usable))
         picked = rng.sample(usable, n) if n else []

@@ -2,9 +2,10 @@
 folder. Mirrors the web UI's selection + build, but non-interactive.
 
 Nothing is auto-kept — exactly as in the UI, only picked photos ship. The synthetic
-`__non_album__` bucket is just another album here, so its photos get the same random
-<=N treatment. Videos are skipped: building one needs a client-captured still, which a
-headless script cannot produce.
+`__non_album__` bucket is **disregarded**: a photo belonging to no album has no slot in
+the ready folder, so it is never picked here (the builder would drop it anyway). Videos
+are skipped: building one needs a client-captured still, which a headless script cannot
+produce.
 
 Usage:
     uv run python scripts/auto_curate.py <export-path> [--per-album 10] [--seed 0]
@@ -52,11 +53,15 @@ def main() -> int:
 
     inv = build_inventory(root)
 
-    # Randomly select <= per-album existing photos per album. `__non_album__` is one of
-    # these albums, so its photos are picked the same way — never auto-kept.
+    # Randomly select <= per-album existing photos per album. Disregarded buckets
+    # (`__non_album__`) are skipped — nothing in them can reach the ready folder.
     keep: set[str] = set()
     print(f"\nAlbums ({len(inv.albums)}):")
     for album in inv.albums:
+        if album.disregarded:
+            print(f"  - {album.name!r} [{album.fb_album_id}]: "
+                  f"disregarded, {len(album.photos)} photo(s) not built (no album)")
+            continue
         usable = [p for p in album.photos if p.exists]
         n = min(args.per_album, len(usable))
         picked = rng.sample(usable, n) if n else []

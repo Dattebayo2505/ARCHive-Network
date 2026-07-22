@@ -102,7 +102,13 @@ export async function toggle(albumFbid, photoFbid, fetchFn = fetch) {
 		body: JSON.stringify({ album_fbid: albumFbid, photo_fbid: photoFbid })
 	});
 	if (res.status === 409) {
+		// Two distinct refusals share the 409: "cap" is a full album (undo by deselecting),
+		// "disregarded" is an album that can never ship (nothing to undo). Keep them apart
+		// so the UI never offers a swap that would not help.
 		const data = await res.json();
+		if (data.error === 'disregarded') {
+			return { ok: false, cap: false, disregarded: true, detail: data.detail, count: data.count };
+		}
 		return { ok: false, cap: true, count: data.count };
 	}
 	const data = await res.json();

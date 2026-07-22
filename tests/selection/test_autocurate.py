@@ -8,8 +8,12 @@ from archivenetwork.selection.state import SelectionState
 
 def _sel(tmp_path: Path, inv) -> SelectionState:
     uncapped = frozenset(a.fb_album_id for a in inv.albums if a.uncapped)
+    disregarded = frozenset(a.fb_album_id for a in inv.albums if a.disregarded)
     return SelectionState(
-        tmp_path / "sel.json", DefaultPolicy(max_per_album=10, uncapped_albums=uncapped)
+        tmp_path / "sel.json",
+        DefaultPolicy(
+            max_per_album=10, uncapped_albums=uncapped, disregarded_albums=disregarded
+        ),
     )
 
 
@@ -65,6 +69,25 @@ def test_archived_photos_are_never_picked(archive_export_root: Path, tmp_path: P
     archived = {p.fbid for p in inv.archived_photos}
     assert archived  # the fixture really does archive some
     assert not (archived & sel.selected_fbids())
+
+
+def test_non_album_photos_are_never_picked(export_root: Path, tmp_path: Path):
+    """The `__non_album__` bucket is disregarded — auto-curate must skip it entirely.
+
+    Unlike archived media (absent from `inventory.albums`), this bucket *is* in the album
+    list because the gallery shows it, so the skip has to be explicit. Picking from it would
+    write selections the builder then throws away — visible checkmarks on photos that never
+    ship.
+    """
+    inv = build_inventory(export_root)
+    sel = _sel(tmp_path, inv)
+
+    result = auto_curate(inv, sel, per_album=10, seed=0)
+
+    non_album = next(a for a in inv.albums if a.disregarded)
+    assert non_album.photos  # the fixture really does produce non-album photos
+    assert not ({p.fbid for p in non_album.photos} & sel.selected_fbids())
+    assert non_album.fb_album_id not in {a.fb_album_id for a in result.albums}
 
 
 def test_auto_curate_is_not_auto_keep(export_root: Path, tmp_path: Path):

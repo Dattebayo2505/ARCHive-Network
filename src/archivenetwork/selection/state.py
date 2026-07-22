@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .policy import CapExceeded, SelectionPolicy
+from .policy import CapExceeded, NotSelectable, SelectionPolicy
 
 
 class SelectionState:
@@ -26,9 +26,13 @@ class SelectionState:
     def toggle(self, album_fbid: str, photo_fbid: str) -> bool:
         sel = self._selected.setdefault(album_fbid, [])
         if photo_fbid in sel:
+            # Removal is always allowed — including from a disregarded album, so a
+            # selection.json written before the album was disregarded can be cleaned up.
             sel.remove(photo_fbid)
             self._save()
             return False
+        if self.policy.is_disregarded(album_fbid):
+            raise NotSelectable(album_fbid)
         if not self.policy.can_select(album_fbid, len(sel)):
             raise CapExceeded(album_fbid)
         sel.append(photo_fbid)

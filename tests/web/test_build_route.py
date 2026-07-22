@@ -15,18 +15,22 @@ def test_build_produces_ready_folder(export_root: Path, tmp_path: Path, monkeypa
     client = TestClient(create_app())
     client.post("/api/ingest/folder", json={"folder": str(export_root)})
     client.post("/api/toggle", json={"album_fbid": "111", "photo_fbid": "a01"})
-    client.post("/api/toggle", json={"album_fbid": "__non_album__", "photo_fbid": "m01"})
+    # Non-album photos are disregarded: the toggle is refused, not merely uncounted.
+    refused = client.post("/api/toggle", json={"album_fbid": "__non_album__", "photo_fbid": "m01"})
+    assert refused.status_code == 409
+    assert refused.json()["error"] == "disregarded"
 
     resp = client.post("/api/build")
     assert resp.status_code == 200
     body = resp.json()
     assert "copied" in body
     assert body["albums_written"] >= 1
+    assert body["non_album_skipped"] == 2
 
     ready = tmp_path / "workspace" / "ready" / "export"
     assert (ready / "posts" / "album" / "0.json").exists()
-    # m01 was toggled so it should exist
-    assert (ready / "posts" / "media" / "Mobileuploads_999" / "m01.jpg").exists()
+    # m01 could not be picked, so it is not in the build.
+    assert not (ready / "posts" / "media" / "Mobileuploads_999" / "m01.jpg").exists()
     # The build pops the file manager open on the workspace/ready/ parent.
     assert [p.resolve() for p in revealed] == [ready.parent.resolve()]
 

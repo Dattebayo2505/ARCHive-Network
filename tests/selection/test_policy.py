@@ -7,11 +7,26 @@ def test_cap_enforced_at_max():
     assert policy.can_select("111", 3) is False
 
 
-def test_non_album_and_videos_are_selectable():
-    # Nothing is auto-kept: both buckets must be pickable, or the user could never ship them.
+def test_videos_are_selectable_and_uncapped():
+    # Nothing is auto-kept: videos must be pickable, or the user could never ship them.
     policy = DefaultPolicy(max_per_album=3)
-    assert policy.can_select("__non_album__", 0) is True
-    assert policy.can_select("__videos__", 999) is True  # videos are uncapped
+    assert policy.can_select("__videos__", 999) is True
+
+
+def test_a_disregarded_album_is_never_selectable():
+    """Non-album photos have no slot in the ready folder, so they may not be picked at all.
+
+    Note the interaction with `uncapped`: `__non_album__` is *both*, and disregarded must
+    win — otherwise the uncapped short-circuit would wave every pick through.
+    """
+    policy = DefaultPolicy(
+        max_per_album=3,
+        uncapped_albums=frozenset({"__non_album__"}),
+        disregarded_albums=frozenset({"__non_album__"}),
+    )
+    assert policy.is_disregarded("__non_album__") is True
+    assert policy.can_select("__non_album__", 0) is False
+    assert policy.can_select("111", 0) is True  # ordinary albums are unaffected
 
 
 def test_uncapped_album_ignores_max():

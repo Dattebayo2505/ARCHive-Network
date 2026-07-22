@@ -30,6 +30,19 @@ describe('BuildConfirmDialog', () => {
 		expect(screen.getByRole('button', { name: /yes, overwrite it/i })).toBeTruthy();
 	});
 
+	it('names how many non-album photos the build will drop', () => {
+		render(BuildConfirmDialog, { ...BASE, existingBuild: null, nonAlbumSkipped: 3 });
+		expect(screen.getByTestId('non-album-notice')).toBeTruthy();
+		expect(
+			screen.getByText(/3 images will not be loaded to the ready folder due to being a non-album photo/i)
+		).toBeTruthy();
+	});
+
+	it('stays silent when every photo belongs to an album', () => {
+		render(BuildConfirmDialog, { ...BASE, existingBuild: null, nonAlbumSkipped: 0 });
+		expect(screen.queryByTestId('non-album-notice')).toBeNull();
+	});
+
 	it('requires the second confirm before calling onConfirm', async () => {
 		const onConfirm = vi.fn();
 		render(BuildConfirmDialog, { ...BASE, existingBuild: EXISTING, onConfirm });

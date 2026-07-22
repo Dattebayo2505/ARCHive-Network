@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -242,6 +243,41 @@ def ready_root(grouping_export_root: Path, tmp_path: Path) -> Path:
     dest = tmp_path / "ready"
     build_ready_folder(grouping_export_root, dest, keep)
     return dest
+
+
+@pytest.fixture
+def legacy_unanchored_ready_root(ready_root: Path, grouping_export_root: Path) -> Path:
+    """A ready folder that still carries `posts/unanchored.json` — a *pre-existing* build.
+
+    Non-album media is disregarded now, so no new build produces this manifest. The loader
+    must keep reading it, or re-loading a folder built before that rule would silently drop
+    rows. Hand-assembled for exactly that reason: the builder can no longer create one.
+    """
+    src_media = grouping_export_root / "posts" / "media" / "Mobileuploads_777"
+    photos = []
+    for fbid in ("s01", "n01"):
+        shutil.copy2(src_media / f"{fbid}.jpg", ready_root / "posts" / "media" / f"{fbid}.jpg")
+        photos.append(
+            {"uri": f"posts/media/{fbid}.jpg", "creation_timestamp": 1_700_000_000,
+             "title": fbid.upper()}
+        )
+    (ready_root / "posts" / "unanchored.json").write_text(
+        json.dumps({"photos": photos}), encoding="utf-8"
+    )
+
+    # `s01` was posted, so an old build listed it in BOTH the feed and the manifest. The
+    # current builder drops that post (its only media is non-album), so put it back — the
+    # "manifest must not clobber a feed caption" rule only has teeth when both are present.
+    posts_path = ready_root / "posts" / "profile_posts_1.json"
+    posts = json.loads(posts_path.read_text(encoding="utf-8"))
+    posts.append(
+        {
+            "data": [{"post": "Solo headline\n\nSolo body."}],
+            "attachments": [{"data": [{"media": {"uri": "posts/media/s01.jpg"}}]}],
+        }
+    )
+    posts_path.write_text(json.dumps(posts), encoding="utf-8")
+    return ready_root
 
 
 @pytest.fixture

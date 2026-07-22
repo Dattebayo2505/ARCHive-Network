@@ -128,9 +128,10 @@ cd frontend && npm run build && node build
    unzipped **locally** by the server — there is no large HTTP upload.
 3. In the gallery, pick up to `MAX_PER_ALBUM` photos per named album and choose a
    still frame for each video. **Nothing is auto-kept** — every photo, video and
-   album that ships is one you explicitly picked. Non-album photos are pickable
-   under a synthetic **Non-Album** entry, and videos under **Videos**; both are
-   uncapped, as are the derived caption-albums.
+   album that ships is one you explicitly picked. Videos are pickable under
+   **Videos** (uncapped, as are the derived caption-albums). Photos belonging to
+   no album appear under a read-only **Non-Album** entry: they cannot be selected
+   and are never built, and the build dialog tells you how many that is.
 4. Click **Build ready folder**. The filtered copy lands in
    `workspace/ready/<workspace-id>/` (the friendly `facebook-<page>-<date>` name,
    matching `workspace/state/<id>/`) and the OS file manager pops open on it.
@@ -166,7 +167,8 @@ with plain `python` inside an activated venv:
 
 ```bash
 # Non-interactive curation: randomly pick <=N photos per album (the synthetic
-# non-album bucket included) and build the ready folder. Nothing is auto-kept.
+# non-album bucket is skipped — it can never be built) and build the ready folder.
+# Nothing is auto-kept.
 # Videos are skipped — building one needs a browser-captured still.
 uv run python scripts/auto_curate.py <export-path> [--per-album 10] [--seed 0]
 # or:  python scripts/auto_curate.py <export-path> [--per-album 10] [--seed 0]

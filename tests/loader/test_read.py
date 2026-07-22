@@ -20,12 +20,13 @@ def test_reads_albums_and_media_from_the_ready_folder_alone(ready_root: Path):
     assert by_id["111"].is_derived is False
 
 
-def test_album_id_comes_from_the_path_and_unanchored_media_is_null(ready_root: Path):
+def test_album_id_comes_from_the_path_and_non_album_media_is_absent(ready_root: Path):
     media = {m.fbid: m for m in read_ready(ready_root).media}
 
     assert media["g01"].fb_album_id == "g01"  # derived album, path-derived synthetic id
     assert media["a01"].fb_album_id == "111"  # named FB album
-    assert media["s01"].fb_album_id is None  # loose singleton -> unanchored
+    # `s01` is a loose singleton: disregarded by the builder, so it never reaches the ETL.
+    assert "s01" not in media
 
 
 def test_caption_is_hoisted_from_the_post_body(ready_root: Path):
@@ -85,9 +86,14 @@ def test_creation_at_prefers_the_post_timestamp_over_the_album(tmp_path: Path):
     assert media["p01"].creation_at == datetime.fromtimestamp(post_ts, tz=timezone.utc)
 
 
-def test_never_posted_unanchored_media_is_still_read(ready_root: Path):
-    """`n01` has no caption and no post — it is reachable only via posts/unanchored.json."""
-    media = {m.fbid: m for m in read_ready(ready_root).media}
+def test_never_posted_unanchored_media_is_still_read(legacy_unanchored_ready_root: Path):
+    """A pre-existing build's `posts/unanchored.json` must still load.
+
+    New builds never write it (non-album media is disregarded), but a folder built before
+    that rule still has one, and re-loading it must not silently drop those rows. `n01` has
+    no caption and no post, so the manifest is its *only* route into the ETL.
+    """
+    media = {m.fbid: m for m in read_ready(legacy_unanchored_ready_root).media}
 
     assert "n01" in media
     assert media["n01"].fb_album_id is None  # belongs to no album
@@ -95,9 +101,9 @@ def test_never_posted_unanchored_media_is_still_read(ready_root: Path):
     assert media["n01"].uri == "posts/media/n01.jpg"
 
 
-def test_unanchored_manifest_does_not_clobber_a_feed_caption(ready_root: Path):
+def test_unanchored_manifest_does_not_clobber_a_feed_caption(legacy_unanchored_ready_root: Path):
     """`s01` is in BOTH the feed and unanchored.json; the feed's caption must survive."""
-    media = {m.fbid: m for m in read_ready(ready_root).media}
+    media = {m.fbid: m for m in read_ready(legacy_unanchored_ready_root).media}
     assert media["s01"].caption == "Solo headline\n\nSolo body."
 
 
@@ -132,8 +138,10 @@ def test_media_inherits_its_albums_hashtag_and_slug_group(ready_root: Path):
     assert g01.group == "headline-one"
 
 
-def test_unanchored_media_has_no_tag_and_the_unanchored_group(ready_root: Path):
-    data = read_ready(ready_root)
+def test_unanchored_media_has_no_tag_and_the_unanchored_group(
+    legacy_unanchored_ready_root: Path,
+):
+    data = read_ready(legacy_unanchored_ready_root)
     s01 = next(m for m in data.media if m.fbid == "s01")
     assert s01.fb_album_id is None
     assert s01.hashtag is None

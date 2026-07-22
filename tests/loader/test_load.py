@@ -45,8 +45,11 @@ def test_reload_is_idempotent_and_freezes_the_key(ready_root: Path, tmp_path: Pa
     assert ws == "ws-2"  # provenance still refreshes
 
 
-def test_unanchored_media_has_a_null_album(ready_root: Path, tmp_path: Path, pg_conn):
-    load(ready_root, "ws-1", LocalStorage(tmp_path / "store"), pg_conn)
+def test_unanchored_media_has_a_null_album(
+    legacy_unanchored_ready_root: Path, tmp_path: Path, pg_conn
+):
+    """Only a *pre-existing* build can carry unanchored media — new ones disregard it."""
+    load(legacy_unanchored_ready_root, "ws-1", LocalStorage(tmp_path / "store"), pg_conn)
     with pg_conn.cursor() as cur:
         cur.execute("SELECT fb_album_id FROM media WHERE fbid = 's01'")
         assert cur.fetchone()[0] is None
@@ -66,9 +69,9 @@ def test_storage_key_is_grouped_by_hashtag_and_album(ready_root: Path, tmp_path:
 
 
 def test_untagged_unanchored_media_lands_in_uncategorized(
-    ready_root: Path, tmp_path: Path, pg_conn
+    legacy_unanchored_ready_root: Path, tmp_path: Path, pg_conn
 ):
-    load(ready_root, "ws-1", LocalStorage(tmp_path / "store"), pg_conn)
+    load(legacy_unanchored_ready_root, "ws-1", LocalStorage(tmp_path / "store"), pg_conn)
     with pg_conn.cursor() as cur:
         cur.execute("SELECT storage_path FROM media WHERE fbid = 's01'")
         assert cur.fetchone()[0] == "fb-exports/uncategorized/unanchored/s01.jpg"

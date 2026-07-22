@@ -10,6 +10,9 @@
 		totalVideos = 0,
 		totalMB = "0.00",
 		defaultMax = 10,
+		// Photos the build will drop for belonging to no album. Server-computed (the same
+		// set the builder subtracts from `keep_fbids`), so the number cannot drift.
+		nonAlbumSkipped = 0,
 		// The existing ready build for this workspace (from GET /api/ready/current), or
 		// null. When set, the build is an *overwrite* and says so — twice.
 		existingBuild = null,
@@ -99,6 +102,30 @@
 						<p class="mt-0.5">
 							Built {formatBuiltAt(existingBuild.built_ts)} · {formatSize(existingBuild.size_bytes)}{#if existingBuild.photos != null} · {existingBuild.photos} photo{existingBuild.photos === 1 ? '' : 's'}{/if}. Building again
 							<strong class="font-semibold">overwrites</strong> it with your current selection.
+						</p>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Non-album notice. Deliberately quieter than the amber overwrite warning above:
+			     this is information, not a risk — nothing is lost that could have been kept.
+			     Surface tokens invert wholesale under .dark, so no dark: variants are needed. -->
+			{#if nonAlbumSkipped > 0}
+				<div
+					class="mx-6 mb-4 flex items-start gap-3 rounded-xl border border-surface-200 bg-surface-100 px-4 py-3 shrink-0"
+					data-testid="non-album-notice"
+				>
+					<svg viewBox="0 0 24 24" class="mt-0.5 size-5 shrink-0 text-surface-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+					</svg>
+					<div class="min-w-0 text-sm leading-relaxed text-surface-700">
+						<p class="font-semibold text-surface-900">
+							{nonAlbumSkipped} image{nonAlbumSkipped === 1 ? '' : 's'} will not be loaded to the
+							ready folder due to being a non-album photo
+						</p>
+						<p class="mt-0.5">
+							{nonAlbumSkipped === 1 ? 'It cannot' : 'They cannot'} be part of the ready folder
+							because {nonAlbumSkipped === 1 ? 'it does' : 'they do'} not belong to an album.
 						</p>
 					</div>
 				</div>

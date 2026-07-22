@@ -5,6 +5,10 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+# The synthetic album that collects every photo belonging to no real FB album. It is a
+# *disregarded* bucket: visible for inspection, never selectable, never built.
+NON_ALBUM_ID = "__non_album__"
+
 
 class Photo(BaseModel):
     fbid: str
@@ -42,6 +46,10 @@ class Album(BaseModel):
     caption_edited: bool = False
     photos: list[Photo] = []
     uncapped: bool = False  # no per-album cap: the derived caption-albums + `__non_album__`
+    # True for a bucket that can never ship: its photos belong to no album, so the ready
+    # folder (and every downstream consumer, which is album-keyed) has no slot for them.
+    # Selection is refused server-side and the builder subtracts them from `keep_fbids`.
+    disregarded: bool = False
     origin: str | None = None  # parent dump name for a derived caption-album (UI subheader)
     media_slug: str | None = None  # derived album's media subdir "<slug>_<id>"; None for FB albums
     post_timestamp: datetime | None = None

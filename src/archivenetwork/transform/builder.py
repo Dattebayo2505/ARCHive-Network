@@ -16,6 +16,9 @@ class BuildResult:
     orphans: list[str]
     videos_built: int = 0
     skipped_videos: list[str] = field(default_factory=list)
+    # Photos that belong to no album and were therefore dropped from the build. Reported so
+    # the count is visible rather than silently missing (the gallery names it before building).
+    non_album_skipped: int = 0
 
 
 def _rel_from_posts(uri: str) -> str:
@@ -71,6 +74,13 @@ def build_ready_folder(
     # carried into the build, even if a stale selection.json still names one.
     keep_fbids = keep_fbids - {p.fbid for p in inventory.archived_photos}
     keep_fbids = keep_fbids - {p.fbid for a in inventory.archived_albums for p in a.photos}
+    # Non-album photos are disregarded outright: they belong to no album, so the ready
+    # folder — which is album-keyed from `posts/album/*.json` down to the S3 key — has no
+    # slot for them. Selection is refused server-side, but a stale selection.json written
+    # before this rule can still name one, so subtract them here too.
+    non_album_fbids = {p.fbid for a in inventory.albums if a.disregarded for p in a.photos}
+    non_album_skipped = len(non_album_fbids)
+    keep_fbids = keep_fbids - non_album_fbids
     dest.mkdir(parents=True, exist_ok=True)
 
     copied = 0
@@ -203,28 +213,11 @@ def build_ready_folder(
             json.dumps(posts, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
-    # Unanchored manifest: media that belongs to no album. A loose photo that *was* posted is
-    # already reachable via the feed, but one that never was (no caption -> no post, e.g. a photo
-    # dropped straight into "Mobile uploads") would be copied into ready/ and referenced by
-    # NOTHING — invisible to a manifest-driven ETL, so a photo the user explicitly picked would
-    # silently vanish. This manifest guarantees every copied file is reachable from some JSON.
-    unanchored = [
-        p
-        for album in inventory.albums
-        if album.fb_album_id == "__non_album__"
-        for p in album.photos
-        if p.fbid in keep_fbids and p.exists and not p.is_video
-    ]
-    if unanchored:
-        (dest / "posts").mkdir(parents=True, exist_ok=True)
-        (dest / "posts" / "unanchored.json").write_text(
-            json.dumps(
-                {"photos": [_album_photo_record(p) for p in unanchored]},
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+    # No `posts/unanchored.json` is written any more. That manifest existed to make an
+    # album-less photo reachable from *some* JSON once it had been copied — but album-less
+    # photos are now disregarded and never copied, so the manifest would always be empty.
+    # "Every copied file is reachable from a manifest" still holds, by exclusion rather than
+    # by an extra manifest. (`loader/read.py` still *reads* the file so older builds load.)
 
     # Videos manifest: emit a filtered posts/videos.json listing only the built videos,
     # each uri rewritten .mp4 -> its poster .jpg (prefix already stripped). This is the
@@ -255,4 +248,5 @@ def build_ready_folder(
         orphans=orphans,
         videos_built=videos_built,
         skipped_videos=skipped_videos,
+        non_album_skipped=non_album_skipped,
     )

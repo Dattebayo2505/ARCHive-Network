@@ -48,6 +48,7 @@ def build(request: Request) -> dict:
         "videos_built": result.videos_built,
         "skipped_videos": result.skipped_videos,
         "albums_written": result.albums_written,
+        "non_album_skipped": result.non_album_skipped,
         "orphans": result.orphans,
         "summary": format_summary(result),
     }

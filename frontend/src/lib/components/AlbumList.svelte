@@ -159,7 +159,17 @@
 			aria-current={active ? 'true' : undefined}
 		>
 			<span class="truncate" class:opacity-0={editing}>{a.name}</span>
-			{#if !isArchived}
+			{#if a.disregarded}
+				<!-- A selection count would be a lie here: nothing in this bucket can be
+				     picked, so show what it *is* — a pile that never ships. -->
+				<span
+					class="ml-auto inline-flex shrink-0 items-center rounded-full bg-surface-200 px-2 py-0.5 text-xs font-medium tabular-nums text-surface-600"
+					class:opacity-0={editing}
+					title="These photos belong to no album — excluded from every build."
+				>
+					{a.photos.length} · not built
+				</span>
+			{:else if !isArchived}
 			<span
 				class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
 				class:opacity-0={editing}

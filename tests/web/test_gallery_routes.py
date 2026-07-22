@@ -120,10 +120,62 @@ def test_inventory_exposes_derived_uncapped_albums(grouping_export_root, tmp_pat
     }
     assert {p["fbid"] for p in body["archive"]} == {"t01"}
 
-    # The `__non_album__` leftover bucket is uncapped too; real FB albums stay capped.
+    # The `__non_album__` leftover bucket is uncapped too (the cap is moot — it is also
+    # disregarded, so nothing in it is selectable at all); real FB albums stay capped.
     by_id = {a["fb_album_id"]: a for a in body["albums"]}
     assert by_id["__non_album__"]["max_per_album"] is None
     assert by_id["111"]["max_per_album"] == 1  # named FB album: min(10, 1 photo)
+
+
+def test_non_album_bucket_is_marked_disregarded(grouping_export_root, tmp_path, monkeypatch):
+    """The wire says which albums can never ship, and how many photos that costs.
+
+    `disregarded` drives the UI's disabled selection affordance; `disregarded_count` is the
+    number quoted in the build warning. Both come from the same place the builder subtracts
+    from, so the warning cannot drift from what actually happens.
+    """
+    client = _loaded_client(grouping_export_root, tmp_path, monkeypatch)
+    body = client.get("/api/inventory").json()
+
+    by_id = {a["fb_album_id"]: a for a in body["albums"]}
+    assert by_id["__non_album__"]["disregarded"] is True
+    assert by_id["111"]["disregarded"] is False
+    assert body["disregarded_count"] == len(by_id["__non_album__"]["photos"]) == 2
+
+
+def test_toggling_a_non_album_photo_is_refused(grouping_export_root, tmp_path, monkeypatch):
+    client = _loaded_client(grouping_export_root, tmp_path, monkeypatch)
+
+    resp = client.post("/api/toggle", json={"album_fbid": "__non_album__", "photo_fbid": "s01"})
+
+    # 409, but NOT "cap": there is no swap the volunteer could make to free a slot.
+    assert resp.status_code == 409
+    assert resp.json()["error"] == "disregarded"
+    assert client.get("/api/inventory").json()["albums"]
+    by_id = {a["fb_album_id"]: a for a in client.get("/api/inventory").json()["albums"]}
+    assert by_id["__non_album__"]["count_selected"] == 0
+
+
+def test_stale_non_album_picks_are_dropped_on_load(export_root, tmp_path, monkeypatch):
+    """A selection.json written before this rule must not resurrect picks that can't ship.
+
+    Re-opening the workspace clears them, so the counters, the gallery and the build agree
+    from the first paint instead of showing checkmarks the builder silently discards.
+    """
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_app())
+    client.post("/api/ingest/folder", json={"folder": str(export_root)})
+
+    state = tmp_path / "workspace" / "state" / "export" / "selection.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(json.dumps({"111": ["a01"], "__non_album__": ["m01"]}), encoding="utf-8")
+
+    client.post("/api/ingest/folder", json={"folder": str(export_root)})
+    by_id = {a["fb_album_id"]: a for a in client.get("/api/inventory").json()["albums"]}
+
+    assert by_id["111"]["count_selected"] == 1  # untouched
+    assert by_id["__non_album__"]["count_selected"] == 0
+    assert json.loads(state.read_text(encoding="utf-8")) == {"111": ["a01"]}
 
 
 def test_archive_persists_and_restores_on_reopen(export_root, tmp_path, monkeypatch):
