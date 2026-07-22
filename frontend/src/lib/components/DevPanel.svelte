@@ -80,7 +80,7 @@
 	let table = $state('media');
 	let offset = $state(0);
 	let rows = $state(null);
-	const LIMIT = 25;
+	const LIMIT = 10;
 
 	const connected = $derived(status?.enabled && status?.connected);
 	const ready = $derived(connected && status?.tables_exist);
@@ -219,8 +219,106 @@
 	const columns = $derived(
 		table === 'media'
 			? ['fbid', 'media_type', 'fb_album_id', 'hashtag', 'caption', 'creation_at', 'storage_path']
-			: ['fb_album_id', 'title', 'hashtag', 'is_derived', 'date', 'description']
+			: ['fb_album_id', 'title', 'hashtag', 'is_derived', 'date', 'caption']
 	);
+
+	// ── Column sizing ────────────────────────────────────────────────────────────────
+	// Widths are fractions of the resizable region, kept per table so switching tabs restores
+	// each layout. A handle drags the *boundary between two columns*: width moves from one to
+	// its right-hand neighbour and the total is conserved. That is what removes the horizontal
+	// scrollbar — the table can never grow wider than its container, so `overflow-x-auto` has
+	// nothing to scroll. It also matches what the handle looks like it does.
+	//
+	// `min-w` on the table is the deliberate exception: below it every column is an unreadable
+	// sliver, and scrolling a too-narrow viewport beats truncating all six columns to "…".
+	const MIN_FRAC = 0.05;
+	const PREVIEW_PX = 56; // the media thumbnail column — fixed, and has no handle
+
+	let colWidths = $state({});
+	let tableWidth = $state(0);
+
+	const fractions = $derived(
+		colWidths[table]?.length === columns.length
+			? colWidths[table]
+			: columns.map(() => 1 / columns.length)
+	);
+	const regionPx = $derived(Math.max(1, tableWidth - (table === 'media' ? PREVIEW_PX : 0)));
+
+	// Every column is sized as a PLAIN percentage, and they sum to exactly 100 — that is what
+	// guarantees the table can't overflow, so no scrollbar appears.
+	//
+	// It must not be `calc(<pct> - <px>)`: Chrome silently drops a mixed %/px calc() on <col>
+	// and falls back to distributing the columns equally. Verified in-browser — `30%` and
+	// `260px` both apply, `calc(30% - 10px)` does not. So the fixed-width preview column is
+	// expressed as its own share of the measured table width instead of subtracted in CSS.
+	const previewPct = $derived(
+		table === 'media' && tableWidth > 0 ? (PREVIEW_PX / tableWidth) * 100 : 0
+	);
+	const colPcts = $derived(fractions.map((f) => f * (100 - previewPct)));
+
+	/** Move `delta` (a fraction) across boundary `i`, clamped so neither side dips below MIN_FRAC. */
+	function setBoundary(i, delta, base) {
+		const lo = MIN_FRAC - base[i];
+		const hi = base[i + 1] - MIN_FRAC;
+		const d = Math.max(lo, Math.min(hi, delta));
+		const next = [...base];
+		next[i] += d;
+		next[i + 1] -= d;
+		colWidths[table] = next;
+	}
+
+	function startResize(e, i) {
+		e.preventDefault();
+		const startX = e.clientX;
+		const base = [...fractions];
+		let frame = 0;
+		let pending = null;
+
+		function cleanup() {
+			cancelAnimationFrame(frame);
+			frame = 0;
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('pointercancel', onUp);
+		}
+
+		// Coalesce moves into one layout write per frame — every change reflows the whole table.
+		function apply() {
+			frame = 0;
+			if (pending === null) return;
+			const delta = (pending - startX) / regionPx;
+			pending = null;
+			setBoundary(i, delta, base);
+		}
+
+		function onMove(ev) {
+			pending = ev.clientX;
+			if (!frame) frame = requestAnimationFrame(apply);
+		}
+
+		function onUp() {
+			apply();
+			cleanup();
+		}
+
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('pointercancel', onUp);
+	}
+
+	// The handle is the only resize affordance, so it has to work from the keyboard too —
+	// same vocabulary as the gallery's dock tab: arrows step, Shift steps further, Home/End max out.
+	function onHandleKey(e, i) {
+		const step = e.shiftKey ? 0.06 : 0.02;
+		let delta = null;
+		if (e.key === 'ArrowLeft') delta = -step;
+		else if (e.key === 'ArrowRight') delta = step;
+		else if (e.key === 'Home') delta = -1; // clamped to MIN_FRAC by setBoundary
+		else if (e.key === 'End') delta = 1;
+		if (delta === null) return;
+		e.preventDefault();
+		setBoundary(i, delta, [...fractions]);
+	}
 
 	function cell(value) {
 		if (value === null || value === undefined || value === '') return '—';
@@ -251,7 +349,11 @@
 	</button>
 {/snippet}
 
-<div class="flex h-full flex-col overflow-y-auto">
+<!-- Scrollbar hidden to match every other inner scroll pane in the app (the photo grid, the
+     album rail, the selection dock, the preview filmstrips all do the same). The pane still
+     scrolls by wheel, trackpad and keyboard; this panel was simply the one that missed the
+     convention, and its 15px Windows bar sat right against the row table's edge. -->
+<div class="flex h-full flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 	<div class="mx-auto w-full max-w-5xl px-6 py-6">
 		<header class="mb-5">
 			<h1 class="text-lg font-semibold text-surface-900">Dev Mode</h1>
@@ -766,17 +868,42 @@
 						</div>
 					{:else}
 						<div class="mt-4 overflow-x-auto rounded-lg border border-surface-200">
-							<table class="w-full border-collapse text-left">
+							<table
+								class="w-full min-w-[46rem] table-fixed border-collapse text-left"
+								bind:clientWidth={tableWidth}
+							>
+								<!-- Declared once here rather than per-<th>: with `table-fixed` the colgroup
+								     is what actually sizes the columns. See `colPcts` for why these are
+								     plain percentages and never a mixed %/px calc(). -->
+								<colgroup>
+									{#if table === 'media'}
+										<col style="width: {previewPct}%" />
+									{/if}
+									{#each columns as col, i (col)}
+										<col style="width: {colPcts[i]}%" />
+									{/each}
+								</colgroup>
 								<thead>
 									<tr class="border-b border-surface-200 bg-surface-100">
 										{#if table === 'media'}
-											<th class="w-14 px-3 py-2"><span class="sr-only">Preview</span></th>
+											<th class="px-3 py-2"><span class="sr-only">Preview</span></th>
 										{/if}
-										{#each columns as col (col)}
+										{#each columns as col, i (col)}
 											<th
-												class="px-3 py-2 font-mono text-xs font-semibold whitespace-nowrap text-surface-700"
-												>{col}</th
+												class="relative px-3 py-2 font-mono text-xs font-semibold text-surface-700 select-none"
 											>
+												<span class="block truncate" title={col}>{col}</span>
+												{#if i < columns.length - 1}
+													<button
+														type="button"
+														onpointerdown={(e) => startResize(e, i)}
+														onkeydown={(e) => onHandleKey(e, i)}
+														aria-label="Resize the {col} column"
+														title="Drag to resize · arrow keys also work"
+														class="absolute top-1/2 right-0 z-10 h-6 w-3 -translate-y-1/2 translate-x-1/2 cursor-col-resize rounded-xs before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-surface-300 before:transition-colors hover:before:bg-primary-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 focus-visible:before:bg-primary-600"
+													></button>
+												{/if}
+											</th>
 										{/each}
 									</tr>
 								</thead>
@@ -785,11 +912,10 @@
 										<tr class="border-b border-surface-200 last:border-0 hover:bg-surface-100">
 											{#if table === 'media'}
 												<td class="px-3 py-1.5">
-													<!-- `min-w-9` is load-bearing. The table is table-layout:auto and already
-													     overflows its wrapper, so the header's `w-14` is only a hint; and
-													     Tailwind's preflight `img { max-width: 100% }` resolves to 100% of a
-													     zero-width column, letting the browser collapse this cell to nothing.
-													     An explicit min-width is the floor that keeps the preview visible. -->
+													<!-- `min-w-9` is still load-bearing under `table-fixed`: Tailwind's preflight
+													     `img { max-width: 100% }` resolves against the column box, so a squeezed
+													     column would collapse the preview to nothing. The colgroup pins this
+													     column at PREVIEW_PX; the min-width is the floor if that ever gives. -->
 													<img
 														src={storeUrl(row.storage_path, status.media_base_url)}
 														alt=""
@@ -801,8 +927,10 @@
 												</td>
 											{/if}
 											{#each columns as col (col)}
+												<!-- `table-fixed` + the colgroup own the width now, so the cell only has
+												     to truncate what it's given. The title keeps the full value reachable. -->
 												<td
-													class="max-w-[16rem] truncate px-3 py-1.5 font-mono text-xs text-surface-700"
+													class="truncate px-3 py-1.5 font-mono text-xs text-surface-700"
 													title={cell(row[col])}>{cell(row[col])}</td
 												>
 											{/each}
