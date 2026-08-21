@@ -330,7 +330,7 @@
 					class="min-w-0 flex-1 bg-transparent py-2 font-mono text-sm text-surface-800 placeholder:font-sans placeholder:text-surface-600 focus:outline-none"
 					type="text"
 					bind:value={typedPath}
-					placeholder="e.g. D:\exports\facebook-export"
+					placeholder="e.g. ~/Downloads/facebook-export or D:\exports\facebook-export"
 					spellcheck="false"
 					autocomplete="off"
 					aria-label="Folder path"

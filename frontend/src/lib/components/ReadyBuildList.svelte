@@ -2,6 +2,7 @@
 	import { slide } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { formatSize } from '$lib/stats.js';
+	import { fileManagerName } from '$lib/platform.js';
 
 	let { builds = [], onReveal, onDelete } = $props();
 
@@ -45,12 +46,12 @@
 					<button
 						type="button"
 						class="flex min-w-0 flex-1 flex-col items-start rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:ring-offset-2"
-						title="Open in Explorer"
+						title={`Open in ${fileManagerName}`}
 						onclick={() => onReveal?.(b.id)}
 					>
 						<!-- The row *is* the open action, so its accessible name has to start with a
 						     verb; the visible content alone would announce as a bare folder name. -->
-						<span class="sr-only">Open in Explorer:</span>
+						<span class="sr-only">Open in {fileManagerName}:</span>
 						<span class="w-full truncate font-medium text-surface-900">{b.display_name}</span>
 						<span class="mt-0.5 w-full truncate text-xs tabular-nums text-surface-600">
 							{fmtDate(b.built_ts)} · {formatSize(b.size_bytes)}{#if counts(b)} · {counts(b)}{/if}

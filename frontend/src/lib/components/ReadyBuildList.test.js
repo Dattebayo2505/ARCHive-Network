@@ -39,7 +39,7 @@ describe('ReadyBuildList', () => {
 	it('calls onReveal with the build id when the button is clicked', async () => {
 		const onReveal = vi.fn();
 		render(ReadyBuildList, { builds: [BUILDS[0]], onReveal });
-		await fireEvent.click(screen.getByRole('button', { name: /open in explorer/i }));
+		await fireEvent.click(screen.getByRole('button', { name: /open in (file explorer|finder|file manager|explorer)/i }));
 		expect(onReveal).toHaveBeenCalledWith('b1');
 	});
 

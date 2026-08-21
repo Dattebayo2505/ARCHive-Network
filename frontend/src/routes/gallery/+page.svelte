@@ -22,6 +22,7 @@
 	import HashtagPills from '$lib/components/HashtagPills.svelte';
 	import AlbumCaption from '$lib/components/AlbumCaption.svelte';
 	import { dragScrollY } from '$lib/dragScrollY.js';
+	import { revealLabel } from '$lib/platform.js';
 
 	let { data } = $props();
 	let inventory = $state(untrack(() => data.inventory || {}));
@@ -497,7 +498,7 @@
 			items: [
 				{ label: 'Preview', icon: 'preview', onSelect: () => openPreviewAt(index) },
 				{
-					label: 'Show in File Explorer',
+					label: revealLabel,
 					icon: 'folder',
 					disabled: !photo.exists,
 					hint: photo.exists ? undefined : 'missing',
@@ -528,7 +529,7 @@
 			items: [
 				{ label: 'Choose Thumbnail', icon: 'preview', onSelect: () => openPreviewAt(index) },
 				{
-					label: 'Show in File Explorer',
+					label: revealLabel,
 					icon: 'folder',
 					disabled: !video.exists,
 					hint: video.exists ? undefined : 'missing',
@@ -548,7 +549,7 @@
 			items: [
 				{ label: 'Preview', icon: 'preview', onSelect: () => openPreviewAt(index) },
 				{
-					label: 'Show in File Explorer',
+					label: revealLabel,
 					icon: 'folder',
 					disabled: !photo.exists,
 					hint: photo.exists ? undefined : 'missing',
@@ -617,7 +618,7 @@
 					}
 				]),
 				{
-					label: 'Show in File Explorer',
+					label: revealLabel,
 					icon: 'folder',
 					onSelect: () => revealOnDisk({ albumFbid: album.fb_album_id })
 				}
