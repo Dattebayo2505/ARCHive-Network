@@ -166,3 +166,34 @@ def test_windows_exe_ignored_off_windows(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setattr("archivenetwork.ingest.unzip.shutil.which", lambda _name: None)
     monkeypatch.setattr("archivenetwork.ingest.unzip.sys.platform", "linux")
     assert find_seven_zip() is None
+
+
+def test_default_seven_zip_resolution(monkeypatch: pytest.MonkeyPatch):
+    from archivenetwork.config import _default_seven_zip
+
+    # Windows -> vendor/7za.exe
+    monkeypatch.setattr("sys.platform", "win32")
+    win_bin = _default_seven_zip()
+    assert win_bin is not None
+    assert win_bin.name == "7za.exe"
+
+    # macOS -> vendor/7zz_mac
+    monkeypatch.setattr("sys.platform", "darwin")
+    mac_bin = _default_seven_zip()
+    assert mac_bin is not None
+    assert mac_bin.name == "7zz_mac"
+
+    # Linux x86_64 -> vendor/7zzs_x64
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr("platform.machine", lambda: "x86_64")
+    linux64_bin = _default_seven_zip()
+    assert linux64_bin is not None
+    assert linux64_bin.name == "7zzs_x64"
+
+    # Linux x86 (32-bit) -> vendor/7zzs_x32
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr("platform.machine", lambda: "i686")
+    linux32_bin = _default_seven_zip()
+    assert linux32_bin is not None
+    assert linux32_bin.name == "7zzs_x32"
+

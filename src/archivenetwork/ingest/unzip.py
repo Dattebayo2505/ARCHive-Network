@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -14,17 +15,22 @@ _SEVEN_ZIP_NAMES = ("7zz", "7z", "7za")
 
 
 def find_seven_zip() -> Path | None:
-    """Locate a usable 7-Zip binary, or return None to signal a zipfile fallback.
+    """Locate a usable 7-Zip binary, or return None to signal a native/zipfile fallback.
 
-    Preference: the explicit/vendored path from settings (used as-is when it
-    exists), then a 7-Zip on PATH. The committed vendored binary is a *Windows*
-    build, so a ``.exe`` is only trusted on Windows — on macOS/Linux we skip
-    straight to PATH discovery and, failing that, Python's zipfile.
+    Preference: the explicit/vendored path from settings (Windows ``7za.exe``, macOS
+    ``7zz_mac``, Linux ``7zzs_x64``/``7zzs_x32``), then a 7-Zip on PATH. A ``.exe``
+    is only trusted on Windows.
     """
     exe = settings.seven_zip_exe
     if exe is not None:
         exe = Path(exe)
         if exe.exists() and (sys.platform.startswith("win") or exe.suffix.lower() != ".exe"):
+            if not sys.platform.startswith("win"):
+                try:
+                    if not os.access(exe, os.X_OK):
+                        exe.chmod(exe.stat().st_mode | 0o755)
+                except OSError:
+                    pass
             return exe
     for name in _SEVEN_ZIP_NAMES:
         found = shutil.which(name)

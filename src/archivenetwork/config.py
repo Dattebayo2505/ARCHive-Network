@@ -1,3 +1,4 @@
+import platform
 import sys
 from pathlib import Path
 
@@ -8,16 +9,33 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _default_seven_zip() -> Path | None:
-    """Default 7-Zip binary: the committed Windows build on Windows, else None.
+    """Default 7-Zip binary: resolves the vendored platform/architecture binary.
 
-    ``vendor/7za.exe`` is a *Windows* executable (and is far faster than Python's
-    zipfile on the ~875 MB export). On macOS/Linux it cannot run, so we return
-    None and let ``ingest.unzip`` discover a system 7-Zip (``7zz``/``7z``/``7za``)
-    or fall back to the stdlib ``zipfile``. Override with ARCHIVENETWORK_SEVEN_ZIP_EXE.
-    Must be a zip-capable build — the reduced ``7zr.exe`` cannot read zips.
+    - Windows: ``vendor/7za.exe``
+    - macOS: ``vendor/7zz_mac`` (Universal Mach-O for Apple Silicon & Intel)
+    - Linux x86_64: ``vendor/7zzs_x64``
+    - Linux x86 (32-bit): ``vendor/7zzs_x32``
+    - Other / ARM Linux: None (falls back to PATH discovery or native tools)
     """
+    vendor = _PROJECT_ROOT / "vendor"
+    candidate: Path | None = None
     if sys.platform.startswith("win"):
-        return _PROJECT_ROOT / "vendor" / "7za.exe"
+        candidate = vendor / "7za.exe"
+    elif sys.platform == "darwin":
+        candidate = vendor / "7zz_mac"
+    elif sys.platform.startswith("linux"):
+        machine = platform.machine().lower()
+        if machine in ("x86_64", "amd64"):
+            candidate = vendor / "7zzs_x64"
+        elif machine in ("i386", "i686", "x86"):
+            candidate = vendor / "7zzs_x32"
+        elif sys.maxsize > 2**32:
+            candidate = vendor / "7zzs_x64"
+        else:
+            candidate = vendor / "7zzs_x32"
+
+    if candidate is not None and candidate.exists():
+        return candidate
     return None
 
 

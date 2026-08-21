@@ -19,11 +19,10 @@ a vendored 7-Zip binary. PostgreSQL is **optional** and only needed for Dev Mode
 
 ## Prerequisites
 
-- **Windows, macOS, or Linux.** The repo ships a vendored **Windows** 7-Zip
-  (`vendor/7za.exe`) used to extract exports fast. On macOS/Linux the tool uses a
-  system `7z`/`7za`/`7zz` if one is on `PATH`, and otherwise falls back to
-  Python's built-in `zipfile` — so **nothing extra is required** to run
-  cross-platform (installing 7-Zip is only a speed optimization on big exports).
+- **Windows, macOS, or Linux.** The repo ships vendored 7-Zip binaries under `vendor/`
+  (`7za.exe` for Windows, `7zz_mac` for macOS, and `7zzs_x64` / `7zzs_x32` for Linux)
+  used to extract exports quickly across platforms out of the box. Native tools (`ditto` on
+  macOS, `unzip` on Linux) and Python's `zipfile` are also supported as automatic fallbacks.
 - **Python 3.12+**
 - A Python installer — either **[uv](https://docs.astral.sh/uv/)** (recommended;
   the repo has a committed `uv.lock`) **or** plain **pip + venv**.
@@ -61,7 +60,7 @@ variables. Backend settings use the `ARCHIVENETWORK_` prefix (see
 | Variable | Default | Purpose |
 |---|---|---|
 | `ARCHIVENETWORK_WORKSPACE_DIR` | `workspace` | Root for all generated state, imports, and the `ready/` output. |
-| `ARCHIVENETWORK_SEVEN_ZIP_EXE` | `vendor/7za.exe` on Windows; auto-discovered elsewhere | Path to a zip-capable 7-Zip binary. On macOS/Linux, leave unset to auto-detect `7z`/`7za`/`7zz` (falls back to Python's `zipfile` if none), or point it at your own. |
+| `ARCHIVENETWORK_SEVEN_ZIP_EXE` | `vendor/<platform-binary>` | Path to a zip-capable 7-Zip binary (defaults to vendored `7za.exe` on Win, `7zz_mac` on macOS, `7zzs_x64`/`7zzs_x32` on Linux). Override to point to a custom binary if desired. |
 | `ARCHIVENETWORK_MAX_PER_ALBUM` | `10` | Per-album selection cap enforced server-side. |
 | `ARCHIVENETWORK_THUMB_SIZE` | `512` | Gallery thumbnail size (px, longest edge). |
 | `ARCHIVENETWORK_PREVIEW_SIZE` | `1280` | Full-screen preview render size (px). |
@@ -209,4 +208,4 @@ scratch database, never a real one.
   `Pipeline.md`, `Pipeline-Process.md`, and `ARCHITECTURE.md`.
 - `workspace/` — all generated output (imports, per-workspace state, the built
   `ready/` folder); gitignored.
-- `vendor/7za.exe` — the committed zip extractor.
+- `vendor/` — the committed cross-platform zip extractors (`7za.exe`, `7zz_mac`, `7zzs_x64`, `7zzs_x32`).
