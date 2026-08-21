@@ -82,6 +82,38 @@ def test_ingest_zip_corrupt_archive(tmp_path: Path, monkeypatch):
     assert resp.status_code == 400
 
 
+def test_ingest_zip_oserror_returns_400(export_root: Path, tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    archive = tmp_path / "export.zip"
+    _zip_tree(export_root, archive)
+
+    def _mock_extract(zip_path, dest):
+        raise OSError("Disk failure")
+
+    monkeypatch.setattr("archivenetwork.web.routes_ingest.extract_zip", _mock_extract)
+
+    client = TestClient(create_app())
+    resp = client.post("/api/ingest/zip", json={"path": str(archive)})
+    assert resp.status_code == 400
+    assert "Could not unzip that archive" in resp.json()["detail"]
+
+
+def test_ingest_zip_permission_error_returns_400(export_root: Path, tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    archive = tmp_path / "export.zip"
+    _zip_tree(export_root, archive)
+
+    def _mock_extract(zip_path, dest):
+        raise PermissionError("Access denied")
+
+    monkeypatch.setattr("archivenetwork.web.routes_ingest.extract_zip", _mock_extract)
+
+    client = TestClient(create_app())
+    resp = client.post("/api/ingest/zip", json={"path": str(archive)})
+    assert resp.status_code == 400
+    assert "Could not unzip that archive" in resp.json()["detail"]
+
+
 def test_ingest_upload_extracts_and_removes_archive(
     export_root: Path, tmp_path: Path, monkeypatch
 ):
@@ -102,6 +134,66 @@ def test_ingest_upload_extracts_and_removes_archive(
     # …and the uploaded archive is not left sitting alongside it.
     assert not (import_dir / "export.zip").exists()
     assert list(import_dir.glob("*.zip")) == []
+
+
+def test_ingest_upload_sanitizes_windows_path_separators(
+    export_root: Path, tmp_path: Path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    archive = tmp_path / "export.zip"
+    _zip_tree(export_root, archive)
+
+    client = TestClient(create_app())
+    with archive.open("rb") as fh:
+        resp = client.post(
+            "/api/ingest/upload",
+            files={"file": (r"C:\Users\test\fakepath\facebook-win-export.zip", fh, "application/zip")},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["workspace_id"] == "facebook-win-export"
+    assert (tmp_path / "workspace" / "imports" / "facebook-win-export").is_dir()
+    import_dir = tmp_path / "workspace" / "import"
+    assert list(import_dir.glob("*.zip")) == []
+
+
+def test_ingest_upload_sanitizes_posix_path_separators(
+    export_root: Path, tmp_path: Path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    archive = tmp_path / "export.zip"
+    _zip_tree(export_root, archive)
+
+    client = TestClient(create_app())
+    with archive.open("rb") as fh:
+        resp = client.post(
+            "/api/ingest/upload",
+            files={"file": ("/tmp/uploads/facebook-posix-export.zip", fh, "application/zip")},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["workspace_id"] == "facebook-posix-export"
+    assert (tmp_path / "workspace" / "imports" / "facebook-posix-export").is_dir()
+    import_dir = tmp_path / "workspace" / "import"
+    assert list(import_dir.glob("*.zip")) == []
+
+
+def test_ingest_upload_corrupt_archive_returns_400(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_app())
+    resp = client.post(
+        "/api/ingest/upload",
+        files={"file": ("corrupt.zip", b"not really a zip content", "application/zip")},
+    )
+
+    assert resp.status_code == 400
+    assert "Could not unzip that archive" in resp.json()["detail"]
+    import_dir = tmp_path / "workspace" / "import"
+    assert not (import_dir / "corrupt.zip").exists()
 
 
 def test_ingest_folder_ok(export_root: Path, tmp_path: Path, monkeypatch):
