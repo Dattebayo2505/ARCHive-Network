@@ -1,3 +1,4 @@
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -197,3 +198,87 @@ def test_default_seven_zip_resolution(monkeypatch: pytest.MonkeyPatch):
     assert linux32_bin is not None
     assert linux32_bin.name == "7zzs_x32"
 
+def test_default_seven_zip_returns_none_on_linux_arm(monkeypatch: pytest.MonkeyPatch):
+    from archivenetwork.config import _default_seven_zip
+
+    monkeypatch.setattr("sys.platform", "linux")
+    for arch in ("aarch64", "arm64", "armv7l", "riscv64", "mips64"):
+        monkeypatch.setattr("platform.machine", lambda arch=arch: arch)
+        assert _default_seven_zip() is None
+
+
+def test_extract_zip_falls_back_when_seven_zip_fails_called_process_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    zip_path = tmp_path / "x.zip"
+    _make_zip(zip_path, {"posts/profile_posts_1.json": "[]"})
+    dest = tmp_path / "out"
+
+    calls = []
+
+    def failing_seven_zip(cmd, check=True):
+        calls.append(cmd)
+        if "7zz" in cmd[0]:
+            raise subprocess.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr(settings, "seven_zip_exe", tmp_path / "7zz")
+    monkeypatch.setattr("archivenetwork.ingest.unzip.shutil.which", lambda _name: None)
+    monkeypatch.setattr("archivenetwork.ingest.unzip.sys.platform", "linux")
+    monkeypatch.setattr("archivenetwork.ingest.unzip.subprocess.run", failing_seven_zip)
+    (tmp_path / "7zz").write_text("#!/bin/sh")
+
+    extract_zip(zip_path, dest)
+    assert (dest / "posts" / "profile_posts_1.json").read_text() == "[]"
+    assert len(calls) == 1
+    assert "7zz" in calls[0][0]
+
+
+def test_extract_zip_falls_back_when_seven_zip_raises_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    zip_path = tmp_path / "x.zip"
+    _make_zip(zip_path, {"posts/profile_posts_1.json": "[]"})
+    dest = tmp_path / "out"
+
+    def failing_seven_zip(cmd, check=True):
+        if "7zz" in cmd[0]:
+            raise OSError(8, "Exec format error")
+
+    monkeypatch.setattr(settings, "seven_zip_exe", tmp_path / "7zz")
+    monkeypatch.setattr("archivenetwork.ingest.unzip.shutil.which", lambda _name: None)
+    monkeypatch.setattr("archivenetwork.ingest.unzip.sys.platform", "linux")
+    monkeypatch.setattr("archivenetwork.ingest.unzip.subprocess.run", failing_seven_zip)
+    (tmp_path / "7zz").write_text("#!/bin/sh")
+
+    extract_zip(zip_path, dest)
+    assert (dest / "posts" / "profile_posts_1.json").read_text() == "[]"
+
+
+def test_extract_zip_cascades_seven_zip_to_unzip_to_zipfile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import subprocess
+    zip_path = tmp_path / "x.zip"
+    _make_zip(zip_path, {"posts/profile_posts_1.json": "[]"})
+    dest = tmp_path / "out"
+
+    called_cmds = []
+
+    def failing_run(cmd, check=True):
+        called_cmds.append(cmd[0])
+        raise subprocess.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr(settings, "seven_zip_exe", tmp_path / "7zz")
+    monkeypatch.setattr(
+        "archivenetwork.ingest.unzip.shutil.which",
+        lambda name: "/usr/bin/unzip" if name == "unzip" else None,
+    )
+    monkeypatch.setattr("archivenetwork.ingest.unzip.sys.platform", "linux")
+    monkeypatch.setattr("archivenetwork.ingest.unzip.subprocess.run", failing_run)
+    (tmp_path / "7zz").write_text("#!/bin/sh")
+
+    extract_zip(zip_path, dest)
+    # Both 7zz and unzip failed, so it extracted with stdlib zipfile
+    assert (dest / "posts" / "profile_posts_1.json").read_text() == "[]"
+    assert str(tmp_path / "7zz") in called_cmds
+    assert "/usr/bin/unzip" in called_cmds

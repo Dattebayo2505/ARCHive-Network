@@ -16,6 +16,11 @@ def _default_seven_zip() -> Path | None:
     - Linux x86_64: ``vendor/7zzs_x64``
     - Linux x86 (32-bit): ``vendor/7zzs_x32``
     - Other / ARM Linux: None (falls back to PATH discovery or native tools)
+
+    Note: The vendored Linux binaries (``7zzs_x64``, ``7zzs_x32``) are x86 binaries
+    and are NOT compatible with ARM architectures (such as Linux ``aarch64``,
+    ``arm64``, ``armv7l``, ``riscv64``). On non-x86 Linux, this returns None so
+    extraction falls back to system tools on PATH or Python stdlib ``zipfile``.
     """
     vendor = _PROJECT_ROOT / "vendor"
     candidate: Path | None = None
@@ -29,10 +34,8 @@ def _default_seven_zip() -> Path | None:
             candidate = vendor / "7zzs_x64"
         elif machine in ("i386", "i686", "x86"):
             candidate = vendor / "7zzs_x32"
-        elif sys.maxsize > 2**32:
-            candidate = vendor / "7zzs_x64"
-        else:
-            candidate = vendor / "7zzs_x32"
+        # Non-x86 Linux architectures (aarch64, arm64, armv7l, riscv64, etc.) are not
+        # compatible with vendored x86 binaries, so candidate remains None.
 
     if candidate is not None and candidate.exists():
         return candidate

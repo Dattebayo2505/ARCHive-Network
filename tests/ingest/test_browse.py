@@ -82,6 +82,9 @@ def test_available_roots_macos(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         Path, "exists", lambda self: self.as_posix() in ("/", "/Volumes")
     )
+    monkeypatch.setattr(
+        Path, "is_dir", lambda self: self.as_posix() in ("/", "/Volumes")
+    )
     assert available_roots() == ["/", "/Volumes"]
 
 
@@ -89,14 +92,20 @@ def test_available_roots_macos_no_volumes(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("archivenetwork.ingest.browse.os.name", "posix")
     monkeypatch.setattr("archivenetwork.ingest.browse.sys.platform", "darwin")
     monkeypatch.setattr(Path, "exists", lambda self: self.as_posix() == "/")
+    monkeypatch.setattr(Path, "is_dir", lambda self: self.as_posix() == "/")
     assert available_roots() == ["/"]
 
 
 def test_available_roots_linux(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("archivenetwork.ingest.browse.os.name", "posix")
     monkeypatch.setattr("archivenetwork.ingest.browse.sys.platform", "linux")
+    monkeypatch.delenv("USER", raising=False)
+    monkeypatch.delenv("LOGNAME", raising=False)
     monkeypatch.setattr(
         Path, "exists", lambda self: self.as_posix() in ("/", "/media", "/mnt")
+    )
+    monkeypatch.setattr(
+        Path, "is_dir", lambda self: self.as_posix() in ("/", "/media", "/mnt")
     )
     assert available_roots() == ["/", "/media", "/mnt"]
 
@@ -104,16 +113,34 @@ def test_available_roots_linux(monkeypatch: pytest.MonkeyPatch):
 def test_available_roots_linux_partial_mounts(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("archivenetwork.ingest.browse.os.name", "posix")
     monkeypatch.setattr("archivenetwork.ingest.browse.sys.platform", "linux")
+    monkeypatch.delenv("USER", raising=False)
+    monkeypatch.delenv("LOGNAME", raising=False)
     monkeypatch.setattr(
         Path, "exists", lambda self: self.as_posix() in ("/", "/mnt")
     )
+    monkeypatch.setattr(
+        Path, "is_dir", lambda self: self.as_posix() in ("/", "/mnt")
+    )
     assert available_roots() == ["/", "/mnt"]
+
+
+def test_available_roots_linux_with_run_media(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("archivenetwork.ingest.browse.os.name", "posix")
+    monkeypatch.setattr("archivenetwork.ingest.browse.sys.platform", "linux")
+    monkeypatch.setenv("USER", "archiver")
+    valid = {"/", "/media", "/mnt", "/run/media", "/run/media/archiver"}
+    monkeypatch.setattr(Path, "exists", lambda self: self.as_posix() in valid)
+    monkeypatch.setattr(Path, "is_dir", lambda self: self.as_posix() in valid)
+    assert available_roots() == ["/", "/media", "/mnt", "/run/media", "/run/media/archiver"]
 
 
 def test_available_roots_windows(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("archivenetwork.ingest.browse.os.name", "nt")
     monkeypatch.setattr(
         Path, "exists", lambda self: str(self) in ("C:\\", "D:\\")
+    )
+    monkeypatch.setattr(
+        Path, "is_dir", lambda self: str(self) in ("C:\\", "D:\\")
     )
     assert available_roots() == ["C:\\", "D:\\"]
 

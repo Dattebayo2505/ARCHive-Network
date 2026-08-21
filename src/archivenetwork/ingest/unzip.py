@@ -59,29 +59,45 @@ def extract_zip(zip_path: Path, dest: Path) -> Path:
             if dest_resolved not in target.parents and target != dest_resolved:
                 raise ValueError(f"Unsafe path in zip (zip-slip): {member}")
 
+    # 1. 7-Zip (fastest)
     exe = find_seven_zip()
     if exe is not None:
-        # x = extract with full paths, -o = output dir, -y = assume yes,
-        # -bso0/-bse0/-bsp0 = silence stdout/stderr/progress streams.
-        subprocess.run(
-            [str(exe), "x", str(zip_path), f"-o{dest}", "-y", "-bso0", "-bse0", "-bsp0"],
-            check=True,
-        )
-    elif sys.platform == "darwin" or shutil.which("ditto"):
-        subprocess.run(
-            ["ditto", "-x", "-k", str(zip_path), str(dest)],
-            check=True,
-        )
-    elif unzip_bin := shutil.which("unzip"):
-        subprocess.run(
-            [unzip_bin, "-q", "-o", str(zip_path), "-d", str(dest)],
-            check=True,
-        )
-    else:
-        # No external fast extractor on this machine: stdlib fallback (slower,
-        # but zero-dependency and cross-platform). The zip-slip scan above
-        # already vetted the paths.
-        with zipfile.ZipFile(zip_path) as zf:
-            zf.extractall(dest)
+        try:
+            # x = extract with full paths, -o = output dir, -y = assume yes,
+            # -bso0/-bse0/-bsp0 = silence stdout/stderr/progress streams.
+            subprocess.run(
+                [str(exe), "x", str(zip_path), f"-o{dest}", "-y", "-bso0", "-bse0", "-bsp0"],
+                check=True,
+            )
+            return dest
+        except (subprocess.CalledProcessError, OSError):
+            pass
+
+    # 2. macOS ditto
+    if sys.platform == "darwin" or shutil.which("ditto"):
+        try:
+            subprocess.run(
+                ["ditto", "-x", "-k", str(zip_path), str(dest)],
+                check=True,
+            )
+            return dest
+        except (subprocess.CalledProcessError, OSError):
+            pass
+
+    # 3. Linux/POSIX unzip
+    if unzip_bin := shutil.which("unzip"):
+        try:
+            subprocess.run(
+                [unzip_bin, "-q", "-o", str(zip_path), "-d", str(dest)],
+                check=True,
+            )
+            return dest
+        except (subprocess.CalledProcessError, OSError):
+            pass
+
+    # 4. Python stdlib fallback (slower, but zero-dependency and cross-platform).
+    # The zip-slip scan above already vetted the paths.
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(dest)
     return dest
 

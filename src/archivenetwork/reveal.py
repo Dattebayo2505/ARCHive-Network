@@ -38,8 +38,16 @@ def reveal_command(path: Path, *, platform: str | None = None) -> list[str]:
         return ["open", "-R", str(path)]
     folder = path if path.is_dir() else path.parent
     is_wsl = "WSL_DISTRO_NAME" in os.environ or shutil.which("wslview") is not None
-    if is_wsl and shutil.which("wslview"):
-        return ["wslview", str(folder)]
+    if is_wsl:
+        if shutil.which("wslview"):
+            return ["wslview", str(folder)]
+        if shutil.which("explorer.exe"):
+            return ["explorer.exe", str(folder)]
+        try:
+            if Path("/mnt/c/Windows/explorer.exe").exists():
+                return ["/mnt/c/Windows/explorer.exe", str(folder)]
+        except OSError:
+            pass
     return ["xdg-open", str(folder)]
 
 
@@ -48,6 +56,9 @@ def reveal_path(path: Path) -> None:
     path = Path(path)
     if not path.exists():
         raise RevealError(f"Path does not exist: {path}")
+    cmd = reveal_command(path)
+    if shutil.which(cmd[0]) is None:
+        raise RevealError(f"Cannot open file manager: command '{cmd[0]}' is not installed.")
     try:
         # explorer.exe exits non-zero even on success, so we never check the code.
         if sys.platform.startswith("win") and not path.is_dir():
@@ -58,6 +69,6 @@ def reveal_path(path: Path) -> None:
             # — causing explorer to silently fall back to %USERPROFILE%\Documents.
             subprocess.run(f'explorer /select,"{path}"', check=False)
         else:
-            subprocess.run(reveal_command(path), check=False)
+            subprocess.run(cmd, check=False)
     except OSError as exc:
         raise RevealError(str(exc)) from exc

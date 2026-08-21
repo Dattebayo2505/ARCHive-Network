@@ -15,7 +15,8 @@ def available_roots() -> list[str]:
         for letter in string.ascii_uppercase:
             root = f"{letter}:\\"
             try:
-                if Path(root).exists():
+                p = Path(root)
+                if p.exists() and p.is_dir():
                     roots.append(root)
             except OSError:
                 continue
@@ -25,19 +26,25 @@ def available_roots() -> list[str]:
         roots = []
         for c in candidates:
             try:
-                if Path(c).exists():
+                p = Path(c)
+                if p.exists() and p.is_dir():
                     roots.append(c)
             except OSError:
                 continue
         return roots or ["/"]
-    candidates = ["/"]
-    for path_str in ["/media", "/mnt"]:
+    candidates = ["/", "/media", "/mnt", "/run/media"]
+    user = os.environ.get("USER") or os.environ.get("LOGNAME")
+    if user:
+        candidates.append(f"/run/media/{user}")
+    roots = []
+    for path_str in candidates:
         try:
-            if Path(path_str).exists():
-                candidates.append(path_str)
+            p = Path(path_str)
+            if p.exists() and p.is_dir() and path_str not in roots:
+                roots.append(path_str)
         except OSError:
             continue
-    return candidates
+    return roots or ["/"]
 
 
 def _is_export(folder: Path) -> bool:

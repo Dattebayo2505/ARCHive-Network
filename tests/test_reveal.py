@@ -85,3 +85,36 @@ def test_reveal_path_runs_command(tmp_path: Path, monkeypatch):
 def test_reveal_path_missing_raises(tmp_path: Path):
     with pytest.raises(reveal.RevealError):
         reveal.reveal_path(tmp_path / "nope.jpg")
+
+def test_command_uses_explorer_exe_in_wsl_when_wslview_missing(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
+    monkeypatch.setattr(
+        reveal.shutil,
+        "which",
+        lambda cmd: "/mnt/c/Windows/explorer.exe" if cmd == "explorer.exe" else None,
+    )
+    f = tmp_path / "photo.jpg"
+    f.write_bytes(b"x")
+    assert reveal.reveal_command(f, platform="linux") == ["explorer.exe", str(tmp_path)]
+
+
+def test_command_uses_mnt_c_explorer_in_wsl_when_on_disk(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
+    monkeypatch.setattr(reveal.shutil, "which", lambda cmd: None)
+    monkeypatch.setattr(
+        Path, "exists", lambda self: self.as_posix() == "/mnt/c/Windows/explorer.exe"
+    )
+    f = tmp_path / "photo.jpg"
+    f.write_bytes(b"x")
+    assert reveal.reveal_command(f, platform="linux") == ["/mnt/c/Windows/explorer.exe", str(tmp_path)]
+
+
+def test_reveal_path_raises_when_command_not_installed(tmp_path: Path, monkeypatch):
+    f = tmp_path / "photo.jpg"
+    f.write_bytes(b"x")
+    monkeypatch.setattr(reveal.shutil, "which", lambda cmd: None)
+    with pytest.raises(
+        reveal.RevealError,
+        match=r"Cannot open file manager: command '.*' is not installed\.",
+    ):
+        reveal.reveal_path(f)
