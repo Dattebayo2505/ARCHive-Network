@@ -632,7 +632,7 @@
 	no control to bring it back.
 -->
 {#snippet topDock()}
-	{#if isDockDragging && dockPosition !== 'header'}
+	{#if isDockDragging && dockPosition !== 'header' && !showDev}
 		<div
 			data-drop-zone="header"
 			aria-hidden="true"
@@ -643,7 +643,7 @@
 		</div>
 	{/if}
 
-	{#if !isDockDragging && dockPosition === 'header'}
+	{#if !isDockDragging && dockPosition === 'header' && !showDev}
 		<SelectionStrip
 			album={panelAlbum}
 			thumb={dockThumb}
@@ -1235,7 +1235,7 @@
 		{/if}
 	</section>
 
-	{#if isDockDragging}
+	{#if isDockDragging && !showDev}
 		{#if dockPosition !== 'right'}
 			<div
 				data-drop-zone="right"
@@ -1268,7 +1268,7 @@
 		</div>
 	{/if}
 
-	{#if !isDockDragging && dockPosition === 'right'}
+	{#if !isDockDragging && dockPosition === 'right' && !showDev}
 		<SelectionPanel
 			album={panelAlbum}
 			thumb={dockThumb}
