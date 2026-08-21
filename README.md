@@ -48,7 +48,7 @@ cd frontend && npm install
 python -m venv .venv
 # Activate it:  Windows -> .venv\Scripts\activate   |   macOS/Linux -> source .venv/bin/activate
 pip install -e .            # runtime deps + the `archivenetwork` command
-# pip install -e ".[dev]"   # add pytest / ruff / httpx for running the tests
+# pip install -e ".[dev]"   # add pytest / ruff / httpx2 for running the tests
 cd frontend && npm install
 ```
 
