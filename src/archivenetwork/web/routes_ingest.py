@@ -192,7 +192,7 @@ def ingest_zip(request: Request, body: ZipRequest) -> dict:
     if not deduped:
         try:
             extract_zip(src, dest)
-        except (zipfile.BadZipFile, ValueError, subprocess.CalledProcessError) as exc:
+        except (zipfile.BadZipFile, ValueError, subprocess.CalledProcessError, OSError, PermissionError) as exc:
             raise HTTPException(status_code=400, detail=f"Could not unzip that archive: {exc}") from exc
     result = _start_session(request, find_export_root(dest), managed=True, source_name=src.stem)
     result["deduped"] = deduped
@@ -204,15 +204,19 @@ def ingest_upload(request: Request, file: UploadFile = File(...)) -> dict:
     workspace = settings.workspace_dir
     import_dir = workspace / "import"
     import_dir.mkdir(parents=True, exist_ok=True)
-    zip_path = import_dir / (file.filename or "export.zip")
-    dest = workspace / "imports" / Path(zip_path.name).stem
+    raw_filename = file.filename or ""
+    clean_filename = Path(raw_filename).name.rsplit("\\", 1)[-1].rsplit("/", 1)[-1] or "export.zip"
+    zip_path = import_dir / clean_filename
+    dest = workspace / "imports" / Path(clean_filename).stem
     try:
         with zip_path.open("wb") as out:
             shutil.copyfileobj(file.file, out)
         if not dest.exists():
             extract_zip(zip_path, dest)
+    except (zipfile.BadZipFile, ValueError, subprocess.CalledProcessError, OSError, PermissionError) as exc:
+        raise HTTPException(status_code=400, detail=f"Could not unzip that archive: {exc}") from exc
     finally:
         zip_path.unlink(missing_ok=True)
     return _start_session(
-        request, find_export_root(dest), managed=True, source_name=Path(zip_path.name).stem
+        request, find_export_root(dest), managed=True, source_name=Path(clean_filename).stem
     )

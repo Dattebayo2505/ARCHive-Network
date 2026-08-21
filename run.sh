@@ -98,10 +98,12 @@ kill_tree() {
     for child in $children; do
       kill_tree "$child" "$sig"
     done
+  elif command -v pkill >/dev/null 2>&1; then
+    pkill -"$sig" -P "$pid" 2>/dev/null || true
   fi
 
-  # Attempt process group kill first, fall back to individual pid
-  kill -"$sig" -"$pid" 2>/dev/null || kill -"$sig" "$pid" 2>/dev/null || true
+  # Signal the pid directly, avoiding negative PID process group kills
+  kill -"$sig" "$pid" 2>/dev/null || true
 }
 
 # Backstop: free ports if any orphaned process remains
