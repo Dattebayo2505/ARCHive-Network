@@ -38,7 +38,14 @@
 	}
 
 	function driveActive(d) {
-		return path && path.slice(0, 2).toUpperCase() === d.slice(0, 2).toUpperCase();
+		if (!path) return false;
+		if (d.includes(':')) {
+			return path.slice(0, 2).toUpperCase() === d.slice(0, 2).toUpperCase();
+		}
+		if (d === '/') {
+			return path.startsWith('/') && !drives.some((other) => other !== '/' && path.startsWith(other));
+		}
+		return path === d || path.startsWith(d.endsWith('/') ? d : `${d}/`);
 	}
 
 	// Load home directory the first time the dialog opens.
@@ -88,7 +95,9 @@
 			<div class="space-y-2 border-b border-surface-200 bg-surface-100 px-4 py-3">
 				{#if drives.length > 1}
 					<div class="flex flex-wrap items-center gap-1.5">
-						<span class="text-xs font-medium text-surface-600">Drives</span>
+						<span class="text-xs font-medium text-surface-600">
+						{drives.some((d) => d.includes(':')) ? 'Drives' : 'Locations'}
+					</span>
 						{#each drives as d (d)}
 							<button
 								type="button"
