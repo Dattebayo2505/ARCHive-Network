@@ -12,7 +12,7 @@ def test_register_is_idempotent_on_id_and_sets_last_active(tmp_path: Path):
     e2 = reg.register(root, managed=True, now=200.0)
 
     assert e1.id == "facebook-MyPage-2026-07-03-abc"
-    assert e1.display_name == "MyPage Facebook Export | 2026-07-03"
+    assert e1.display_name == "My Page Facebook Export | 2026-07-03"
     assert len(reg.list()) == 1                # not duplicated
     assert e2.last_opened_ts == 200.0
     assert reg.last_active == e1.id

@@ -37,7 +37,11 @@ def test_thumbnail_missing_then_saved(video_export_root: Path, tmp_path: Path, m
     assert client.get("/api/video/v01/thumbnail").status_code == 404
     save = client.post("/api/video/v01/thumbnail", content=b"JPEGBYTES",
                        headers={"content-type": "image/jpeg"})
-    assert save.status_code == 200 and save.json() == {"ok": True}
+    assert save.status_code == 200 and save.json() == {
+        "ok": True,
+        "file_size_bytes": len(b"JPEGBYTES"),
+        "thumb_timestamp": 0.0,
+    }
     got = client.get("/api/video/v01/thumbnail")
     assert got.status_code == 200 and got.content == b"JPEGBYTES"
 
