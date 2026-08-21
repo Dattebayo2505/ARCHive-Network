@@ -34,6 +34,7 @@ packages = ["src/archivenetwork"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = "--basetemp=.pytest_cache/tmp"
 
 [tool.ruff]
 line-length = 100

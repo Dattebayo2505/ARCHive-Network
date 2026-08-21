@@ -1,0 +1,112 @@
+{
+  "version": "0.2.0",
+  "compounds": [
+    {
+      "name": "Full Stack (Backend + Frontend)",
+      "configurations": [
+        "Backend: FastAPI",
+        "Frontend: SvelteKit Dev"
+      ],
+      "stopAll": true
+    },
+    {
+      "name": "Test: All (Backend + Frontend)",
+      "configurations": [
+        "Test: Backend (pytest)",
+        "Test: Frontend (vitest)"
+      ],
+      "stopAll": true
+    }
+  ],
+  "configurations": [
+    {
+      "name": "Backend: FastAPI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "archivenetwork.main",
+      "cwd": "${workspaceFolder}",
+      "windows": {
+        "python": "${workspaceFolder}/.venv/Scripts/python.exe"
+      },
+      "osx": {
+        "python": "${workspaceFolder}/.venv/bin/python"
+      },
+      "linux": {
+        "python": "${workspaceFolder}/.venv/bin/python"
+      },
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "UV_LINK_MODE": "copy",
+        "ARCHIVENETWORK_PORT": "8000"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "jinja": true,
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Frontend: SvelteKit Dev",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/frontend",
+      "runtimeExecutable": "npm",
+      "windows": {
+        "runtimeExecutable": "npm.cmd"
+      },
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "env": {
+        "VITE_API_BASE": "http://127.0.0.1:8000"
+      },
+      "console": "integratedTerminal",
+      "serverReadyAction": {
+        "pattern": "Local:\\s+(https?://\\S+)",
+        "uriFormat": "%s",
+        "action": "openExternally"
+      }
+    },
+    {
+      "name": "Test: Backend (pytest)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "-q"
+      ],
+      "cwd": "${workspaceFolder}",
+      "windows": {
+        "python": "${workspaceFolder}/.venv/Scripts/python.exe"
+      },
+      "osx": {
+        "python": "${workspaceFolder}/.venv/bin/python"
+      },
+      "linux": {
+        "python": "${workspaceFolder}/.venv/bin/python"
+      },
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "UV_LINK_MODE": "copy"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Test: Frontend (vitest)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/frontend",
+      "runtimeExecutable": "npm",
+      "windows": {
+        "runtimeExecutable": "npm.cmd"
+      },
+      "runtimeArgs": [
+        "run",
+        "test"
+      ],
+      "console": "integratedTerminal"
+    }
+  ]
+}
