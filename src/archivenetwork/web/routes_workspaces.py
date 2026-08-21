@@ -38,7 +38,6 @@ def list_workspaces(request: Request) -> dict:
         "last_active": registry.last_active,
     }
 
-import json
 
 @router.get("/api/workspaces/{id}/stats")
 def workspace_stats(id: str, request: Request) -> dict:
