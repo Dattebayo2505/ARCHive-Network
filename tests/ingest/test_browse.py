@@ -76,6 +76,48 @@ def test_available_roots_are_real_directories():
     assert all(Path(r).is_dir() for r in roots)
 
 
+def test_available_roots_macos(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("archivenetwork.ingest.browse.os.name", "posix")
+    monkeypatch.setattr("archivenetwork.ingest.browse.sys.platform", "darwin")
+    monkeypatch.setattr(
+        Path, "exists", lambda self: self.as_posix() in ("/", "/Volumes")
+    )
+    assert available_roots() == ["/", "/Volumes"]
+
+
+def test_available_roots_macos_no_volumes(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("archivenetwork.ingest.browse.os.name", "posix")
+    monkeypatch.setattr("archivenetwork.ingest.browse.sys.platform", "darwin")
+    monkeypatch.setattr(Path, "exists", lambda self: self.as_posix() == "/")
+    assert available_roots() == ["/"]
+
+
+def test_available_roots_linux(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("archivenetwork.ingest.browse.os.name", "posix")
+    monkeypatch.setattr("archivenetwork.ingest.browse.sys.platform", "linux")
+    monkeypatch.setattr(
+        Path, "exists", lambda self: self.as_posix() in ("/", "/media", "/mnt")
+    )
+    assert available_roots() == ["/", "/media", "/mnt"]
+
+
+def test_available_roots_linux_partial_mounts(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("archivenetwork.ingest.browse.os.name", "posix")
+    monkeypatch.setattr("archivenetwork.ingest.browse.sys.platform", "linux")
+    monkeypatch.setattr(
+        Path, "exists", lambda self: self.as_posix() in ("/", "/mnt")
+    )
+    assert available_roots() == ["/", "/mnt"]
+
+
+def test_available_roots_windows(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("archivenetwork.ingest.browse.os.name", "nt")
+    monkeypatch.setattr(
+        Path, "exists", lambda self: str(self) in ("C:\\", "D:\\")
+    )
+    assert available_roots() == ["C:\\", "D:\\"]
+
+
 def test_missing_path_raises(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
         list_directory(tmp_path / "does-not-exist")

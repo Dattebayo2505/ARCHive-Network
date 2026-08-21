@@ -29,8 +29,38 @@ def test_command_opens_dir_on_macos(tmp_path: Path):
     assert reveal.reveal_command(tmp_path, platform="darwin") == ["open", str(tmp_path)]
 
 
-def test_command_opens_containing_dir_on_linux(tmp_path: Path):
+def test_command_opens_containing_dir_on_linux(tmp_path: Path, monkeypatch):
     # No portable "select a file" flag on Linux → open the folder instead.
+    monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
+    monkeypatch.setattr(reveal.shutil, "which", lambda cmd: None)
+    f = tmp_path / "photo.jpg"
+    f.write_bytes(b"x")
+    assert reveal.reveal_command(f, platform="linux") == ["xdg-open", str(tmp_path)]
+
+
+def test_command_uses_wslview_when_wslview_available_on_linux(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
+    monkeypatch.setattr(
+        reveal.shutil, "which", lambda cmd: "/usr/bin/wslview" if cmd == "wslview" else None
+    )
+    f = tmp_path / "photo.jpg"
+    f.write_bytes(b"x")
+    assert reveal.reveal_command(f, platform="linux") == ["wslview", str(tmp_path)]
+
+
+def test_command_uses_wslview_when_wsl_env_and_wslview_present(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
+    monkeypatch.setattr(
+        reveal.shutil, "which", lambda cmd: "/usr/bin/wslview" if cmd == "wslview" else None
+    )
+    f = tmp_path / "photo.jpg"
+    f.write_bytes(b"x")
+    assert reveal.reveal_command(f, platform="linux") == ["wslview", str(tmp_path)]
+
+
+def test_command_falls_back_to_xdg_open_in_wsl_without_wslview(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
+    monkeypatch.setattr(reveal.shutil, "which", lambda cmd: None)
     f = tmp_path / "photo.jpg"
     f.write_bytes(b"x")
     assert reveal.reveal_command(f, platform="linux") == ["xdg-open", str(tmp_path)]

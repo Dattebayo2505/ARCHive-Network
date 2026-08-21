@@ -45,16 +45,114 @@ def test_rejects_zip_slip(tmp_path: Path):
     assert not (tmp_path / "evil.txt").exists()
 
 
-def test_falls_back_to_zipfile_when_no_7zip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_falls_back_to_zipfile_when_no_external_tools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     # No configured binary and none discoverable on PATH -> stdlib zipfile fallback,
-    # so extraction still succeeds on machines without 7-Zip (e.g. a bare macOS/Linux).
+    # so extraction still succeeds on machines without 7-Zip, ditto, or unzip.
     zip_path = tmp_path / "x.zip"
     _make_zip(zip_path, {"posts/profile_posts_1.json": "[]"})
     monkeypatch.setattr(settings, "seven_zip_exe", None)
     monkeypatch.setattr("archivenetwork.ingest.unzip.shutil.which", lambda _name: None)
+    monkeypatch.setattr("archivenetwork.ingest.unzip.sys.platform", "linux")
     dest = tmp_path / "out"
     extract_zip(zip_path, dest)
     assert (dest / "posts" / "profile_posts_1.json").read_text() == "[]"
+
+
+def test_uses_seven_zip_when_available(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    zip_path = tmp_path / "x.zip"
+    _make_zip(zip_path, {"posts/profile_posts_1.json": "[]"})
+    dest = tmp_path / "out"
+
+    called_cmd = []
+
+    def fake_run(cmd, check=True):
+        called_cmd.append(cmd)
+
+    monkeypatch.setattr(settings, "seven_zip_exe", tmp_path / "7zz")
+    monkeypatch.setattr("archivenetwork.ingest.unzip.subprocess.run", fake_run)
+    monkeypatch.setattr("archivenetwork.ingest.unzip.sys.platform", "linux")
+    (tmp_path / "7zz").write_text("#!/bin/sh")
+
+    extract_zip(zip_path, dest)
+    assert len(called_cmd) == 1
+    assert called_cmd[0] == [
+        str(tmp_path / "7zz"),
+        "x",
+        str(zip_path),
+        f"-o{dest}",
+        "-y",
+        "-bso0",
+        "-bse0",
+        "-bsp0",
+    ]
+
+
+def test_uses_ditto_on_macos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    zip_path = tmp_path / "x.zip"
+    _make_zip(zip_path, {"posts/profile_posts_1.json": "[]"})
+    dest = tmp_path / "out"
+
+    called_cmd = []
+
+    def fake_run(cmd, check=True):
+        called_cmd.append(cmd)
+
+    monkeypatch.setattr(settings, "seven_zip_exe", None)
+    monkeypatch.setattr("archivenetwork.ingest.unzip.shutil.which", lambda _name: None)
+    monkeypatch.setattr("archivenetwork.ingest.unzip.sys.platform", "darwin")
+    monkeypatch.setattr("archivenetwork.ingest.unzip.subprocess.run", fake_run)
+
+    extract_zip(zip_path, dest)
+    assert len(called_cmd) == 1
+    assert called_cmd[0] == ["ditto", "-x", "-k", str(zip_path), str(dest)]
+
+
+def test_uses_ditto_when_found_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    zip_path = tmp_path / "x.zip"
+    _make_zip(zip_path, {"posts/profile_posts_1.json": "[]"})
+    dest = tmp_path / "out"
+
+    called_cmd = []
+
+    def fake_run(cmd, check=True):
+        called_cmd.append(cmd)
+
+    monkeypatch.setattr(settings, "seven_zip_exe", None)
+    monkeypatch.setattr(
+        "archivenetwork.ingest.unzip.shutil.which",
+        lambda name: "/usr/bin/ditto" if name == "ditto" else None,
+    )
+    monkeypatch.setattr("archivenetwork.ingest.unzip.sys.platform", "unknown")
+    monkeypatch.setattr("archivenetwork.ingest.unzip.subprocess.run", fake_run)
+
+    extract_zip(zip_path, dest)
+    assert len(called_cmd) == 1
+    assert called_cmd[0] == ["ditto", "-x", "-k", str(zip_path), str(dest)]
+
+
+def test_uses_unzip_on_linux(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    zip_path = tmp_path / "x.zip"
+    _make_zip(zip_path, {"posts/profile_posts_1.json": "[]"})
+    dest = tmp_path / "out"
+
+    called_cmd = []
+
+    def fake_run(cmd, check=True):
+        called_cmd.append(cmd)
+
+    monkeypatch.setattr(settings, "seven_zip_exe", None)
+    monkeypatch.setattr(
+        "archivenetwork.ingest.unzip.shutil.which",
+        lambda name: "/usr/bin/unzip" if name == "unzip" else None,
+    )
+    monkeypatch.setattr("archivenetwork.ingest.unzip.sys.platform", "linux")
+    monkeypatch.setattr("archivenetwork.ingest.unzip.subprocess.run", fake_run)
+
+    extract_zip(zip_path, dest)
+    assert len(called_cmd) == 1
+    assert called_cmd[0] == ["/usr/bin/unzip", "-q", "-o", str(zip_path), "-d", str(dest)]
 
 
 def test_windows_exe_ignored_off_windows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

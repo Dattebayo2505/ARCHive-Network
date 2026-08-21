@@ -76,7 +76,7 @@ def validate(ready_root: Path, storage: Storage, conn: psycopg.Connection) -> li
     # cannot see such a file, so it would be silently dropped — the `n01` class of bug.
     media_dir = ready_root / "posts" / "media"
     on_disk = {
-        str(p.relative_to(ready_root)).replace("\\", "/")
+        p.relative_to(ready_root).as_posix()
         for p in media_dir.rglob("*")
         if p.is_file()
     }

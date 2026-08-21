@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import os
 import string
+import sys
 from pathlib import Path
 
 from .validate import find_export_root, validate_export
 
 
 def available_roots() -> list[str]:
-    """Filesystem roots the picker can jump to: drive letters on Windows, `/` elsewhere."""
+    """Filesystem roots the picker can jump to: drive letters on Windows, mount points on macOS/Linux."""
     if os.name == "nt":
         roots = []
         for letter in string.ascii_uppercase:
@@ -19,7 +20,24 @@ def available_roots() -> list[str]:
             except OSError:
                 continue
         return roots or [str(Path.home().anchor or "C:\\")]
-    return ["/"]
+    if sys.platform == "darwin":
+        candidates = ["/", "/Volumes"]
+        roots = []
+        for c in candidates:
+            try:
+                if Path(c).exists():
+                    roots.append(c)
+            except OSError:
+                continue
+        return roots or ["/"]
+    candidates = ["/"]
+    for path_str in ["/media", "/mnt"]:
+        try:
+            if Path(path_str).exists():
+                candidates.append(path_str)
+        except OSError:
+            continue
+    return candidates
 
 
 def _is_export(folder: Path) -> bool:

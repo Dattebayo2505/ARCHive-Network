@@ -14,15 +14,19 @@ from .web.registry import WorkspaceRegistry
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     # When the browser aborts a video Range stream mid-flight (it already has
-    # the frame it wanted), Windows' Proactor loop raises ConnectionResetError
-    # inside its own connection_lost callback — outside any request handler, so
-    # only the loop's exception handler sees it. Swallow that one error;
-    # forward everything else to the previous/default handler.
+    # the frame it wanted), event loops (Windows Proactor, POSIX/Unix selector,
+    # kqueue) raise ConnectionResetError, BrokenPipeError, or
+    # ConnectionAbortedError inside their connection_lost callbacks — outside
+    # any request handler, so only the loop's exception handler sees it.
+    # Swallow those errors; forward everything else to the previous/default handler.
     loop = asyncio.get_running_loop()
     previous = loop.get_exception_handler()
 
     def _quiet_reset(loop, context):
-        if isinstance(context.get("exception"), ConnectionResetError):
+        if isinstance(
+            context.get("exception"),
+            (ConnectionResetError, BrokenPipeError, ConnectionAbortedError),
+        ):
             return
         (previous or loop.default_exception_handler)(context)
 

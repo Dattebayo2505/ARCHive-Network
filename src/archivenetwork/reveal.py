@@ -9,6 +9,8 @@ holds.
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +37,9 @@ def reveal_command(path: Path, *, platform: str | None = None) -> list[str]:
             return ["open", str(path)]
         return ["open", "-R", str(path)]
     folder = path if path.is_dir() else path.parent
+    is_wsl = "WSL_DISTRO_NAME" in os.environ or shutil.which("wslview") is not None
+    if is_wsl and shutil.which("wslview"):
+        return ["wslview", str(folder)]
     return ["xdg-open", str(folder)]
 
 

@@ -37,11 +37,12 @@ def extract_zip(zip_path: Path, dest: Path) -> Path:
     """Extract `zip_path` into `dest`.
 
     Uses a 7-Zip binary when one is available (far faster than Python's `zipfile`
-    on the large FB export); otherwise falls back to the stdlib `zipfile` so the
-    tool still works on machines without 7-Zip installed. Either way we first scan
-    the archive's central directory with `zipfile` — that reads only the entry
-    names (no decompression, effectively instant) — to reject zip-slip paths
-    before anything touches the disk.
+    on the large FB export); otherwise checks for native platform extractors
+    (`ditto` on macOS, `unzip` on Linux/POSIX); and finally falls back to the
+    stdlib `zipfile` so the tool still works on machines without external tools.
+    Either way we first scan the archive's central directory with `zipfile` —
+    that reads only the entry names (no decompression, effectively instant) —
+    to reject zip-slip paths before anything touches the disk.
     """
     dest.mkdir(parents=True, exist_ok=True)
     dest_resolved = dest.resolve()
@@ -60,9 +61,21 @@ def extract_zip(zip_path: Path, dest: Path) -> Path:
             [str(exe), "x", str(zip_path), f"-o{dest}", "-y", "-bso0", "-bse0", "-bsp0"],
             check=True,
         )
+    elif sys.platform == "darwin" or shutil.which("ditto"):
+        subprocess.run(
+            ["ditto", "-x", "-k", str(zip_path), str(dest)],
+            check=True,
+        )
+    elif unzip_bin := shutil.which("unzip"):
+        subprocess.run(
+            [unzip_bin, "-q", "-o", str(zip_path), "-d", str(dest)],
+            check=True,
+        )
     else:
-        # No 7-Zip on this machine: stdlib fallback (slower, but zero-dependency
-        # and cross-platform). The zip-slip scan above already vetted the paths.
+        # No external fast extractor on this machine: stdlib fallback (slower,
+        # but zero-dependency and cross-platform). The zip-slip scan above
+        # already vetted the paths.
         with zipfile.ZipFile(zip_path) as zf:
             zf.extractall(dest)
     return dest
+

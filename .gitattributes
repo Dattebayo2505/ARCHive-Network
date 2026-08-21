@@ -1,0 +1,48 @@
+# Auto-detect text files and normalize line endings
+* text=auto
+
+# Shell scripts must always use LF line endings
+*.sh text eol=lf
+
+# Windows batch and powershell scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Source code and config files
+*.py text
+*.js text
+*.ts text
+*.svelte text
+*.html text
+*.css text
+*.json text
+*.toml text
+*.yaml text
+*.yml text
+*.md text
+*.txt text
+*.sql text
+
+# Binary files
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.mp4 binary
+*.mov binary
+*.webm binary
+*.zip binary
+*.7z binary
+*.tar.gz binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
