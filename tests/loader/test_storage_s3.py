@@ -72,3 +72,29 @@ def test_ensure_ready_raises_for_missing_bucket():
     s = S3Storage("no-such-bucket", REGION)
     with pytest.raises(Exception):
         s.ensure_ready()
+
+
+@mock_aws
+def test_endpoint_url_configures_path_style_and_timeouts():
+    s = S3Storage(BUCKET, REGION, endpoint_url="http://127.0.0.1:4566")
+    assert s.client.meta.endpoint_url == "http://127.0.0.1:4566"
+    # Virtual-hosted style would resolve <bucket>.127.0.0.1 — a hostname that does not exist.
+    assert s.client.meta.config.s3["addressing_style"] == "path"
+    # Without these, a dead endpoint hangs on boto3's 60s default before the route can 502.
+    assert s.client.meta.config.connect_timeout == 3
+    assert s.client.meta.config.read_timeout == 10
+    # botocore normalizes `retries={"max_attempts": 1}` (one *retry*) into
+    # `total_max_attempts` on the client's merged config. The default carries no bound at
+    # all, so the presence of this key is what proves the cap was applied.
+    assert s.client.meta.config.retries["total_max_attempts"] == 2
+
+
+@mock_aws
+def test_without_endpoint_url_the_client_still_points_at_aws():
+    s = S3Storage(BUCKET, REGION)
+    assert "amazonaws.com" in s.client.meta.endpoint_url
+
+
+@mock_aws
+def test_region_is_retained_for_bucket_creation():
+    assert S3Storage(BUCKET, REGION).region == REGION

@@ -6,9 +6,17 @@ from pathlib import Path
 from typing import Protocol
 
 import boto3
+from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 
 UNCATEGORIZED = "uncategorized"
+
+# A custom endpoint (the floci emulator) must fail fast. boto3 otherwise waits out a 60s
+# default connect timeout, multiplied by its default retry count, before the route can
+# render a 502 — long enough that the UI reads as hung rather than failed. This is the
+# same lesson `db.CONNECT_TIMEOUT` records for psycopg.
+ENDPOINT_CONNECT_TIMEOUT = 3
+ENDPOINT_READ_TIMEOUT = 10
 
 
 def media_key(fbid: str, hashtag: str | None, group: str, suffix: str) -> str:
@@ -82,8 +90,11 @@ class S3Storage:
         access_key_id: str | None = None,
         secret_access_key: str | None = None,
         client=None,
+        *,
+        endpoint_url: str | None = None,
     ) -> None:
         self.bucket = bucket
+        self.region = region
         if client is not None:
             self.client = client
         else:
@@ -93,6 +104,16 @@ class S3Storage:
             if access_key_id and secret_access_key:
                 kwargs["aws_access_key_id"] = access_key_id
                 kwargs["aws_secret_access_key"] = secret_access_key
+            if endpoint_url:
+                # Path-style is load-bearing: virtual-hosted style would resolve
+                # <bucket>.127.0.0.1, which does not exist.
+                kwargs["endpoint_url"] = endpoint_url
+                kwargs["config"] = BotoConfig(
+                    s3={"addressing_style": "path"},
+                    connect_timeout=ENDPOINT_CONNECT_TIMEOUT,
+                    read_timeout=ENDPOINT_READ_TIMEOUT,
+                    retries={"max_attempts": 1},
+                )
             self.client = boto3.client("s3", **kwargs)
 
     def key_for(self, fbid: str, hashtag: str | None, group: str, suffix: str) -> str:
