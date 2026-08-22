@@ -505,7 +505,15 @@ export async function devDatabaseDrop(fetchFn = fetch) {
 /** Both upload targets: whether each is configured, and for floci whether it is reachable
  *  right now. Never throws. */
 export async function s3Status(fetchFn = fetch) {
-	const offline = { aws: { enabled: false }, floci: { enabled: false, reachable: false } };
+	// `api_reachable: false` is the tell that this is the FALLBACK, not a reading. Without it
+	// a dead backend is indistinguishable from a dead emulator, and the panel renders the
+	// "Docker isn't running" banner for a problem Docker has nothing to do with. The real
+	// response never carries the key, so anything from the API reads as reachable.
+	const offline = {
+		api_reachable: false,
+		aws: { enabled: false },
+		floci: { enabled: false, reachable: false }
+	};
 	try {
 		const res = await fetchFn(url('/api/s3/status'));
 		if (!res.ok) return offline;

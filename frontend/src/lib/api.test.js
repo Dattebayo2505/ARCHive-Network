@@ -205,6 +205,9 @@ describe('s3 api', () => {
 	it('falls back to both targets disabled when status cannot be fetched', async () => {
 		const fetchFn = vi.fn().mockRejectedValue(new Error('offline'));
 		expect(await s3Status(fetchFn)).toEqual({
+			// api_reachable marks this as the fallback, so the panel can say "the API is down"
+			// instead of blaming Docker for a backend that never answered.
+			api_reachable: false,
 			aws: { enabled: false },
 			floci: { enabled: false, reachable: false }
 		});

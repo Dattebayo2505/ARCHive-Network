@@ -52,26 +52,6 @@ export function flociUiUrl(endpointUrl) {
 	return `${base}/_floci/ui`;
 }
 
-/** The destination proper: the storage explorer on the UI container's OWN port, which is
- *  where the uploaded objects are — not the console's generic landing page.
- *
- *  The port is hard-coded rather than derived because the UI is a *separate container*; only
- *  the host is shared with the S3 endpoint. A deep link is dead until that container exists,
- *  so nothing should use this without first confirming readiness (`/api/docker/floci-ui`). */
-export function flociExplorerUrl(endpointUrl) {
-	const { protocol, hostname } = parseEndpoint(endpointUrl);
-	return `${protocol}//${hostname}:4500/cloud-explorer/aws/storage`;
-}
-
-function parseEndpoint(endpointUrl) {
-	try {
-		const url = new URL(String(endpointUrl || 'http://127.0.0.1:4566'));
-		return { protocol: url.protocol, hostname: url.hostname };
-	} catch {
-		return { protocol: 'http:', hostname: '127.0.0.1' };
-	}
-}
-
 /** Whether an upload is worth opening the Floci UI for.
  *
  *  "There is already a build uploaded" is exactly `uploaded === 0`: every object was skipped

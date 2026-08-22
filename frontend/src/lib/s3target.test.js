@@ -2,7 +2,6 @@ import { beforeEach, expect, test } from 'vitest';
 import {
 	canUpload,
 	flociAutoOpen,
-	flociExplorerUrl,
 	flociUiUrl,
 	s3Target,
 	shouldOpenFlociUi
@@ -96,19 +95,4 @@ test('auto-open defaults on and persists an opt-out', () => {
 	expect(localStorage.getItem('archive-floci-autoopen')).toBe('off');
 	flociAutoOpen.set(true);
 	expect(localStorage.getItem('archive-floci-autoopen')).toBe('on');
-});
-
-test('the storage explorer lives on the UI container own port, not the S3 one', () => {
-	// 4500 is the sibling floci/floci-ui container; only the host is shared with :4566.
-	expect(flociExplorerUrl('http://127.0.0.1:4566')).toBe(
-		'http://127.0.0.1:4500/cloud-explorer/aws/storage'
-	);
-	expect(flociExplorerUrl('http://floci.local:9999')).toBe(
-		'http://floci.local:4500/cloud-explorer/aws/storage'
-	);
-});
-
-test('a malformed endpoint still yields a usable explorer url', () => {
-	expect(flociExplorerUrl('')).toBe('http://127.0.0.1:4500/cloud-explorer/aws/storage');
-	expect(flociExplorerUrl('not a url')).toBe('http://127.0.0.1:4500/cloud-explorer/aws/storage');
 });

@@ -377,3 +377,64 @@ describe('who owns the Start button', () => {
 		expect(screen.getByText(/nothing is answering at/)).toBeTruthy();
 	});
 });
+
+describe('what the switch disables, and what the banner blames', () => {
+	const FLOCI_DOWN = {
+		...FLOCI_UP,
+		aws: { enabled: false },
+		floci: { ...FLOCI_UP.floci, reachable: false }
+	};
+
+	it('disables only the AWS position, so aws is never a one-way door', async () => {
+		// Sitting on floci with no bucket configured: the aws position is unavailable.
+		api.s3Status.mockResolvedValue({ ...FLOCI_UP, aws: { enabled: false } });
+		render(DevPanel);
+		await waitFor(() => expect(screen.getByRole('switch').disabled).toBe(true));
+	});
+
+	it('leaves the switch live while it points AT aws, even with AWS unconfigured', async () => {
+		// A stored 'aws' preference plus a bucket unset after the fact used to strand the
+		// panel: switch dead, Upload dead, no route back to the always-offered target.
+		s3Target.set('aws');
+		api.s3Status.mockResolvedValue({ ...FLOCI_UP, aws: { enabled: false } });
+		render(DevPanel);
+		const toggle = await screen.findByRole('switch');
+		await waitFor(() => expect(toggle.disabled).toBe(false));
+		await fireEvent.click(toggle);
+		expect(s3Target.target).toBe('floci');
+	});
+
+	it('tints the whole card on the AWS position and leaves it neutral on floci', async () => {
+		const { unmount } = render(DevPanel);
+		await waitFor(() => expect(document.querySelector('section.bg-surface-50')).toBeTruthy());
+		expect(document.querySelector('section.bg-warning-50')).toBeNull();
+		unmount();
+
+		s3Target.set('aws');
+		render(DevPanel);
+		await waitFor(() => expect(document.querySelector('section.bg-warning-50')).toBeTruthy());
+	});
+
+	it.each([
+		['Docker unusable', { available: false, running: false, exists: false }],
+		['container down', { running: false, exists: true }],
+		['container up but silent', { running: true, exists: true }]
+	])('names Docker in the %s message, matching the 502', async (_label, over) => {
+		api.s3Status.mockResolvedValue(FLOCI_DOWN);
+		api.dockerStatus.mockResolvedValue(dockerState(over));
+		const { unmount } = render(DevPanel);
+		await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Docker/));
+		unmount();
+	});
+
+	it('blames the API, not Docker, when the fallback reading fires', async () => {
+		// `api_reachable: false` is only ever set by api.js's offline fallback: the backend
+		// never answered, so floci's state is unknown and Docker is not the subject.
+		api.s3Status.mockResolvedValue({ ...FLOCI_DOWN, api_reachable: false });
+		api.dockerStatus.mockResolvedValue(dockerState({ available: false, running: false }));
+		render(DevPanel);
+		const banner = await screen.findByRole('status');
+		await waitFor(() => expect(banner.textContent).toMatch(/API isn't answering/i));
+		expect(banner.textContent).not.toMatch(/Docker isn't running/i);
+	});
+});

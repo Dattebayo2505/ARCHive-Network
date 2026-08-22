@@ -21,15 +21,18 @@ router = APIRouter()
 
 
 @router.get("/api/docker/floci-ui")
-def ui(wait: float = flociui.DEFAULT_WAIT) -> dict:
+def ui() -> dict:
     """Where to send someone who wants to look at the bucket.
 
     Lives here rather than in the browser because the two calls involved are cross-origin to
     floci, which sends no CORS headers: a `no-cors` fetch would perform the warm-up but could
     never read back whether it worked. Never fails — an unreachable floci comes back as
     `ready: false` with the poller URL, which is always safe to open.
+
+    The wait budget is not a query parameter: no caller passes one, and a caller-controlled
+    sleep on a server route is a lever with no user. `flociui.DEFAULT_WAIT` owns it.
     """
-    return flociui.ensure(settings.floci_endpoint_url, wait=wait).as_dict()
+    return flociui.ensure(settings.floci_endpoint_url).as_dict()
 
 
 @router.get("/api/docker/status")

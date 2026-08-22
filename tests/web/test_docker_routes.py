@@ -139,7 +139,7 @@ def _ui(**over):
 
 
 def test_the_ui_route_returns_the_storage_explorer_when_it_is_up(client, monkeypatch):
-    monkeypatch.setattr(routes_docker.flociui, "ensure", lambda endpoint, wait: _ui())
+    monkeypatch.setattr(routes_docker.flociui, "ensure", lambda endpoint: _ui())
     body = client.get("/api/docker/floci-ui").json()
     assert body["ready"] is True
     assert body["url"].endswith("/cloud-explorer/aws/storage")
@@ -152,8 +152,8 @@ def test_the_ui_route_hands_back_the_poller_rather_than_a_dead_deep_link(client,
     monkeypatch.setattr(
         routes_docker.flociui,
         "ensure",
-        lambda endpoint, wait: _ui(ready=False, url="http://127.0.0.1:4566/_floci/ui",
-                                   reason="not started"),
+        lambda endpoint: _ui(ready=False, url="http://127.0.0.1:4566/_floci/ui",
+                             reason="not started"),
     )
     body = client.get("/api/docker/floci-ui").json()
     assert body["ready"] is False
@@ -161,21 +161,23 @@ def test_the_ui_route_hands_back_the_poller_rather_than_a_dead_deep_link(client,
     assert body["explorer"].endswith("/cloud-explorer/aws/storage"), "still reported, just not chosen"
 
 
-def test_the_ui_route_uses_the_configured_endpoint_and_an_overridable_wait(client, monkeypatch):
+def test_the_ui_route_uses_the_configured_endpoint_and_owns_its_wait(client, monkeypatch):
+    """The wait budget belongs to `flociui.DEFAULT_WAIT`, not to the caller: a query-string
+    sleep on a server route is a lever no client ever pulls."""
     seen = {}
 
-    def ensure(endpoint, wait):
-        seen.update(endpoint=endpoint, wait=wait)
+    def ensure(endpoint):
+        seen.update(endpoint=endpoint)
         return _ui()
 
     monkeypatch.setattr(routes_docker.flociui, "ensure", ensure)
     monkeypatch.setattr(routes_docker.settings, "floci_endpoint_url", "http://floci.local:9999")
     client.get("/api/docker/floci-ui?wait=2")
-    assert seen == {"endpoint": "http://floci.local:9999", "wait": 2.0}
+    assert seen == {"endpoint": "http://floci.local:9999"}
 
 
 def test_the_ui_route_needs_no_docker_probe(client, monkeypatch):
     """It asks floci, not the daemon — so it must not 409 the way the action route does."""
     monkeypatch.setattr(routes_docker.dockerctl, "probe", lambda: _state(engine_up=False))
-    monkeypatch.setattr(routes_docker.flociui, "ensure", lambda endpoint, wait: _ui())
+    monkeypatch.setattr(routes_docker.flociui, "ensure", lambda endpoint: _ui())
     assert client.get("/api/docker/floci-ui").status_code == 200

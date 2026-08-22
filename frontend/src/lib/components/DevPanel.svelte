@@ -99,17 +99,27 @@
 	// (port conflict, overridden ARCHIVENETWORK_FLOCI_ENDPOINT_URL) diagnosable. When Docker
 	// *is* usable there is nothing to instruct — the Start button below does it.
 	const flociEndpoint = $derived(s3?.floci?.endpoint_url ?? 'http://127.0.0.1:4566');
+	// EVERY branch names Docker. The 502 this banner mirrors (`FLOCI_DOWN_DETAIL`) always
+	// does, and a banner that quietly stopped saying "Docker" while the error kept saying it
+	// would let the two disagree about the same failure. The branches differ only in what to
+	// DO about Docker, never in whether Docker is the subject.
 	const flociDownMessage = $derived(
-		!docker?.available
-			? `Docker isn't running. Floci needs it. Start Docker Desktop, then bring the container up ` +
-					`with \`docker compose up -d\`, then Re-check. Expected at ${flociEndpoint}.`
-			: docker.running
-				? // Running but silent: starting it again would fix nothing, so don't suggest it.
-					`The container is running, but nothing is answering at ${flociEndpoint}. Something else ` +
-					`may be holding the port, or ARCHIVENETWORK_FLOCI_ENDPOINT_URL points elsewhere. Try ` +
-					`Restart below, then Re-check.`
-				: `The floci container isn't running, so there's nowhere to upload yet. Start it and this ` +
-					`clears itself once the emulator answers — no terminal needed. Expected at ${flociEndpoint}.`
+		s3?.api_reachable === false
+			? // Not a floci failure at all: the fallback reading fires when the backend itself
+				// never answered, and blaming Docker for that is a misattribution.
+				`The ARCHiveNetwork API isn't answering, so whether floci is up can't be checked ` +
+					`from here. Start the backend, then Re-check.`
+			: !docker?.available
+				? `Docker isn't running. Floci needs it. Start Docker Desktop, then bring the ` +
+					`container up with \`docker compose up -d\`, then Re-check. Expected at ${flociEndpoint}.`
+				: docker.running
+					? // Running but silent: starting it again would fix nothing, so don't suggest it.
+						`Docker is running the floci container, but nothing is answering at ` +
+						`${flociEndpoint}. Something else may be holding the port, or ` +
+						`ARCHIVENETWORK_FLOCI_ENDPOINT_URL points elsewhere. Try Restart below, then Re-check.`
+					: `Docker is running, but its floci container isn't, so there's nowhere to upload ` +
+						`yet. Start it and this clears itself once the emulator answers - no terminal ` +
+						`needed. Expected at ${flociEndpoint}.`
 	);
 	const flociDown = $derived(s3?.floci?.reachable === false);
 	// Who owns the Start button. When the emulator is unreachable *and* the container is down,
@@ -649,8 +659,18 @@
 		     A sibling panel like auto-curate: an object-store push with NO database
 		     involvement, so it must stay outside the DB-gated block below. The section no
 		     longer hides when AWS is unconfigured — floci is always available, so the AWS
-		     *position of the switch* is what gets disabled. -->
-		<section class="mb-4 rounded-xl border border-surface-300 bg-surface-50 p-5">
+		     *position of the switch* is what gets disabled.
+
+		     Colour carries the state: floci leaves the card neutral, AWS tints the whole card
+		     with `warning` tokens, so "this writes to production" is legible from across the
+		     room and not only from the button's label. The `warning` ramp does NOT invert
+		     under `.dark` (only `surface` does), so this pale-tint/dark-ink pairing is stable
+		     in both themes rather than the primary-100/primary-800 trap. -->
+		<section
+			class="mb-4 rounded-xl border p-5 transition-colors {s3Target.target === 'aws'
+				? 'border-warning-400 bg-warning-50'
+				: 'border-surface-300 bg-surface-50'}"
+		>
 			<div class="flex flex-wrap items-start justify-between gap-3">
 				<div class="max-w-prose">
 					<h2 class="text-sm font-semibold text-surface-900">
@@ -691,12 +711,17 @@
 								? 'text-surface-900'
 								: 'text-surface-500'}">Local floci</span
 						>
+						<!-- Only the AWS *position* is unavailable when AWS is unconfigured. Disabling the
+						     whole control would strand a profile whose stored preference is already 'aws'
+						     (a bucket unset after the fact): switch dead, Upload dead, and no route back
+						     to floci, the one target that is always offered. So the switch stays live
+						     whenever it is pointing AT aws. -->
 						<button
 							type="button"
 							role="switch"
 							aria-checked={s3Target.target === 'aws'}
 							aria-label="Upload to real AWS S3"
-							disabled={!s3?.aws?.enabled || busy !== ''}
+							disabled={(s3Target.target === 'floci' && !s3?.aws?.enabled) || busy !== ''}
 							onclick={switchTarget}
 							class="relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 {s3Target.target ===
 							'aws'
@@ -739,8 +764,10 @@
 			{#if flociDown}
 				<!-- Shown on BOTH targets: someone sitting on AWS should learn the testing path is
 				     down before flipping to it. Worded as information, never as an obstruction. -->
+				<!-- warning-100, a step darker than the card's own warning-50 tint, so the band
+				     still separates on the AWS card as well as on the neutral floci one. -->
 				<div
-					class="mt-4 flex flex-wrap items-start justify-between gap-3 rounded-lg border border-warning-300 bg-warning-50 px-3 py-2"
+					class="mt-4 flex flex-wrap items-start justify-between gap-3 rounded-lg border border-warning-400 bg-warning-100 px-3 py-2"
 					role="status"
 				>
 					<p class="max-w-prose text-sm text-warning-800">{flociDownMessage}</p>
@@ -761,7 +788,7 @@
 						<button
 							type="button"
 							onclick={refreshS3}
-							class="rounded-lg border border-warning-300 bg-surface-50 px-3 py-1.5 text-sm font-medium text-warning-800 transition-colors hover:bg-warning-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+							class="rounded-lg border border-warning-400 bg-surface-50 px-3 py-1.5 text-sm font-medium text-warning-800 transition-colors hover:bg-warning-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
 							>Re-check</button
 						>
 					</div>
