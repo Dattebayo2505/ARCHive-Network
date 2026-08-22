@@ -1,3 +1,5 @@
+import socket
+
 import boto3
 import pytest
 from moto import mock_aws
@@ -34,22 +36,43 @@ def _build_ready(export_root, tmp_path):
     build_ready_folder(export_root, tmp_path / "workspace" / "ready" / export_root.name, keep)
 
 
-def test_status_disabled_when_unset(tmp_path, monkeypatch):
+def _floci_down(monkeypatch):
+    """Point floci at a port nothing is listening on, so the probe refuses instantly."""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    monkeypatch.setattr(settings, "floci_endpoint_url", f"http://127.0.0.1:{port}")
+    monkeypatch.setattr(settings, "floci_bucket", "archivenetwork-dev")
+
+
+def test_status_reports_aws_disabled_and_floci_always_offered(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(settings, "s3_bucket", None)
-    client = TestClient(create_app())
-    assert client.get("/api/s3/status").json() == {"enabled": False}
+    monkeypatch.setattr(settings, "s3_region", REGION)
+    _floci_down(monkeypatch)
+    body = TestClient(create_app()).get("/api/s3/status").json()
+
+    assert body["aws"] == {"enabled": False}
+    # Configured is not the same question as up: floci is always offered.
+    assert body["floci"]["enabled"] is True
+    assert body["floci"]["bucket"] == "archivenetwork-dev"
+    assert body["floci"]["region"] == REGION
+    assert body["floci"]["reachable"] is False
+    assert body["floci"]["reason"]
 
 
-def test_status_enabled_when_set(tmp_path, monkeypatch):
+def test_status_reports_both_targets_when_aws_is_configured(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _configure(monkeypatch)
-    client = TestClient(create_app())
-    assert client.get("/api/s3/status").json() == {
-        "enabled": True,
-        "bucket": BUCKET,
-        "region": REGION,
-    }
+    _floci_down(monkeypatch)
+    body = TestClient(create_app()).get("/api/s3/status").json()
+
+    assert body["aws"] == {"enabled": True, "bucket": BUCKET, "region": REGION}
+    assert body["floci"]["endpoint_url"].startswith("http://127.0.0.1:")
+    # The AWS entry carries no liveness field — probing a remote bucket on page load
+    # would be a network round trip to AWS.
+    assert "reachable" not in body["aws"]
 
 
 def test_upload_404_when_unconfigured(export_root, tmp_path, monkeypatch):

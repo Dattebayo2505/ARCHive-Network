@@ -52,6 +52,16 @@ class Settings(BaseSettings):
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
 
+    # --- Floci: a local LocalStack-compatible AWS emulator, used as the "testing" upload
+    # target. Kept independent of the S3 block on purpose — the switch must work on a machine
+    # with no AWS bucket configured, and real credentials must never travel to the emulator.
+    # Both fields have defaults, so the testing target is ALWAYS offered; whether the
+    # container is actually up is a separate question, answered by storage.probe_endpoint().
+    # Region is deliberately NOT duplicated: reusing s3_region keeps the emulator's key
+    # layout byte-identical to production's.
+    floci_endpoint_url: str = "http://127.0.0.1:4566"
+    floci_bucket: str = "archivenetwork-dev"
+
     host: str = "127.0.0.1"
     port: int = 8000
     cors_origins: list[str] = [
