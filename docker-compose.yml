@@ -1,0 +1,18 @@
+# The local floci emulator — the Dev panel's "testing" upload target.
+#
+# floci is LocalStack-compatible, so at the boto3 level the only difference from real AWS is
+# an `endpoint_url` override (see `loader/storage.py` and `web/routes_s3.py`). Bring it up
+# with `docker compose up -d`; the Dev panel's Upload switch then has somewhere to write.
+#
+# The port MUST match ARCHIVENETWORK_FLOCI_ENDPOINT_URL (default http://127.0.0.1:4566).
+services:
+  floci:
+    image: floci/floci:latest # :latest-jvm for broader platform compatibility (e.g. ARM)
+    container_name: archivenetwork-floci
+    ports:
+      - '4566:4566'
+    volumes:
+      # Under workspace/ so it lands with every other piece of runtime data, and is already
+      # gitignored. Objects survive a container restart; delete the directory to start clean.
+      - ./workspace/floci-data:/app/data
+    restart: unless-stopped
