@@ -8,9 +8,11 @@ import {
 	ingestZip,
 	previewUrl,
 	reveal,
+	s3Status,
 	saveVideoThumbnail,
 	thumbUrl,
 	toggle,
+	uploadToS3,
 	videoThumbUrl,
 	videoUrl
 } from './api.js';
@@ -179,5 +181,29 @@ describe('ingestUpload', () => {
 		const result = await ingestUpload(new Blob(['x']), { createXhr: () => xhr });
 		expect(result.ok).toBe(false);
 		expect(result.errors).toBeTruthy();
+	});
+});
+
+describe('s3 api', () => {
+	it('names the target on the upload request', async () => {
+		const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ uploaded: 3 }) });
+		await uploadToS3('floci', fetchFn);
+		const [requested, opts] = fetchFn.mock.calls[0];
+		expect(requested).toMatch(/\/api\/s3\/upload\?target=floci$/);
+		expect(opts.method).toBe('POST');
+	});
+
+	it('sends target=aws when that is the armed target', async () => {
+		const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ uploaded: 0 }) });
+		await uploadToS3('aws', fetchFn);
+		expect(fetchFn.mock.calls[0][0]).toMatch(/\?target=aws$/);
+	});
+
+	it('falls back to both targets disabled when status cannot be fetched', async () => {
+		const fetchFn = vi.fn().mockRejectedValue(new Error('offline'));
+		expect(await s3Status(fetchFn)).toEqual({
+			aws: { enabled: false },
+			floci: { enabled: false, reachable: false }
+		});
 	});
 });

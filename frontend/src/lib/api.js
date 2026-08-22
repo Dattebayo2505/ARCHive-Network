@@ -498,24 +498,27 @@ export async function devDatabaseDrop(fetchFn = fetch) {
 	return { ok: res.ok, status: res.status, body: await res.json() };
 }
 
-// --- On-demand S3 upload. Gated on the backend having ARCHIVENETWORK_S3_BUCKET set;
-// GET status 200s regardless (enabled:false when unset) so the panel can reveal itself. ---
+// --- On-demand S3 upload. TWO targets: the local floci emulator (testing) and real AWS S3.
+// The target is named on every upload request rather than remembered server-side, so it is
+// never ambiguous which bucket is about to be written to. ---
 
-/** Whether S3 upload is configured, and against which bucket/region. Never throws. */
+/** Both upload targets: whether each is configured, and for floci whether it is reachable
+ *  right now. Never throws. */
 export async function s3Status(fetchFn = fetch) {
+	const offline = { aws: { enabled: false }, floci: { enabled: false, reachable: false } };
 	try {
 		const res = await fetchFn(url('/api/s3/status'));
-		if (!res.ok) return { enabled: false };
+		if (!res.ok) return offline;
 		return res.json();
 	} catch {
-		return { enabled: false };
+		return offline;
 	}
 }
 
-/** Push the current built workspace's ready folder to S3. 404=not configured, 409=not built,
- *  502=S3 unreachable. */
-export async function uploadToS3(fetchFn = fetch) {
-	const res = await fetchFn(url('/api/s3/upload'), { method: 'POST' });
+/** Push the current built workspace's ready folder to `target` ('aws' | 'floci').
+ *  404=not configured, 409=not built, 422=no target, 502=unreachable. */
+export async function uploadToS3(target, fetchFn = fetch) {
+	const res = await fetchFn(url(`/api/s3/upload?target=${target}`), { method: 'POST' });
 	return { ok: res.ok, status: res.status, body: await res.json() };
 }
 
