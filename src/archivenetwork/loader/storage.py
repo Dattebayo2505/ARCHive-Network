@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import mimetypes
 import shutil
+import socket
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlsplit
 
 import boto3
 from botocore.config import Config as BotoConfig
@@ -166,3 +169,38 @@ class S3Storage:
         ctype = mimetypes.guess_type(key)[0] or "application/octet-stream"
         self.client.upload_file(str(src), self.bucket, key, ExtraArgs={"ContentType": ctype})
         return True
+
+
+# --- Endpoint liveness -------------------------------------------------------------------
+# Mirrors `db.probe()`: report what we can learn cheaply, without assuming the service is up.
+# Bounded on purpose — an unbounded connect blocks for the OS default (~21s per address on
+# Windows), which reads as a hung UI rather than a failed check.
+PROBE_TIMEOUT = 1.0
+
+
+@dataclass(frozen=True)
+class EndpointProbe:
+    """Whether anything is listening at an object-store endpoint, right now.
+
+    Records NO cause. A refused connection cannot distinguish "Docker is not running" from
+    "Docker is up but the container was never started" from "something else owns the port".
+    The judgement about the likeliest cause belongs to the message layer, which has the
+    context to guess; this does not.
+    """
+
+    reachable: bool
+    reason: str | None = None
+
+
+def probe_endpoint(endpoint_url: str, timeout: float = PROBE_TIMEOUT) -> EndpointProbe:
+    """A bounded TCP connect to the endpoint's host/port. Never raises."""
+    parts = urlsplit(endpoint_url)
+    host = parts.hostname
+    if not host:
+        return EndpointProbe(reachable=False, reason=f"malformed endpoint url: {endpoint_url!r}")
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    try:
+        with socket.create_connection((host, port), timeout):
+            return EndpointProbe(reachable=True)
+    except OSError as exc:
+        return EndpointProbe(reachable=False, reason=str(exc))
