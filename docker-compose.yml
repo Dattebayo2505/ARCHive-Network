@@ -1,0 +1,34 @@
+# The local floci emulator — the Dev panel's "testing" upload target.
+#
+# floci is LocalStack-compatible, so at the boto3 level the only difference from real AWS is
+# an `endpoint_url` override (see `loader/storage.py` and `web/routes_s3.py`). Bring it up
+# with `docker compose up -d`; the Dev panel's Upload switch then has somewhere to write.
+#
+# The port MUST match ARCHIVENETWORK_FLOCI_ENDPOINT_URL (default http://127.0.0.1:4566).
+services:
+  floci:
+    image: floci/floci:latest # :latest-jvm for broader platform compatibility (e.g. ARM)
+    container_name: archivenetwork-floci
+    ports:
+      - '4566:4566'
+    environment:
+      # LOAD-BEARING, and easy to miss: the image ships with FLOCI_STORAGE_PERSISTENT_PATH
+      # already set to /app/data, so the bind-mount below *looks* sufficient — but floci
+      # defaults to `Storage: memory` and writes nothing to that path. Uploaded objects then
+      # vanish on every restart, which the Dev panel's Restart and Rebuild buttons make a
+      # one-click action. Verified by the boot line, which must read
+      # `EmulatorLifecycle] Storage: persistent  Path: /app/data`.
+      FLOCI_STORAGE_MODE: persistent
+    volumes:
+      # Under workspace/ so it lands with every other piece of runtime data, and is already
+      # gitignored. Objects survive a container restart; delete the directory to start clean.
+      - ./workspace/floci-data:/app/data
+      # The Floci UI (http://127.0.0.1:4566/_floci/ui) is NOT served by this container — floci
+      # starts it as a *sibling* container, so it needs to reach the host container runtime.
+      # Without this mount the UI page renders "Floci UI unavailable ... java.net.SocketException:
+      # No such file or directory"; the S3 API is unaffected, which is why uploads still succeed.
+      # Docker Desktop (Windows/macOS) special-cases this path even though the host endpoint is a
+      # named pipe, so the literal unix path is correct on every platform. On SELinux hosts append
+      # ':z' (or run with '--security-opt label=disable').
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped

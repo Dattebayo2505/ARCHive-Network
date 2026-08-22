@@ -4,8 +4,9 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Repo root: config.py -> archivenetwork -> src -> <root>. Used to locate vendored binaries.
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Repo root: config.py -> archivenetwork -> src -> <root>. Used to locate vendored binaries
+# and the checked-in docker-compose.yml (see loader/dockerctl.py).
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _default_seven_zip() -> Path | None:
@@ -22,7 +23,7 @@ def _default_seven_zip() -> Path | None:
     ``arm64``, ``armv7l``, ``riscv64``). On non-x86 Linux, this returns None so
     extraction falls back to system tools on PATH or Python stdlib ``zipfile``.
     """
-    vendor = _PROJECT_ROOT / "vendor"
+    vendor = PROJECT_ROOT / "vendor"
     candidate: Path | None = None
     if sys.platform.startswith("win"):
         candidate = vendor / "7za.exe"
@@ -72,6 +73,16 @@ class Settings(BaseSettings):
     s3_region: str = "ap-southeast-1"
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
+
+    # --- Floci: a local LocalStack-compatible AWS emulator, used as the "testing" upload
+    # target. Kept independent of the S3 block on purpose — the switch must work on a machine
+    # with no AWS bucket configured, and real credentials must never travel to the emulator.
+    # Both fields have defaults, so the testing target is ALWAYS offered; whether the
+    # container is actually up is a separate question, answered by storage.probe_endpoint().
+    # Region is deliberately NOT duplicated: reusing s3_region keeps the emulator's key
+    # layout byte-identical to production's.
+    floci_endpoint_url: str = "http://127.0.0.1:4566"
+    floci_bucket: str = "archivenetwork-dev"
 
     host: str = "127.0.0.1"
     port: int = 8000

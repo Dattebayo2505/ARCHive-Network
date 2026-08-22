@@ -32,6 +32,37 @@ S3 settings are defined in [src/archivenetwork/config.py](src/archivenetwork/con
 | `ARCHIVENETWORK_S3_REGION` | `s3_region` | `"ap-southeast-1"` | AWS Region |
 | `ARCHIVENETWORK_S3_ACCESS_KEY_ID` | `s3_access_key_id` | `None` | Optional explicit AWS Access Key ID (**only honoured together with the secret**) |
 | `ARCHIVENETWORK_S3_SECRET_ACCESS_KEY` | `s3_secret_access_key` | `None` | Optional explicit AWS Secret Access Key (**only honoured together with the key ID**) |
+| `ARCHIVENETWORK_FLOCI_ENDPOINT_URL` | `floci_endpoint_url` | `"http://127.0.0.1:4566"` | Local emulator endpoint (testing target) |
+| `ARCHIVENETWORK_FLOCI_BUCKET` | `floci_bucket` | `"archivenetwork-dev"` | Bucket used on the emulator; auto-created |
+
+> **Two targets, chosen per request.** `POST /api/s3/upload` takes a **required**
+> `?target=aws|floci` parameter — a forgotten parameter is a `422`, never an implicit write to
+> production. `GET /api/s3/status` describes both. The floci block is independent of the AWS
+> block on purpose: the switch must be usable on a machine with no AWS bucket configured, and
+> real credentials must never travel to the emulator (it uses the dummy `test`/`test` pair).
+> Region is shared, so the emulator's key layout is byte-identical to production's.
+
+> **Path-style addressing is load-bearing.** When `endpoint_url` is set, the client is built
+> with `Config(s3={"addressing_style": "path"})`. boto3 defaults to virtual-hosted style, which
+> would resolve `http://archivenetwork-dev.127.0.0.1:4566` — a hostname that does not exist.
+> Every request would fail with a DNS error that reads like the container is down, sending the
+> reader after the wrong problem entirely. The same `Config` carries `connect_timeout=3`,
+> `read_timeout=10` and `retries={"max_attempts": 1}`, because boto3's 60s default connect
+> times its retries makes a dead endpoint read as a hung UI rather than a failed upload.
+
+> **Auto-create is asymmetric.** `S3Storage(create_if_missing=True)` is set **only** for floci,
+> which starts empty. `ensure_ready()` catches a `404`/`NoSuchBucket`/`NotFound` and creates the
+> bucket; a `403` re-raises, because a permissions failure must stay diagnosable rather than be
+> retried as "bucket absent". The AWS target never sets the flag — a preflight that can create a
+> production bucket is the opposite of a preflight.
+
+> **Liveness is a separate question from configuration.** `floci.enabled` is always `true` (the
+> settings have defaults); `floci.reachable` comes from `storage.probe_endpoint()`, a bounded
+> TCP connect. This is the same split as the Postgres pane's `server_up` vs `database_exists`,
+> and for the same reason: the panel must distinguish "not configured" from "configured but
+> down". The probe records no *cause* — a refused connection cannot tell Docker-off from
+> container-not-started from port-occupied — but the message it feeds does name Docker, because
+> that is the common case and an instruction beats a taxonomy.
 
 > **Note on Credentials — the explicit pair is both-or-neither.** `S3Storage.__init__` guards
 > with `if access_key_id and secret_access_key:`, so setting only *one* of the two silently
@@ -85,16 +116,33 @@ The uploader in [src/archivenetwork/loader/upload.py](src/archivenetwork/loader/
 
 ### REST API Routes
 Endpoints in [src/archivenetwork/web/routes_s3.py](src/archivenetwork/web/routes_s3.py#L57-L81) expose S3 capabilities over HTTP (mounted in FastAPI via `s3_router` in [src/archivenetwork/app.py](src/archivenetwork/app.py#L58-L68)):
-- **`GET /api/s3/status`**: Returns `{"enabled": true, "bucket": "...", "region": "..."}` or `{"enabled": false}`. It reads local settings only and **never contacts AWS**, so `enabled: true` says nothing about whether the credentials or the bucket actually work.
-- **`POST /api/s3/upload`**: Triggers `upload_ready()` for the active session's workspace. Responses:
+- **`GET /api/s3/status`**: Returns both targets — `{"aws": {...}, "floci": {...}}`. `aws` collapses to `{"enabled": false}` when unset and reads local settings only, so it **never contacts AWS**: `enabled: true` says nothing about whether the credentials or the bucket actually work. `floci.enabled` is always `true`; only `floci.reachable` (a bounded TCP probe) reports liveness.
+
+```json
+{
+  "aws":   { "enabled": true, "bucket": "archers-net", "region": "ap-southeast-1" },
+  "floci": { "enabled": true, "bucket": "archivenetwork-dev", "region": "ap-southeast-1",
+             "endpoint_url": "http://127.0.0.1:4566",
+             "reachable": false, "reason": "connection refused" }
+}
+```
+
+- **`POST /api/s3/upload?target=aws|floci`**: Triggers `upload_ready()` for the active session's workspace against the named target. Responses:
 
 | Status | Cause | Body / detail |
 | :--- | :--- | :--- |
-| `200` | The run completed — **including a run where every file failed** | `{uploaded, skipped, orphans[], errors[], bucket, region}` |
-| `404` | S3 not configured (`s3_bucket` unset) | `"S3 is not configured (set ARCHIVENETWORK_S3_BUCKET)"` |
+| `200` | The run completed — **including a run where every file failed** | `{uploaded, skipped, orphans[], errors[], target, bucket, region, endpoint_url}` |
+| `404` | `target=aws` and S3 not configured (`s3_bucket` unset). `target=floci` never 404s here | `"S3 is not configured (set ARCHIVENETWORK_S3_BUCKET)"` |
 | `404` | **No export loaded** in the session — a *different* cause, same status | `"No export loaded"` |
 | `409` | The workspace has never been built | `"This workspace has not been built yet — run Build first."` |
+| `422` | **`target` missing or not one of `aws`/`floci`** — a forgotten parameter is never an implicit production write | FastAPI validation error |
 | `502` | Whole-run blocker raised by the preflight (bad creds, missing bucket, no network, missing `s3:ListBucket`) | `"S3 not reachable: ..."` |
+| `502` | `target=floci` and the endpoint refused the connection | The Docker message naming `docker compose up -d` and the expected endpoint |
+
+> **Exception ordering is load-bearing.** `EndpointConnectionError` and `ConnectTimeoutError` are
+> **subclasses of `BotoCoreError`**, so their `except` arm must come *first* in `upload()`. Put
+> the generic arm above them and it swallows both, and the Docker message never renders — the
+> user gets a bare `"S3 not reachable"` for a container that simply is not up.
 
 > **`200` does not mean the bucket is complete.** Partial failure is the normal shape: a
 > permissions error on a subset of keys returns `200` with `uploaded: 0` and a populated
@@ -104,13 +152,22 @@ Endpoints in [src/archivenetwork/web/routes_s3.py](src/archivenetwork/web/routes
 > telling a user to go set `ARCHIVENETWORK_S3_BUCKET` when the real fix is to open a workspace.
 
 ### Frontend & UI Integration
-- **API Layer**: Client functions `s3Status()` and `uploadToS3()` in [frontend/src/lib/api.js](frontend/src/lib/api.js#L504-L520).
-- **Developer Panel**: [frontend/src/lib/components/DevPanel.svelte](frontend/src/lib/components/DevPanel.svelte#L50-L61) queries `/api/s3/status` on mount and exposes an **"Upload to S3"** action button.
+- **API Layer**: Client functions `s3Status()` and `uploadToS3(target, fetchFn)` in [frontend/src/lib/api.js](frontend/src/lib/api.js). `target` is `uploadToS3`'s **first** parameter.
+- **Target store**: [frontend/src/lib/s3target.svelte.js](frontend/src/lib/s3target.svelte.js) holds the armed target in `localStorage` (key `archive-s3-target`), defaulting to **`floci`** so a fresh browser profile is never armed at production. It also exports `canUpload(target, s3)` — the rule that gates the Upload button — which lives there rather than in the component so it is unit-testable.
+- **Developer Panel**: [frontend/src/lib/components/DevPanel.svelte](frontend/src/lib/components/DevPanel.svelte) queries `/api/s3/status` on mount and renders a two-position switch (Local floci ⇄ AWS S3). The section renders **even when AWS is unconfigured** — floci is always available, so it is the AWS *position of the switch* that gets disabled. When the probe reports floci down, an amber banner names Docker and a **Re-check** button re-probes; that button is deliberately never gated on `busy` or on the probe, because it is the only way out of a disabled Upload button.
 
 ### Testing Strategy
-- [tests/loader/test_storage_s3.py](tests/loader/test_storage_s3.py): Tests `S3Storage` `put()`, `exists()`, `ensure_ready()`, and MIME type guessing using `moto`.
-- [tests/loader/test_upload.py](tests/loader/test_upload.py): Validates `upload_ready()` against S3.
-- [tests/web/test_s3_routes.py](tests/web/test_s3_routes.py): Verifies status and upload API endpoints.
+
+Two tiers, because they prove different things.
+
+- **Unit — `moto[s3]`, in-memory, always runs.** [tests/loader/test_storage_s3.py](tests/loader/test_storage_s3.py) (`put()`, `exists()`, `ensure_ready()`, MIME guessing, endpoint/path-style config, auto-create), [tests/loader/test_probe.py](tests/loader/test_probe.py), [tests/loader/test_upload.py](tests/loader/test_upload.py), [tests/web/test_s3_routes.py](tests/web/test_s3_routes.py). Fast, no Docker. moto patches botocore below the socket, so it verifies logic and key computation but **cannot** prove anything about the real wire.
+- **Integration — `testcontainers-floci` + Docker.** [tests/loader/test_storage_s3_floci.py](tests/loader/test_storage_s3_floci.py) runs a real [floci](https://github.com/floci-io/floci) container and proves what moto cannot: that path-style addressing is genuinely required, that `ContentType` survives the wire, that auto-create works against a genuinely empty store, and that `upload_ready()` is idempotent across two live runs.
+
+Start the emulator from the repo root with **`docker compose up -d`** — [docker-compose.yml](docker-compose.yml) is checked in and already binds port `4566` and persists objects under the gitignored `workspace/floci-data/`. Ad-hoc equivalent: `docker run -p 4566:4566 floci/floci:latest`. The port must match `ARCHIVENETWORK_FLOCI_ENDPOINT_URL`. On ARM hosts use the `:latest-jvm` tag.
+
+> **Read the skip count.** The integration tier skips cleanly when floci is not installed or
+> Docker is unreachable — the same philosophy as the `pg_conn` fixture. `N skipped` means those
+> tests **did not run**, and a skipped test is not a passing one. Use `pytest -rs` to see why.
 
 ---
 
