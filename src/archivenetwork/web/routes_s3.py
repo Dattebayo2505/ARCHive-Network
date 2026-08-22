@@ -13,6 +13,7 @@ from typing import Literal
 from botocore.exceptions import (
     BotoCoreError,
     ClientError,
+    ConnectTimeoutError,
     EndpointConnectionError,
     NoCredentialsError,
 )
@@ -30,6 +31,15 @@ Target = Literal["aws", "floci"]
 # S3Storage only forwards them both-or-neither.
 FLOCI_ACCESS_KEY_ID = "test"
 FLOCI_SECRET_ACCESS_KEY = "test"
+
+# Docker-not-running is the common case on a development machine, so the message asserts it
+# rather than hedging across the three causes a refused connection technically permits. The
+# trailing endpoint line is what keeps a port conflict or an overridden endpoint diagnosable.
+FLOCI_DOWN_DETAIL = (
+    "Docker isn't running. Floci needs it. Start Docker Desktop, then bring the container "
+    "up with `docker compose up -d` (or `docker run -p 4566:4566 floci/floci:latest`) and "
+    "try again. Expected at {endpoint}."
+)
 
 
 def _require_target(target: Target) -> None:
@@ -92,14 +102,23 @@ def status() -> dict:
 
 
 @router.post("/api/s3/upload")
-def upload(request: Request) -> dict:
-    # Temporarily pinned to "aws" so this commit stays green. Task 5 makes it a required
-    # request parameter.
-    _require_target("aws")
+def upload(request: Request, target: Target) -> dict:
+    """`target` is REQUIRED — a bare Literal with no default. A forgotten parameter is a 422,
+    never an implicit write to production."""
+    _require_target(target)
     root, _ = _ready_root(request)
+    store = _store(target)
     try:
-        result = upload_ready(root, _store("aws"))
-    except (ClientError, NoCredentialsError, EndpointConnectionError, BotoCoreError) as exc:
+        result = upload_ready(root, store)
+    except (EndpointConnectionError, ConnectTimeoutError) as exc:
+        # MUST precede the BotoCoreError arm below — both are subclasses of it.
+        detail = (
+            FLOCI_DOWN_DETAIL.format(endpoint=settings.floci_endpoint_url)
+            if target == "floci"
+            else f"S3 not reachable: {exc}"
+        )
+        raise HTTPException(status_code=502, detail=detail) from exc
+    except (ClientError, NoCredentialsError, BotoCoreError) as exc:
         # A whole-run blocker surfaced by the preflight head_bucket inside upload_ready.
         raise HTTPException(status_code=502, detail=f"S3 not reachable: {exc}") from exc
     return {
@@ -107,6 +126,8 @@ def upload(request: Request) -> dict:
         "skipped": result.skipped,
         "orphans": result.orphans,
         "errors": result.errors,
-        "bucket": settings.s3_bucket,
+        "target": target,
+        "bucket": store.bucket,
         "region": settings.s3_region,
+        "endpoint_url": settings.floci_endpoint_url if target == "floci" else None,
     }
