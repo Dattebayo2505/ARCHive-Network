@@ -15,4 +15,12 @@ services:
       # Under workspace/ so it lands with every other piece of runtime data, and is already
       # gitignored. Objects survive a container restart; delete the directory to start clean.
       - ./workspace/floci-data:/app/data
+      # The Floci UI (http://127.0.0.1:4566/_floci/ui) is NOT served by this container — floci
+      # starts it as a *sibling* container, so it needs to reach the host container runtime.
+      # Without this mount the UI page renders "Floci UI unavailable ... java.net.SocketException:
+      # No such file or directory"; the S3 API is unaffected, which is why uploads still succeed.
+      # Docker Desktop (Windows/macOS) special-cases this path even though the host endpoint is a
+      # named pipe, so the literal unix path is correct on every platform. On SELinux hosts append
+      # ':z' (or run with '--security-opt label=disable').
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
