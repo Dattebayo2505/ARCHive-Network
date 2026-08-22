@@ -2,6 +2,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	browse,
+	dockerFloci,
+	dockerStatus,
+	flociUiTarget,
 	getInventory,
 	ingestFolder,
 	ingestUpload,
@@ -205,5 +208,57 @@ describe('s3 api', () => {
 			aws: { enabled: false },
 			floci: { enabled: false, reachable: false }
 		});
+	});
+});
+
+describe('docker api', () => {
+	it('names the action on the lifecycle request', async () => {
+		const fetchFn = vi
+			.fn()
+			.mockResolvedValue({ ok: true, json: async () => ({ action: 'start', ok: true }) });
+		await dockerFloci('start', fetchFn);
+		const [requested, opts] = fetchFn.mock.calls[0];
+		expect(requested).toMatch(/\/api\/docker\/floci\?action=start$/);
+		expect(opts.method).toBe('POST');
+	});
+
+	it('passes every verb through unchanged', async () => {
+		const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+		for (const action of ['start', 'restart', 'stop', 'rebuild']) {
+			await dockerFloci(action, fetchFn);
+		}
+		expect(fetchFn.mock.calls.map(([u]) => u.split('action=')[1])).toEqual([
+			'start',
+			'restart',
+			'stop',
+			'rebuild'
+		]);
+	});
+
+	it('reports docker unavailable rather than throwing when the API is unreachable', async () => {
+		const fetchFn = vi.fn().mockRejectedValue(new Error('offline'));
+		const state = await dockerStatus(fetchFn);
+		expect(state.available).toBe(false);
+		expect(state.running).toBe(false);
+		expect(state.reason).toBeTruthy();
+	});
+
+	it('treats a non-OK status response as unavailable, not as a body', async () => {
+		const fetchFn = vi.fn().mockResolvedValue({ ok: false, json: async () => ({ available: true }) });
+		expect((await dockerStatus(fetchFn)).available).toBe(false);
+	});
+});
+
+describe('floci ui target', () => {
+	it('asks the backend where to send the viewer', async () => {
+		const body = { ready: true, url: 'http://127.0.0.1:4500/cloud-explorer/aws/storage' };
+		const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: async () => body });
+		expect(await flociUiTarget(fetchFn)).toEqual(body);
+		expect(fetchFn.mock.calls[0][0]).toMatch(/\/api\/docker\/floci-ui$/);
+	});
+
+	it('returns null rather than throwing when the API is unreachable', async () => {
+		expect(await flociUiTarget(vi.fn().mockRejectedValue(new Error('offline')))).toBeNull();
+		expect(await flociUiTarget(vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }))).toBeNull();
 	});
 });

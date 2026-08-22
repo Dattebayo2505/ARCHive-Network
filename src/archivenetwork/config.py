@@ -3,8 +3,10 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Repo root: config.py -> archivenetwork -> src -> <root>. Used to locate vendored binaries.
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Repo root: config.py -> archivenetwork -> src -> <root>. Used to locate vendored binaries
+# and the checked-in docker-compose.yml (see loader/dockerctl.py).
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_PROJECT_ROOT = PROJECT_ROOT  # historical private name, kept so existing imports hold
 
 
 def _default_seven_zip() -> Path | None:

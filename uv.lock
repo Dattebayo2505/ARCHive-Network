@@ -52,6 +52,7 @@ dev = [
     { name = "httpx" },
     { name = "moto", extra = ["s3"] },
     { name = "pytest" },
+    { name = "pyyaml" },
     { name = "ruff" },
     { name = "testcontainers-floci" },
 ]
@@ -61,6 +62,7 @@ dev = [
     { name = "httpx" },
     { name = "moto", extra = ["s3"] },
     { name = "pytest" },
+    { name = "pyyaml" },
     { name = "ruff" },
     { name = "testcontainers-floci" },
 ]
@@ -76,6 +78,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "testcontainers-floci", marker = "extra == 'dev'", specifier = ">=0.1.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
@@ -87,6 +90,7 @@ dev = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "moto", extras = ["s3"], specifier = ">=5" },
     { name = "pytest", specifier = ">=8" },
+    { name = "pyyaml", specifier = ">=6" },
     { name = "ruff", specifier = ">=0.6" },
     { name = "testcontainers-floci", specifier = ">=0.1.1" },
 ]

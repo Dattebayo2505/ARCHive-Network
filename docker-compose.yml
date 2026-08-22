@@ -11,6 +11,14 @@ services:
     container_name: archivenetwork-floci
     ports:
       - '4566:4566'
+    environment:
+      # LOAD-BEARING, and easy to miss: the image ships with FLOCI_STORAGE_PERSISTENT_PATH
+      # already set to /app/data, so the bind-mount below *looks* sufficient — but floci
+      # defaults to `Storage: memory` and writes nothing to that path. Uploaded objects then
+      # vanish on every restart, which the Dev panel's Restart and Rebuild buttons make a
+      # one-click action. Verified by the boot line, which must read
+      # `EmulatorLifecycle] Storage: persistent  Path: /app/data`.
+      FLOCI_STORAGE_MODE: persistent
     volumes:
       # Under workspace/ so it lands with every other piece of runtime data, and is already
       # gitignored. Objects survive a container restart; delete the directory to start clean.

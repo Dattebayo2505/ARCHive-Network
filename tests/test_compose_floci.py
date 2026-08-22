@@ -38,3 +38,17 @@ def test_floci_mounts_the_container_runtime_socket():
     targets = {v.split(":")[1] for v in volumes}
     assert DOCKER_SOCK in targets, f"expected a {DOCKER_SOCK} bind-mount, got {volumes}"
     assert "/app/data" in targets
+
+
+def test_floci_persists_its_objects_to_the_mounted_path():
+    """Without this the bind-mount below it is decorative and every restart empties the bucket.
+
+    The image already sets FLOCI_STORAGE_PERSISTENT_PATH=/app/data, so the volume looks
+    sufficient — but floci defaults to `Storage: memory` and writes nothing there. Measured:
+    158 uploaded objects, `docker compose restart floci`, NoSuchBucket. The Dev panel's
+    Restart and Rebuild buttons make that a one-click loss, which is why this is pinned.
+    """
+    service = _floci_service()
+    assert service.get("environment", {}).get("FLOCI_STORAGE_MODE") == "persistent"
+    targets = {v.split(":")[1] for v in service["volumes"]}
+    assert "/app/data" in targets, "persistence needs somewhere on the host to persist to"

@@ -522,4 +522,53 @@ export async function uploadToS3(target, fetchFn = fetch) {
 	return { ok: res.ok, status: res.status, body: await res.json() };
 }
 
+// --- The floci container's lifecycle. Independent of everything else: no session, no
+// database, no built folder — the container is a machine-level thing, and the panel's whole
+// point is that a volunteer never has to open a terminal to fix it. ---
+
+/** Whether Docker is usable here, and what the floci container is currently doing.
+ *  Never throws: an unusable Docker is a *reading*, not an error. */
+export async function dockerStatus(fetchFn = fetch) {
+	const offline = {
+		installed: false,
+		engine_up: false,
+		compose_available: false,
+		compose_file: false,
+		available: false,
+		container: null,
+		running: false,
+		exists: false,
+		reason: "Can't reach the API."
+	};
+	try {
+		const res = await fetchFn(url('/api/docker/status'));
+		if (!res.ok) return offline;
+		return res.json();
+	} catch {
+		return offline;
+	}
+}
+
+/** Run one lifecycle verb ('start' | 'restart' | 'stop' | 'rebuild') against the floci
+ *  service. 409 = Docker unusable, 422 = unknown verb. A 200 with `ok: false` is the command
+ *  itself failing — a result to render, not a transport error. */
+export async function dockerFloci(action, fetchFn = fetch) {
+	const res = await fetchFn(url(`/api/docker/floci?action=${action}`), { method: 'POST' });
+	return { ok: res.ok, status: res.status, body: await res.json() };
+}
+
+/** Where to send someone who wants to look at the bucket, and bring the Floci UI container up
+ *  if it isn't. Backend-side because floci sends no CORS headers: the browser can perform the
+ *  warm-up but could never read back whether it worked. Never throws — the poller URL is the
+ *  safe answer, and it is what `url` falls back to. */
+export async function flociUiTarget(fetchFn = fetch) {
+	try {
+		const res = await fetchFn(url('/api/docker/floci-ui'));
+		if (!res.ok) return null;
+		return res.json();
+	} catch {
+		return null;
+	}
+}
+
 export { API_BASE };
