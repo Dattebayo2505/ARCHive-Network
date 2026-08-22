@@ -92,9 +92,11 @@ class S3Storage:
         client=None,
         *,
         endpoint_url: str | None = None,
+        create_if_missing: bool = False,
     ) -> None:
         self.bucket = bucket
         self.region = region
+        self.create_if_missing = create_if_missing
         if client is not None:
             self.client = client
         else:
@@ -121,8 +123,31 @@ class S3Storage:
 
     def ensure_ready(self) -> None:
         """Preflight: fail fast on a whole-run blocker (bad creds, missing bucket,
-        no network) before we touch a single file."""
-        self.client.head_bucket(Bucket=self.bucket)
+        no network) before we touch a single file.
+
+        `create_if_missing` is set ONLY for the local floci emulator, which starts empty.
+        The AWS target never sets it: a preflight that can create a production bucket is
+        the opposite of a preflight.
+        """
+        try:
+            self.client.head_bucket(Bucket=self.bucket)
+        except ClientError as exc:
+            if not self.create_if_missing:
+                raise
+            code = str(exc.response.get("Error", {}).get("Code"))
+            # Anything else — a 403 above all — is a real problem. Swallowing it into a
+            # create attempt would turn a diagnosable credential failure into a confusing
+            # second one.
+            if code not in ("404", "NoSuchBucket", "NotFound"):
+                raise
+            self._create_bucket()
+
+    def _create_bucket(self) -> None:
+        kwargs: dict = {"Bucket": self.bucket}
+        if self.region and self.region != "us-east-1":
+            # S3 rejects CreateBucketConfiguration for us-east-1.
+            kwargs["CreateBucketConfiguration"] = {"LocationConstraint": self.region}
+        self.client.create_bucket(**kwargs)
 
     def exists(self, key: str) -> bool:
         try:

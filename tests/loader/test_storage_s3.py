@@ -1,5 +1,6 @@
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
 
 from archivenetwork.loader.storage import S3Storage
@@ -98,3 +99,56 @@ def test_without_endpoint_url_the_client_still_points_at_aws():
 @mock_aws
 def test_region_is_retained_for_bucket_creation():
     assert S3Storage(BUCKET, REGION).region == REGION
+
+
+class _FakeClient:
+    """Minimal stand-in so we can choose exactly which error head_bucket raises."""
+
+    def __init__(self, head_error=None):
+        self.head_error = head_error
+        self.created = []
+
+    def head_bucket(self, Bucket):
+        if self.head_error is not None:
+            raise self.head_error
+
+    def create_bucket(self, **kwargs):
+        self.created.append(kwargs)
+
+
+def _client_error(code):
+    from botocore.exceptions import ClientError as _CE
+
+    return _CE({"Error": {"Code": code}}, "HeadBucket")
+
+
+def test_create_if_missing_creates_the_bucket_on_404():
+    fake = _FakeClient(head_error=_client_error("404"))
+    S3Storage(BUCKET, REGION, client=fake, create_if_missing=True).ensure_ready()
+    assert fake.created == [
+        {"Bucket": BUCKET, "CreateBucketConfiguration": {"LocationConstraint": REGION}}
+    ]
+
+
+def test_create_if_missing_omits_location_constraint_for_us_east_1():
+    fake = _FakeClient(head_error=_client_error("NoSuchBucket"))
+    S3Storage(BUCKET, "us-east-1", client=fake, create_if_missing=True).ensure_ready()
+    # S3 rejects CreateBucketConfiguration for us-east-1.
+    assert fake.created == [{"Bucket": BUCKET}]
+
+
+def test_create_if_missing_reraises_a_403_instead_of_creating():
+    # A permissions failure must stay diagnosable, not be retried as "bucket absent".
+    fake = _FakeClient(head_error=_client_error("403"))
+    s = S3Storage(BUCKET, REGION, client=fake, create_if_missing=True)
+    with pytest.raises(ClientError):
+        s.ensure_ready()
+    assert fake.created == []
+
+
+def test_without_create_if_missing_a_404_still_fails_fast():
+    fake = _FakeClient(head_error=_client_error("404"))
+    s = S3Storage(BUCKET, REGION, client=fake)  # the AWS default
+    with pytest.raises(ClientError):
+        s.ensure_ready()
+    assert fake.created == []
