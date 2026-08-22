@@ -13,6 +13,7 @@
 		storeUrl,
 		uploadToS3
 	} from '$lib/api.js';
+	import { canUpload, s3Target } from '$lib/s3target.svelte.js';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 
 	// The dev pane runs the real downstream ETL locally: it reads the built ready/ folder,
@@ -42,24 +43,44 @@
 	let curateResult = $state(null);
 	let curateError = $state('');
 
-	let s3 = $state(null); // null while loading; { enabled, bucket?, region? }
+	let s3 = $state(null); // null while loading; { aws: {...}, floci: {...} }
 	let s3Result = $state(null);
 	let s3Error = $state('');
 	let confirmS3 = $state(false);
 
+	// Docker-not-running is the common case; the endpoint line keeps the rarer causes
+	// (port conflict, overridden ARCHIVENETWORK_FLOCI_ENDPOINT_URL) diagnosable.
+	const flociDownMessage = $derived(
+		`Docker isn't running. Floci needs it. Start Docker Desktop, then bring the container up ` +
+			`with \`docker compose up -d\`, then Re-check. Expected at ${s3?.floci?.endpoint_url ?? 'http://127.0.0.1:4566'}.`
+	);
+	const flociDown = $derived(s3?.floci?.reachable === false);
+	const uploadReady = $derived(canUpload(s3Target.target, s3));
+
 	async function refreshS3() {
 		s3 = await s3Status();
+	}
+
+	// Arming floci must evaluate against a current reading, not one from page load —
+	// otherwise a container started after mount leaves a permanently disabled button.
+	function switchTarget() {
+		s3Target.toggle();
+		s3Error = '';
+		s3Result = null;
+		if (s3Target.target === 'floci') refreshS3();
 	}
 
 	async function runUpload() {
 		busy = 's3';
 		s3Error = '';
 		s3Result = null;
-		const res = await uploadToS3();
-		// 409 (not built) and 502 (S3 unreachable) are expected, actionable cases — not crashes.
-		if (!res.ok) s3Error = res.body?.detail ?? 'The S3 upload failed.';
+		const res = await uploadToS3(s3Target.target);
+		// 409 (not built), 422 (no target) and 502 (unreachable) are expected, actionable
+		// cases — not crashes.
+		if (!res.ok) s3Error = res.body?.detail ?? 'The upload failed.';
 		else s3Result = res.body;
 		busy = '';
+		if (s3Target.target === 'floci') refreshS3();
 	}
 
 	const hasSelection = $derived(selectedPhotos + selectedVideos > 0);
@@ -448,41 +469,111 @@
 			{/if}
 		</section>
 
-		<!-- ── Upload to S3 ───────────────────────────────────────────────────────────
+		<!-- ── Upload to S3 / floci ───────────────────────────────────────────────────
 		     A sibling panel like auto-curate: an object-store push with NO database
-		     involvement, so it must stay outside the DB-gated block below. Gated on the
-		     backend having a bucket configured. -->
+		     involvement, so it must stay outside the DB-gated block below. The section no
+		     longer hides when AWS is unconfigured — floci is always available, so the AWS
+		     *position of the switch* is what gets disabled. -->
 		<section class="mb-4 rounded-xl border border-surface-300 bg-surface-50 p-5">
 			<div class="flex flex-wrap items-start justify-between gap-3">
 				<div class="max-w-prose">
-					<h2 class="text-sm font-semibold text-surface-900">Upload to S3</h2>
-					{#if s3?.enabled}
+					<h2 class="text-sm font-semibold text-surface-900">
+						Upload to {s3Target.target === 'aws' ? 'S3' : 'floci'}
+					</h2>
+					{#if s3Target.target === 'aws'}
 						<p class="mt-1 text-xs leading-relaxed text-surface-600">
 							Pushes this workspace's built <code
 								class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800">ready/</code
 							> media to
 							<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
-								>s3://{s3.bucket}</code
+								>s3://{s3?.aws?.bucket}</code
 							>
-							({s3.region}). Re-running is safe — objects already there are skipped.
+							({s3?.aws?.region}). Re-running is safe — objects already there are skipped.
 						</p>
 					{:else}
 						<p class="mt-1 text-xs leading-relaxed text-surface-600">
-							Not configured. Set <code
-								class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
+							Pushes this workspace's built <code
+								class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800">ready/</code
+							> media to the local floci emulator at
+							<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
+								>{s3?.floci?.endpoint_url}</code
+							>. Nothing leaves your machine. The bucket is created if it doesn't exist.
+						</p>
+					{/if}
+				</div>
+
+				<div class="flex flex-col items-end gap-2">
+					<!-- role="switch" is honest here: "on" means the real, production target. Visible
+					     labels sit on both sides so neither position reads as merely "off". -->
+					<div class="flex items-center gap-2">
+						<span
+							class="text-xs font-medium {s3Target.target === 'floci'
+								? 'text-surface-900'
+								: 'text-surface-500'}">Local floci</span
+						>
+						<button
+							type="button"
+							role="switch"
+							aria-checked={s3Target.target === 'aws'}
+							aria-label="Upload to real AWS S3"
+							disabled={!s3?.aws?.enabled || busy !== ''}
+							onclick={switchTarget}
+							class="relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 {s3Target.target ===
+							'aws'
+								? 'bg-warning-600'
+								: 'bg-surface-400'}"
+						>
+							<span
+								class="absolute top-0.5 size-4 rounded-full bg-surface-50 transition-all {s3Target.target ===
+								'aws'
+									? 'left-4.5'
+									: 'left-0.5'}"
+							></span>
+						</button>
+						<span
+							class="text-xs font-medium {s3Target.target === 'aws'
+								? 'text-warning-800'
+								: 'text-surface-500'}">AWS S3</span
+						>
+					</div>
+					{#if !s3?.aws?.enabled}
+						<p class="text-right text-xs text-surface-500">
+							AWS unavailable — set <code
+								class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
 								>ARCHIVENETWORK_S3_BUCKET</code
-							> in <code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
+							> in <code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
 								>.env</code
 							> and restart the API.
 						</p>
 					{/if}
+					{@render primaryBtn(
+						s3Target.target === 'aws' ? 'Upload to S3' : 'Upload to floci',
+						'Uploading…',
+						's3',
+						() => (confirmS3 = true),
+						!uploadReady
+					)}
 				</div>
-				{#if s3?.enabled}
-					<div class="flex flex-col items-end gap-1.5">
-						{@render primaryBtn('Upload to S3', 'Uploading…', 's3', () => (confirmS3 = true))}
-					</div>
-				{/if}
 			</div>
+
+			{#if flociDown}
+				<!-- Shown on BOTH targets: someone sitting on AWS should learn the testing path is
+				     down before flipping to it. Worded as information, never as an obstruction. -->
+				<div
+					class="mt-4 flex flex-wrap items-start justify-between gap-3 rounded-lg border border-warning-300 bg-warning-50 px-3 py-2"
+					role="status"
+				>
+					<p class="max-w-prose text-sm text-warning-800">{flociDownMessage}</p>
+					<!-- Never gated on `busy` or on the probe: this is always the way out of a
+					     disabled Upload button. -->
+					<button
+						type="button"
+						onclick={refreshS3}
+						class="rounded-lg border border-warning-300 bg-surface-50 px-3 py-1 text-sm font-medium text-warning-800 transition-colors hover:bg-warning-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+						>Re-check</button
+					>
+				</div>
+			{/if}
 
 			{#if s3Error}
 				<p
@@ -512,6 +603,13 @@
 						</div>
 					{/each}
 				</div>
+
+				<p class="mt-2 text-xs text-surface-600">
+					Uploaded to <span class="font-medium text-surface-800"
+						>{s3Result.target === 'aws' ? `s3://${s3Result.bucket}` : s3Result.endpoint_url}</span
+					>
+					· bucket <code class="rounded bg-surface-200 px-1 py-0.5 font-mono">{s3Result.bucket}</code>
+				</p>
 
 				{#if s3Result.orphans.length || s3Result.errors.length}
 					<details class="group mt-3">
@@ -1021,9 +1119,13 @@
 
 <ConfirmDialog
 	open={confirmS3}
-	title="Upload this build to S3?"
-	message="Copies this workspace's built ready/ media to s3://{s3?.bucket} ({s3?.region}). Objects already present are skipped; nothing is deleted. Your export, ready folder, and local store are untouched."
-	confirmLabel="Upload to S3"
+	title={s3Target.target === 'aws'
+		? 'Upload this build to AWS S3?'
+		: 'Upload this build to floci?'}
+	message={s3Target.target === 'aws'
+		? `Copies this workspace's built ready/ media to s3://${s3?.aws?.bucket} (${s3?.aws?.region}). This is the REAL bucket. Objects already present are skipped; nothing is deleted. Your export, ready folder, and local store are untouched.`
+		: `Copies this workspace's built ready/ media to the local floci emulator at ${s3?.floci?.endpoint_url} (bucket ${s3?.floci?.bucket}). Nothing leaves your machine. Objects already present are skipped; nothing is deleted.`}
+	confirmLabel={s3Target.target === 'aws' ? 'Upload to S3' : 'Upload to floci'}
 	cancelLabel="Cancel"
 	onConfirm={() => {
 		confirmS3 = false;
