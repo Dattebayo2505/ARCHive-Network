@@ -12,10 +12,16 @@ optional **Dev Mode** lets you rehearse the rest locally: it runs the real
 downstream ETL against a local PostgreSQL, reading nothing but the built `ready/`
 folder. It is off unless you configure a database. See **Dev Mode** below.
 
-**Tech stack:** Python 3.12 · FastAPI · Uvicorn · Pydantic · Pillow · psycopg 3
-(backend JSON API) — and SvelteKit (Svelte 5) · Skeleton v3 · Tailwind v4 · Vite ·
-`adapter-node` (frontend UI). Packaged with **uv**; zip extraction shells out to
-a vendored 7-Zip binary. PostgreSQL is **optional** and only needed for Dev Mode.
+> **Database decision (2026-10-30):** production uses **Amazon DynamoDB**, not
+> PostgreSQL. The loader still talks to PostgreSQL until it is ported. After the port, Dev
+> Mode targets DynamoDB through the local floci emulator, and the PostgreSQL steps below
+> go away.
+
+**Tech stack:** Python 3.12 · FastAPI · Uvicorn · Pydantic · Pillow · boto3 ·
+psycopg 3 (backend JSON API) — and SvelteKit (Svelte 5) · Skeleton v3 · Tailwind v4 ·
+Vite · `adapter-node` (frontend UI). Packaged with **uv**; zip extraction shells out
+to a vendored 7-Zip binary. PostgreSQL is **optional** and only needed for Dev Mode.
+It is being replaced by DynamoDB (boto3), the production database.
 
 ## Prerequisites
 
@@ -25,12 +31,12 @@ a vendored 7-Zip binary. PostgreSQL is **optional** and only needed for Dev Mode
   macOS, `unzip` on Linux) and Python's `zipfile` are also supported as automatic fallbacks.
 - **Python 3.12+**
 - A Python installer — either **[uv](https://docs.astral.sh/uv/)** (recommended;
-  the repo has a committed `uv.lock`) **or** plain **pip + venv**.
+  the repo has a committed `uv.lock`), plain **pip + venv**, or **conda / mamba**.
 - **Node 20+** — for the SvelteKit frontend.
 
 ## Setup
 
-Pick one Python path. Either way, no database, external services, or accounts are
+Pick one of the three Python paths below. Whichever you pick, no database, external services, or accounts are
 required — the tool runs entirely against your local export.
 
 **With uv (recommended):**
@@ -51,6 +57,16 @@ pip install -e .            # runtime deps + the `archivenetwork` command
 cd frontend && npm install
 ```
 
+**With conda / mamba:** conda supplies the interpreter; the project's own deps
+still come from pip inside that env.
+
+```bash
+conda create -n archivenetwork python=3.12     # or: mamba create -n archivenetwork python=3.12
+conda activate archivenetwork
+pip install -e .            # add ".[dev]" for pytest / ruff
+cd frontend && npm install
+```
+
 ## Configuration
 
 Nothing is required to run with defaults. Everything is tunable via environment
@@ -67,8 +83,8 @@ variables. Backend settings use the `ARCHIVENETWORK_` prefix (see
 | `ARCHIVENETWORK_HOST` | `127.0.0.1` | API bind host. |
 | `ARCHIVENETWORK_PORT` | `8000` | API bind port. |
 | `ARCHIVENETWORK_CORS_ORIGINS` / `ARCHIVENETWORK_CORS_ORIGIN_REGEX` | localhost:5173/3000 | Origins allowed to call the API. |
-| `ARCHIVENETWORK_DATABASE_URL` | — (unset) | **Enables Dev Mode.** A PostgreSQL URL, e.g. `postgresql://user:pass@127.0.0.1:5432/archivenetwork_dev`. Every `/api/dev/*` route 404s while unset. |
-| `ARCHIVENETWORK_MEDIA_ROOT` | `workspace/store` | Dev-mode local object store (stands in for the S3 bucket). Must **not** be named `media` — keys already begin with `media/`. |
+| `ARCHIVENETWORK_DATABASE_URL` | — (unset) | **Enables Dev Mode.** A PostgreSQL URL, e.g. `postgresql://user:pass@127.0.0.1:5432/archivenetwork_dev`. Every `/api/dev/*` route 404s while unset. The DynamoDB port replaces it with `ARCHIVENETWORK_DYNAMODB_TABLE` + `ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL`. |
+| `ARCHIVENETWORK_MEDIA_ROOT` | `workspace/store` | Dev-mode local object store (stands in for the S3 bucket). Keys are written below it as `fb-exports/<hashtag>/<album-slug>/<fbid>.jpg`. |
 | `ARCHIVENETWORK_MEDIA_BASE_URL` | `/store` | Where the object store is served. In production this is a CDN domain instead. |
 | `VITE_API_BASE` | `http://127.0.0.1:8000` | Base URL the frontend uses to reach the API. |
 | `UV_LINK_MODE` | — | Set to `copy` on Windows to dodge a Defender file-lock (`os error 32`) during `uv sync`/`uv run`. |
@@ -154,10 +170,12 @@ The loader reads **only** the ready folder's four JSON manifests — never the r
 export, never the tool's in-memory objects — because that is all the real
 downstream ETL will have. Photos are copied into a local object store
 (`workspace/store/`) under the same key an S3 bucket would use
-(`media/<YYYY>/<MM>/<DD>/<fbid>.jpg`), so swapping `LocalStorage` for an
-`S3Storage` later is a config change rather than a rewrite. The schema is two
-tables (`photo_album`, `media`); taxonomy, contributors and users are CMS-overlay
-concerns with no source in the export. See `docs/PLAN.md`.
+(`fb-exports/<hashtag>/<album-slug>/<fbid>.jpg`), so `LocalStorage` and
+`S3Storage` are interchangeable. Today the loader writes two PostgreSQL tables
+(`photo_album`, `media`). In production these become **album and media items in
+DynamoDB**, written with `UpdateItem` only, so a load never overwrites what the CMS
+edited. Taxonomy, credits, staff and users are CMS-written, with no source in the
+export.
 
 ### Headless / utility scripts
 

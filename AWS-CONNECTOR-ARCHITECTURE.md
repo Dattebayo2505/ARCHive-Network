@@ -1,6 +1,6 @@
 # AWS Architecture & Connectors
 
-ARCHiveNetwork is designed with a decoupled architecture for AWS services. Infrastructure components (Object Storage via S3, Relational Database via PostgreSQL RDS) are abstracted behind backend interfaces and environment configuration so that local development and cloud production use identical data schemas and business logic.
+ARCHiveNetwork is designed with a decoupled architecture for AWS services. Infrastructure components (Object Storage via S3, and the database, which is **DynamoDB** as of 2026-10-30, see §2) are abstracted behind backend interfaces and environment configuration so that local development and cloud production share the same business logic. The data schemas match once the DynamoDB port lands; until then, Dev Mode still runs PostgreSQL (§2).
 
 ---
 
@@ -171,6 +171,43 @@ Start the emulator from the repo root with **`docker compose up -d`** — [docke
 
 ---
 
-## 2. AWS RDS Connector (PostgreSQL Database) — *Planned / Future Integration*
+## 2. AWS DynamoDB Connector — *Decided, port pending*
 
-*To be documented once integrated.*
+**The production database is Amazon DynamoDB** (decided 2026-10-30). Aurora DSQL and RDS
+PostgreSQL were considered and set aside: DynamoDB costs about $0/mo at this workload, needs no
+VPC, bastion, tunnel or connection pool, and has true 35-day point-in-time recovery.
+
+**What runs today.** The loader still reaches a database only through Dev Mode, and that
+database is still PostgreSQL: psycopg 3, with a plain connection URL in
+`ARCHIVENETWORK_DATABASE_URL` pointing at a local server. The port replaces it.
+
+**The target connector:**
+
+- **Client.** `boto3`, the same library and credential chain as the S3 connector (§1): explicit
+  keys only for local work, otherwise environment, `~/.aws`, IAM Identity Center or a role. No
+  connection URL, password or pool. Region `ap-southeast-1`, shared with the bucket.
+- **Two targets, like S3.** An `endpoint_url` points the client at the local floci emulator
+  (port `4566`, which also serves DynamoDB). Without it, the client talks to AWS. Planned
+  settings: `ARCHIVENETWORK_DYNAMODB_TABLE` and `ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL`, replacing
+  `ARCHIVENETWORK_DATABASE_URL` as the Dev Mode gate (every `/api/dev/*` route still 404s when
+  unset).
+- **Tables.** `archers-network` holds the album and media items the loader writes, plus
+  everything the CMS writes. `archers-network-users` holds CMS logins and is **never granted to
+  the loader**.
+- **Writes: `UpdateItem` only.** The loader never uses `PutItem`, `BatchWriteItem` or
+  `batch_writer()`. Each of them replaces the whole item, which would silently erase every field
+  the CMS has edited. Each write sets only the loader's own attributes, freezes `storage_path`
+  with `if_not_exists`, and carries `attribute_not_exists(deleted_at)`, so a photo the CMS
+  deleted is not brought back by the next weekly export.
+- **IAM.** The curator's role gets `GetItem`, `BatchGetItem`, `Query`, `Scan`, `DescribeTable` and
+  `UpdateItem` on the main table only. `UpdateItem` is meant to be narrowed to the loader's
+  attributes and key prefixes (`dynamodb:Attributes`, `dynamodb:LeadingKeys`); that condition
+  syntax is **unverified** until the spike. The S3 write narrows to `fb-exports/*`, because the
+  CMS owns a separate `cms/` prefix.
+- **Testing.** The same two tiers as §1: `moto[dynamodb]` in memory, and floci in Docker as a
+  real-endpoint tier. A local spike (2026-10-30) confirmed that both honour the loader's write
+  rules: `if_not_exists`, `REMOVE`, condition expressions and sorted, sparse GSIs. floci 1.7.0
+  does **not** keep DynamoDB tables across a container restart once a GSI has a sort key, so a
+  floci restart means re-loading. Tests never touch the configured table.
+
+*Connector details to be documented once the port lands.*
