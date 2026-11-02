@@ -10,6 +10,7 @@ the `pg_conn` fixture. Read the skip count: a skipped test is not a passing one.
 """
 
 import pytest
+from conftest import floci_image
 
 from archivenetwork.inventory.parser import build_inventory
 from archivenetwork.loader.storage import S3Storage, probe_endpoint
@@ -23,8 +24,11 @@ BUCKET = "archivenetwork-itest"
 
 @pytest.fixture(scope="module")
 def floci_endpoint():
+    image = floci_image()
+    if image is None:
+        pytest.skip("docker-compose.yml pins no floci tag; refusing to pull latest")
     try:
-        container = floci.FlociContainer()
+        container = floci.FlociContainer(image=image)
         container.start()
     except Exception as exc:  # daemon down, image pull failure, socket permissions…
         pytest.skip(f"floci container unavailable (is Docker running?): {exc}")

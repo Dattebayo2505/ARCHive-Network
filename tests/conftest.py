@@ -382,3 +382,15 @@ def ddb(monkeypatch):
         table = dynamo.Table(client, _scratch_table(), on_emulator=True)  # moto is an emulator
         dynamo.create_table(table)
         yield table
+
+
+def floci_image() -> str | None:
+    """The floci image both integration tiers start: the compose pin, never `latest`.
+
+    None when the compose file carries no exact tag, so a tier skips instead of pulling
+    `floci/floci:None`.
+    """
+    from archivenetwork.loader import dockerctl, flociversion
+
+    pinned = flociversion.pinned_version(dockerctl.COMPOSE_FILE)
+    return f"floci/floci:{pinned}" if pinned else None
