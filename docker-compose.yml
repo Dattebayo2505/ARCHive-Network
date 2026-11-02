@@ -7,7 +7,9 @@
 # The port MUST match ARCHIVENETWORK_FLOCI_ENDPOINT_URL (default http://127.0.0.1:4566).
 services:
   floci:
-    image: floci/floci:latest # :latest-jvm for broader platform compatibility (e.g. ARM)
+    # Pinned: compose never re-pulls `latest`, so a floating tag silently goes stale. Bump it on
+    # purpose (DynamoDB persistence needs >= 2.0); 2.4.0 is multi-arch (amd64 + arm64).
+    image: floci/floci:2.4.0
     container_name: archivenetwork-floci
     ports:
       - '4566:4566'

@@ -181,3 +181,13 @@ def test_the_ui_route_needs_no_docker_probe(client, monkeypatch):
     monkeypatch.setattr(routes_docker.dockerctl, "probe", lambda: _state(engine_up=False))
     monkeypatch.setattr(routes_docker.flociui, "ensure", lambda endpoint: _ui())
     assert client.get("/api/docker/floci-ui").status_code == 200
+
+
+def test_floci_version_reports_running_pinned_and_latest(client, monkeypatch):
+    from archivenetwork.loader.flociversion import assess
+
+    monkeypatch.setattr(routes_docker.flociversion, "report",
+                        lambda endpoint, compose: assess("2.4.0", "2.4.0", "2.5.0"))
+    body = client.get("/api/docker/floci-version").json()
+    assert body["status"] == "update_available"
+    assert (body["running"], body["pinned"], body["latest"]) == ("2.4.0", "2.4.0", "2.5.0")

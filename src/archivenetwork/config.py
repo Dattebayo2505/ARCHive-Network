@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     # layout byte-identical to production's.
     floci_endpoint_url: str = "http://127.0.0.1:4566"
     floci_bucket: str = "archivenetwork-dev"
+    # Log at startup whether floci is the latest release (loader/flociversion.py). It makes
+    # one GitHub call, so switch it off (ARCHIVENETWORK_FLOCI_VERSION_CHECK=false) when offline.
+    floci_version_check: bool = True
 
     host: str = "127.0.0.1"
     port: int = 8000

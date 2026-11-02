@@ -85,6 +85,7 @@ variables. Backend settings use the `ARCHIVENETWORK_` prefix (see
 | `ARCHIVENETWORK_CORS_ORIGINS` / `ARCHIVENETWORK_CORS_ORIGIN_REGEX` | localhost:5173/3000 | Origins allowed to call the API. |
 | `ARCHIVENETWORK_DATABASE_URL` | — (unset) | **Enables Dev Mode.** A PostgreSQL URL, e.g. `postgresql://user:pass@127.0.0.1:5432/archivenetwork_dev`. Every `/api/dev/*` route 404s while unset. The DynamoDB port replaces it with `ARCHIVENETWORK_DYNAMODB_TABLE` + `ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL`. |
 | `ARCHIVENETWORK_MEDIA_ROOT` | `workspace/store` | Dev-mode local object store (stands in for the S3 bucket). Keys are written below it as `fb-exports/<hashtag>/<album-slug>/<fbid>.jpg`. |
+| `ARCHIVENETWORK_FLOCI_VERSION_CHECK` | `true` | Log at startup whether the local floci emulator is the latest release (one GitHub call; `false` turns it off). |
 | `ARCHIVENETWORK_MEDIA_BASE_URL` | `/store` | Where the object store is served. In production this is a CDN domain instead. |
 | `VITE_API_BASE` | `http://127.0.0.1:8000` | Base URL the frontend uses to reach the API. |
 | `UV_LINK_MODE` | — | Set to `copy` on Windows to dodge a Defender file-lock (`os error 32`) during `uv sync`/`uv run`. |

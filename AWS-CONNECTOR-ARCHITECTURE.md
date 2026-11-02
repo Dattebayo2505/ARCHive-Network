@@ -34,6 +34,7 @@ S3 settings are defined in [src/archivenetwork/config.py](src/archivenetwork/con
 | `ARCHIVENETWORK_S3_SECRET_ACCESS_KEY` | `s3_secret_access_key` | `None` | Optional explicit AWS Secret Access Key (**only honoured together with the key ID**) |
 | `ARCHIVENETWORK_FLOCI_ENDPOINT_URL` | `floci_endpoint_url` | `"http://127.0.0.1:4566"` | Local emulator endpoint (testing target) |
 | `ARCHIVENETWORK_FLOCI_BUCKET` | `floci_bucket` | `"archivenetwork-dev"` | Bucket used on the emulator; auto-created |
+| `ARCHIVENETWORK_FLOCI_VERSION_CHECK` | `floci_version_check` | `true` | At startup, log whether floci is the latest release: running vs the version pinned in `docker-compose.yml` vs GitHub's latest. Also `GET /api/docker/floci-version`. Set `false` when offline |
 
 > **Two targets, chosen per request.** `POST /api/s3/upload` takes a **required**
 > `?target=aws|floci` parameter — a forgotten parameter is a `422`, never an implicit write to
@@ -206,8 +207,8 @@ database is still PostgreSQL: psycopg 3, with a plain connection URL in
   CMS owns a separate `cms/` prefix.
 - **Testing.** The same two tiers as §1: `moto[dynamodb]` in memory, and floci in Docker as a
   real-endpoint tier. A local spike (2026-10-30) confirmed that both honour the loader's write
-  rules: `if_not_exists`, `REMOVE`, condition expressions and sorted, sparse GSIs. floci 1.7.0
-  does **not** keep DynamoDB tables across a container restart once a GSI has a sort key, so a
-  floci restart means re-loading. Tests never touch the configured table.
+  rules: `if_not_exists`, `REMOVE`, condition expressions and sorted, sparse GSIs. Use floci
+  **2.0 or later**: 1.7.0 dropped DynamoDB tables on a container restart once a GSI had a sort
+  key, and 2.4.0 keeps them (re-checked 2026-11-02). Tests never touch the configured table.
 
 *Connector details to be documented once the port lands.*

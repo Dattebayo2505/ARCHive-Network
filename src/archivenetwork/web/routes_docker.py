@@ -14,10 +14,17 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from ..config import settings
-from ..loader import dockerctl, flociui
+from ..loader import dockerctl, flociui, flociversion
 from ..loader.dockerctl import Action
 
 router = APIRouter()
+
+
+@router.get("/api/docker/floci-version")
+def floci_version() -> dict:
+    """Running vs pinned vs latest floci (`loader/flociversion.py`). Never fails: an
+    unreachable floci or GitHub comes back as `null` fields with a status explaining it."""
+    return flociversion.report(settings.floci_endpoint_url, dockerctl.COMPOSE_FILE).as_dict()
 
 
 @router.get("/api/docker/floci-ui")

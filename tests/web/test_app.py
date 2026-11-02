@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from archivenetwork.app import create_app
@@ -77,3 +78,31 @@ def test_cors_blocks_foreign_origin():
     client = TestClient(create_app())
     resp = client.get("/", headers={"Origin": "http://evil.example"})
     assert resp.headers.get("access-control-allow-origin") is None
+
+
+def test_startup_logs_the_floci_version_check(monkeypatch, caplog):
+    """Entering the TestClient runs the lifespan, which logs the check once (off the event loop)."""
+    import logging
+
+    from archivenetwork import app as app_module
+    from archivenetwork.loader.flociversion import assess
+
+    monkeypatch.setattr(app_module.settings, "floci_version_check", True)
+    monkeypatch.setattr(app_module.flociversion, "report",
+                        lambda endpoint, compose: assess("2.4.0", "2.4.0", "2.5.0"))
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        app = app_module.create_app()
+        with TestClient(app):
+            app.state.floci_version_thread.join(timeout=5)
+    assert any("floci 2.5.0 is out" in r.getMessage() and r.levelno == logging.WARNING
+               for r in caplog.records)
+
+
+def test_the_floci_version_check_can_be_switched_off(monkeypatch):
+    from archivenetwork import app as app_module
+
+    monkeypatch.setattr(app_module.settings, "floci_version_check", False)
+    monkeypatch.setattr(app_module.flociversion, "report",
+                        lambda *a: pytest.fail("checked despite the switch"))
+    with TestClient(app_module.create_app()):
+        pass
