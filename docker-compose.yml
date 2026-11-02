@@ -1,4 +1,5 @@
-# The local floci emulator — the Dev panel's "testing" upload target.
+# The local floci emulator — the Dev panel's "testing" upload target, and the home of the
+# Dev-mode DynamoDB table (ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL, same port).
 #
 # floci is LocalStack-compatible, so at the boto3 level the only difference from real AWS is
 # an `endpoint_url` override (see `loader/storage.py` and `web/routes_s3.py`). Bring it up
