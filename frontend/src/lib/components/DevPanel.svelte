@@ -250,7 +250,10 @@
 
 	let table = $state('media');
 	let offset = $state(0);
+	/** @type {{type: string, total: number, limit: number, offset: number, rows: Record<string, any>[]} | null} */
 	let rows = $state(null);
+	// The table shows curated columns; JSON shows each item whole (GSI keys, overrides, loaded_at).
+	let view = $state('table');
 	const LIMIT = 10;
 
 	const connected = $derived(status?.enabled && status?.endpoint_reachable);
@@ -1270,28 +1273,45 @@
 				<section class="p-5">
 					<div class="flex flex-wrap items-center justify-between gap-3">
 						<h2 class="text-sm font-semibold text-surface-900">Items</h2>
-						<div
-							class="flex rounded-lg border border-surface-300 p-0.5"
-							role="tablist"
-							aria-label="Item type"
-						>
-							{#each ['media', 'album'] as t (t)}
-								<button
-									type="button"
-									role="tab"
-									aria-selected={table === t}
-									onclick={() => {
-										table = t;
-										offset = 0;
-									}}
-									class="rounded-md px-3 py-1 font-mono text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 {table ===
-									t
-										? 'bg-primary-100 font-semibold text-primary-900'
-										: 'text-surface-600 hover:bg-surface-200'}"
-								>
-									{t}
-								</button>
-							{/each}
+						<div class="flex flex-wrap items-center gap-2">
+							<div class="flex rounded-lg border border-surface-300 p-0.5" role="group" aria-label="View as">
+								{#each [['table', 'Table'], ['json', 'JSON']] as [v, label] (v)}
+									<button
+										type="button"
+										aria-pressed={view === v}
+										onclick={() => (view = v)}
+										class="rounded-md px-3 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 {view ===
+										v
+											? 'bg-primary-100 font-semibold text-primary-900'
+											: 'text-surface-600 hover:bg-surface-200'}"
+									>
+										{label}
+									</button>
+								{/each}
+							</div>
+							<div
+								class="flex rounded-lg border border-surface-300 p-0.5"
+								role="tablist"
+								aria-label="Item type"
+							>
+								{#each ['media', 'album'] as t (t)}
+									<button
+										type="button"
+										role="tab"
+										aria-selected={table === t}
+										onclick={() => {
+											table = t;
+											offset = 0;
+										}}
+										class="rounded-md px-3 py-1 font-mono text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 {table ===
+										t
+											? 'bg-primary-100 font-semibold text-primary-900'
+											: 'text-surface-600 hover:bg-surface-200'}"
+									>
+										{t}
+									</button>
+								{/each}
+							</div>
 						</div>
 					</div>
 
@@ -1310,78 +1330,88 @@
 							</p>
 						</div>
 					{:else}
-						<div class="mt-4 overflow-x-auto rounded-lg border border-surface-200">
-							<table
-								class="w-full min-w-[46rem] table-fixed border-collapse text-left"
-								bind:clientWidth={tableWidth}
-							>
-								<!-- Declared once here rather than per-<th>: with `table-fixed` the colgroup
-								     is what actually sizes the columns. See `colPcts` for why these are
-								     plain percentages and never a mixed %/px calc(). -->
-								<colgroup>
-									{#if table === 'media'}
-										<col style="width: {previewPct}%" />
-									{/if}
-									{#each columns as col, i (col)}
-										<col style="width: {colPcts[i]}%" />
-									{/each}
-								</colgroup>
-								<thead>
-									<tr class="border-b border-surface-200 bg-surface-100">
+						{#if view === 'json'}
+							<pre
+								data-testid="rows-json"
+								class="mt-4 max-h-[32rem] overflow-auto rounded-lg border border-surface-200 bg-surface-100 p-3 font-mono text-xs leading-relaxed text-surface-800">{JSON.stringify(
+									rows.rows,
+									null,
+									2
+								)}</pre>
+						{:else}
+							<div class="mt-4 overflow-x-auto rounded-lg border border-surface-200">
+								<table
+									class="w-full min-w-[46rem] table-fixed border-collapse text-left"
+									bind:clientWidth={tableWidth}
+								>
+									<!-- Declared once here rather than per-<th>: with `table-fixed` the colgroup
+									     is what actually sizes the columns. See `colPcts` for why these are
+									     plain percentages and never a mixed %/px calc(). -->
+									<colgroup>
 										{#if table === 'media'}
-											<th class="px-3 py-2"><span class="sr-only">Preview</span></th>
+											<col style="width: {previewPct}%" />
 										{/if}
 										{#each columns as col, i (col)}
-											<th
-												class="relative px-3 py-2 font-mono text-xs font-semibold text-surface-700 select-none"
-											>
-												<span class="block truncate" title={col}>{col}</span>
-												{#if i < columns.length - 1}
-													<button
-														type="button"
-														onpointerdown={(e) => startResize(e, i)}
-														onkeydown={(e) => onHandleKey(e, i)}
-														aria-label="Resize the {col} column"
-														title="Drag to resize · arrow keys also work"
-														class="absolute top-1/2 right-0 z-10 h-6 w-3 -translate-y-1/2 translate-x-1/2 cursor-col-resize rounded-xs before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-surface-300 before:transition-colors hover:before:bg-primary-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 focus-visible:before:bg-primary-600"
-													></button>
-												{/if}
-											</th>
+											<col style="width: {colPcts[i]}%" />
 										{/each}
-									</tr>
-								</thead>
-								<tbody>
-									{#each rows.rows as row (row.id)}
-										<tr class="border-b border-surface-200 last:border-0 hover:bg-surface-100">
+									</colgroup>
+									<thead>
+										<tr class="border-b border-surface-200 bg-surface-100">
 											{#if table === 'media'}
-												<td class="px-3 py-1.5">
-													<!-- `min-w-9` is still load-bearing under `table-fixed`: Tailwind's preflight
-													     `img { max-width: 100% }` resolves against the column box, so a squeezed
-													     column would collapse the preview to nothing. The colgroup pins this
-													     column at PREVIEW_PX; the min-width is the floor if that ever gives. -->
-													<img
-														src={storeUrl(row.storage_path, status.media_base_url)}
-														alt=""
-														loading="lazy"
-														width="36"
-														height="36"
-														class="size-9 min-w-9 rounded object-cover ring-1 ring-surface-300"
-													/>
-												</td>
+												<th class="px-3 py-2"><span class="sr-only">Preview</span></th>
 											{/if}
-											{#each columns as col (col)}
-												<!-- `table-fixed` + the colgroup own the width now, so the cell only has
-												     to truncate what it's given. The title keeps the full value reachable. -->
-												<td
-													class="truncate px-3 py-1.5 font-mono text-xs text-surface-700"
-													title={cell(row[col])}>{cell(row[col])}</td
+											{#each columns as col, i (col)}
+												<th
+													class="relative px-3 py-2 font-mono text-xs font-semibold text-surface-700 select-none"
 												>
+													<span class="block truncate" title={col}>{col}</span>
+													{#if i < columns.length - 1}
+														<button
+															type="button"
+															onpointerdown={(e) => startResize(e, i)}
+															onkeydown={(e) => onHandleKey(e, i)}
+															aria-label="Resize the {col} column"
+															title="Drag to resize · arrow keys also work"
+															class="absolute top-1/2 right-0 z-10 h-6 w-3 -translate-y-1/2 translate-x-1/2 cursor-col-resize rounded-xs before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-surface-300 before:transition-colors hover:before:bg-primary-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 focus-visible:before:bg-primary-600"
+														></button>
+													{/if}
+												</th>
 											{/each}
 										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
+									</thead>
+									<tbody>
+										{#each rows.rows as row (row.id)}
+											<tr class="border-b border-surface-200 last:border-0 hover:bg-surface-100">
+												{#if table === 'media'}
+													<td class="px-3 py-1.5">
+														<!-- `min-w-9` is still load-bearing under `table-fixed`: Tailwind's preflight
+														     `img { max-width: 100% }` resolves against the column box, so a squeezed
+														     column would collapse the preview to nothing. The colgroup pins this
+														     column at PREVIEW_PX; the min-width is the floor if that ever gives. -->
+														<img
+															src={storeUrl(row.storage_path, status.media_base_url)}
+															alt=""
+															loading="lazy"
+															width="36"
+															height="36"
+															class="size-9 min-w-9 rounded object-cover ring-1 ring-surface-300"
+														/>
+													</td>
+												{/if}
+												{#each columns as col (col)}
+													<!-- `table-fixed` + the colgroup own the width now, so the cell only has
+													     to truncate what it's given. The title keeps the full value reachable. -->
+													<td
+														class="truncate px-3 py-1.5 font-mono text-xs text-surface-700"
+														title={cell(row[col])}>{cell(row[col])}</td
+													>
+												{/each}
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						{/if}
 
 						<div class="mt-3 flex items-center justify-between gap-3">
 							<p class="font-mono text-xs text-surface-600">

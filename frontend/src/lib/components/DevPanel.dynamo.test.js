@@ -142,4 +142,52 @@ describe('Dev panel on DynamoDB', () => {
 		expect(container.textContent).toContain('tombstoned: MEDIA#g01');
 		expect(container.textContent).toContain('1 tombstoned');
 	});
+
+	describe('JSON view', () => {
+		const item = {
+			PK: 'MEDIA#g01',
+			SK: '#META',
+			id: 'g01',
+			media_type: 'photo',
+			storage_path: 'fb-exports/archevt/headline-one/g01.jpg',
+			GSI1PK: 'ALBUM#g01',
+			overrides: { title: 'CMS title' }
+		};
+
+		beforeEach(() => {
+			api.devRows.mockResolvedValue({
+				ok: true,
+				body: { type: 'media', total: 1, limit: 10, offset: 0, rows: [item] }
+			});
+		});
+
+		it('starts on the table view', async () => {
+			render(DevPanel);
+			await screen.findByRole('table');
+			expect(screen.getByRole('button', { name: 'Table' }).getAttribute('aria-pressed')).toBe(
+				'true'
+			);
+			expect(screen.queryByTestId('rows-json')).toBeNull();
+		});
+
+		it('shows every attribute of the page as formatted JSON', async () => {
+			render(DevPanel);
+			await screen.findByRole('table');
+			await fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
+			const pre = await screen.findByTestId('rows-json');
+			expect(JSON.parse(pre.textContent)).toEqual([item]);
+			// Attributes outside the curated columns are exactly what this view is for.
+			expect(pre.textContent).toContain('"GSI1PK": "ALBUM#g01"');
+			expect(screen.queryByRole('table')).toBeNull();
+		});
+
+		it('keeps paging in the JSON view', async () => {
+			const { container } = render(DevPanel);
+			await screen.findByRole('table');
+			await fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
+			await screen.findByTestId('rows-json');
+			expect(container.textContent).toContain('1–1 of 1');
+			expect(screen.getByRole('button', { name: 'Next' })).toBeTruthy();
+		});
+	});
 });
