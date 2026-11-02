@@ -42,7 +42,7 @@ def test_cors_allows_every_method_the_api_actually_serves():
 
     `allow_methods` used to be a hardcoded ["GET", "POST", "OPTIONS"], so the Dev panel's
     then-only DELETE route failed its preflight with `400 Disallowed CORS method` and its
-    button did nothing. `DELETE /api/dev/table` is the route that keeps this honest now.
+    button did nothing. `DELETE /api/dev/tables` is the route that keeps this honest now.
     The backend route was fine; the browser never got to call it.
 
     Asserting against the live route table (rather than hardcoding DELETE) means the next
@@ -64,7 +64,7 @@ def test_cors_allows_every_method_the_api_actually_serves():
 
     for method in sorted(served):
         pre = client.options(
-            "/api/dev/table",
+            "/api/dev/tables",
             headers={
                 "Origin": "http://localhost:5173",
                 "Access-Control-Request-Method": method,

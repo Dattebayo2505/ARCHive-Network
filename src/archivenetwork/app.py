@@ -71,7 +71,7 @@ def create_app() -> FastAPI:
         # Must cover every method the routers serve — a method missing here fails the browser's
         # *preflight* with `400 Disallowed CORS method`, so the route is never reached and the
         # failure looks like a broken endpoint rather than a CORS policy. `DELETE` was the
-        # casualty (`DELETE /api/dev/table`). `*` keeps the list from drifting as routes are added;
+        # casualty (`DELETE /api/dev/tables`). `*` keeps the list from drifting as routes are added;
         # it is not a widening — `allow_origins`/`allow_origin_regex` still gate who may ask.
         allow_methods=["*"],
         allow_headers=["*"],
