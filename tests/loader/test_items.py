@@ -9,11 +9,9 @@ from archivenetwork.loader.items import (
     MEDIA_REFRESH,
     MEDIA_SET_ONCE,
     RETIRED,
-    album_pk,
     album_update,
     iso_date,
     iso_utc,
-    media_pk,
     media_update,
 )
 from archivenetwork.loader.read import AlbumRow, MediaRow
@@ -69,8 +67,18 @@ def _video_row(**kw) -> MediaRow:
     return MediaRow(**base)
 
 
-def test_keys():
-    assert album_pk("111") == "ALBUM#111" and media_pk("g01") == "MEDIA#g01"
+def test_updates_name_their_table_and_id():
+    a = album_update(_album_row(fb_album_id="111"), NOW)
+    assert a.kind == "album" and a.item_id == "111"
+    m = media_update(_photo_row(fbid="g01"), "k", "ws", NOW)
+    assert m.kind == "media" and m.item_id == "g01"
+
+
+def test_the_key_is_never_set():
+    # `id` is the table key: the UpdateItem Key writes it, and a SET on it is rejected.
+    for u in (album_update(_album_row(), NOW), media_update(_photo_row(), "k", "ws", NOW),
+              media_update(_video_row(), "k", "ws", NOW)):
+        assert "id" not in u.refresh | u.set_once
 
 
 def test_every_l_attribute_is_always_named_so_absent_ones_are_removed():
@@ -81,10 +89,9 @@ def test_every_l_attribute_is_always_named_so_absent_ones_are_removed():
 
 def test_album_update_matches_the_contract():
     u = album_update(_album_row(fb_album_id="111", is_derived=False), NOW)
-    assert u.pk == "ALBUM#111" and set(u.refresh) == ALBUM_REFRESH
+    assert u.kind == "album" and u.item_id == "111" and set(u.refresh) == ALBUM_REFRESH
     assert set(u.set_once) == ALBUM_SET_ONCE
     assert u.set_once == {
-        "id": "111",
         "kind": "photo",
         "source": "fb_export",
         "created_at": "2026-11-02T03:04:05Z",
@@ -111,19 +118,22 @@ def test_album_without_a_date_or_tags_removes_them():
 def test_no_cms_or_retired_attribute_is_ever_written():
     for u in (album_update(_album_row(), NOW), media_update(_photo_row(), "k", "ws", NOW)):
         assert not (set(u.refresh) | set(u.set_once)) & (CMS_OWNED | RETIRED)
+    assert {"PK", "SK", "GSI1PK", "GSI1SK", "GSI2PK", "GSI3PK", "GSI3SK"} <= RETIRED
+    assert "featured_pk" in CMS_OWNED
 
 
 def test_media_carries_its_own_id_and_no_source():
     u = media_update(_photo_row(fbid="g01"), "k", "ws", NOW)
-    assert u.pk == "MEDIA#g01" and u.set_once["id"] == "g01" and "source" not in u.set_once
-    assert u.set_once["fbid"] == "g01" and u.set_once["storage_path"] == "k"
+    assert u.kind == "media" and u.item_id == "g01" and "source" not in u.set_once
+    assert u.set_once == {"storage_path": "k", "fbid": "g01",
+                          "created_at": "2026-11-02T03:04:05Z"}
     assert u.refresh["source_workspace_id"] == "ws"
 
 
-def test_anchored_media_partitions_by_album_and_sorts_by_creation_at():
-    u = media_update(_photo_row(fb_album_id="g01", creation_at=NOW), "k", "ws", NOW)
-    assert u.refresh["GSI1PK"] == "ALBUM#g01"
-    assert u.refresh["GSI1SK"] == "2026-11-02T03:04:05Z"
+def test_anchored_media_has_an_album_id_and_no_loose_section():
+    u = media_update(_photo_row(fb_album_id="111", creation_at=NOW), "k", "ws", NOW)
+    assert u.refresh["album_id"] == "111"
+    assert u.refresh["loose_section"] is None  # REMOVEd, so it stays out of by-section
     assert u.refresh["creation_at"] == "2026-11-02T03:04:05Z"
 
 
@@ -139,16 +149,16 @@ def test_loose_media_carries_its_own_description_and_tags():
     assert u.refresh["album_id"] is None
 
 
-def test_loose_media_partitions_by_its_canonical_tag_or_uncategorized():
-    tagged = _video_row(hashtags=["ArchersAfterDark", "ARCHENT"])
-    assert media_update(tagged, "k", "ws", NOW).refresh["GSI1PK"] == "LOOSE#ARCHENT"
-    untagged = _video_row(hashtags=[])
-    assert media_update(untagged, "k", "ws", NOW).refresh["GSI1PK"] == "LOOSE#uncategorized"
+def test_loose_media_has_a_loose_section():
+    tagged = media_update(_video_row(hashtags=["ArchersAfterDark", "ARCHEVT"]), "k", "ws", NOW)
+    assert tagged.refresh["loose_section"] == "ARCHEVT" and tagged.refresh["album_id"] is None
+    untagged = media_update(_video_row(hashtags=[]), "k", "ws", NOW)
+    assert untagged.refresh["loose_section"] == "uncategorized"
 
 
-def test_media_without_creation_at_removes_gsi1sk():
+def test_media_without_creation_at_removes_it():
     u = media_update(_photo_row(creation_at=None), "k", "ws", NOW)
-    assert u.refresh["GSI1SK"] is None and u.refresh["creation_at"] is None
+    assert u.refresh["creation_at"] is None
 
 
 def test_empty_hashtags_are_removed_not_stored_empty():

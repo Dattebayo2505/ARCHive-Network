@@ -21,7 +21,7 @@ from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError
 
-from .items import SK_META, Update
+from .items import Update
 from .storage import ENDPOINT_CONNECT_TIMEOUT, ENDPOINT_READ_TIMEOUT, probe_endpoint
 
 if TYPE_CHECKING:
@@ -297,39 +297,39 @@ def _plain(v: Any) -> Any:
     return v
 
 
-def _scan(t: Tables, **kw) -> list[dict]:
-    items: list[dict] = []
-    for page in t.client.get_paginator("scan").paginate(TableName=t.name, **kw):
-        items.extend(page.get("Items", []))
-    return items
-
-
-_PREFIX = {"album": "ALBUM#", "media": "MEDIA#"}
+def _guard_filter(kind: str) -> dict:
+    """The Scan kwargs that skip uniqueness guards, for the tables that hold them."""
+    if kind not in GUARDED:
+        return {}
+    return {
+        "FilterExpression": "NOT begins_with(#gid, :g)",
+        "ExpressionAttributeNames": {"#gid": "id"},
+        "ExpressionAttributeValues": {":g": {"S": GUARD_PREFIX}},
+    }
 
 
 def counts(t: Tables) -> dict[str, int]:
-    """`#META` items per type; edges (`CREDIT#`, `FEAT#`) and other types never count."""
-    out = {"album": 0, "media": 0}
-    raw = _scan(t, ProjectionExpression="#pk, #sk",
-                ExpressionAttributeNames={"#pk": "PK", "#sk": "SK"})
-    for it in raw:
-        if it["SK"]["S"] != SK_META:
-            continue
-        for kind, prefix in _PREFIX.items():
-            if it["PK"]["S"].startswith(prefix):
-                out[kind] += 1
+    """Items per probed table, guards excluded."""
+    out: dict[str, int] = {}
+    for kind in t.probed():
+        pages = t.client.get_paginator("scan").paginate(
+            TableName=t.name(kind), Select="COUNT", **_guard_filter(kind)
+        )
+        # Real DynamoDB returns no `Items` under Select=COUNT (moto does), so sum the counts.
+        out[kind] = sum(page["Count"] for page in pages)
     return out
 
 
-def scan_items(t: Tables, kind: Literal["album", "media"] | None = None) -> list[dict]:
-    """The whole table as plain Python, optionally only one type's `#META` items, sorted by PK."""
-    items = [
-        _plain({k: _deserializer.deserialize(v) for k, v in it.items()}) for it in _scan(t)
-    ]
-    if kind is not None:
-        prefix = _PREFIX[kind]
-        items = [i for i in items if i["PK"].startswith(prefix) and i["SK"] == SK_META]
-    return sorted(items, key=lambda i: (i["PK"], i["SK"]))
+def scan_items(t: Tables, kind: str) -> list[dict]:
+    """One table as plain Python, guards skipped, sorted by its (hash, range) key."""
+    raw: list[dict] = []
+    for page in t.client.get_paginator("scan").paginate(
+        TableName=t.name(kind), **_guard_filter(kind)
+    ):
+        raw.extend(page.get("Items", []))
+    items = [_plain({k: _deserializer.deserialize(v) for k, v in it.items()}) for it in raw]
+    spec = TABLES[kind]
+    return sorted(items, key=lambda i: (i[spec.hash], i[spec.range] if spec.range else ""))
 
 
 @dataclass(frozen=True)
@@ -338,36 +338,40 @@ class Existing:
     deleted: bool
 
 
-def prefetch(t: Tables, pks: list[str]) -> dict[str, Existing]:
-    """The items that already exist: their frozen key and whether the CMS tombstoned them.
+def prefetch(t: Tables, keys: list[tuple[str, str]]) -> dict[tuple[str, str], Existing]:
+    """The `(kind, id)` items that already exist: their frozen key and whether they're tombstoned.
 
-    BatchGetItem takes at most 100 distinct keys and may hand some back as UnprocessedKeys;
-    missing either would make every item past the first batch read as an insert.
+    Album and media share each `BatchGetItem`, which takes at most 100 distinct keys and may hand
+    some back as UnprocessedKeys; missing either would make every item past the first batch read
+    as an insert.
     """
-    unique = list(dict.fromkeys(pks))
-    found: dict[str, Existing] = {}
+    unique = list(dict.fromkeys(keys))
+    found: dict[tuple[str, str], Existing] = {}
     for i in range(0, len(unique), BATCH_GET_LIMIT):
         chunk = unique[i:i + BATCH_GET_LIMIT]
+        by_name = {t.name(kind): kind for kind, _ in chunk}
         req: dict = {
-            t.name: {
-                "Keys": [{"PK": {"S": pk}, "SK": {"S": SK_META}} for pk in chunk],
-                "ProjectionExpression": "#pk, #sp, #del",
+            name: {
+                "Keys": [{"id": {"S": item_id}} for kind, item_id in chunk if kind == k],
+                "ProjectionExpression": "#id, #sp, #del",
                 "ExpressionAttributeNames": {
-                    "#pk": "PK", "#sp": "storage_path", "#del": "deleted_at",
+                    "#id": "id", "#sp": "storage_path", "#del": "deleted_at",
                 },
                 "ConsistentRead": True,
             }
+            for name, k in by_name.items()
         }
         attempt = 0
         while req:
             if attempt:
                 time.sleep(min(0.05 * 2**attempt, 1.0))
             resp = t.client.batch_get_item(RequestItems=req)
-            for it in resp.get("Responses", {}).get(t.name, []):
-                found[it["PK"]["S"]] = Existing(
-                    storage_path=it.get("storage_path", {}).get("S"),
-                    deleted="deleted_at" in it,
-                )
+            for name, items in resp.get("Responses", {}).items():
+                for it in items:
+                    found[(by_name[name], it["id"]["S"])] = Existing(
+                        storage_path=it.get("storage_path", {}).get("S"),
+                        deleted="deleted_at" in it,
+                    )
             req = resp.get("UnprocessedKeys") or {}
             attempt += 1
     return found
@@ -379,7 +383,8 @@ def prefetch(t: Tables, pks: list[str]) -> dict[str, Existing]:
 def upsert(t: Tables, u: Update) -> Literal["written", "skipped_deleted"]:
     """The §5.2 `UpdateItem`: SET L values, if_not_exists L1 values, REMOVE absent L values.
 
-    The condition keeps a CMS tombstone authoritative even if it landed after the pre-fetch.
+    The `Key` writes `id` on insert. The condition keeps a CMS tombstone authoritative even if it
+    landed after the pre-fetch.
     """
     names: dict[str, str] = {"#del": "deleted_at"}
     values: dict[str, Any] = {}
@@ -401,8 +406,8 @@ def upsert(t: Tables, u: Update) -> Literal["written", "skipped_deleted"]:
         expr += " REMOVE " + ", ".join(removes)
     try:
         t.client.update_item(
-            TableName=t.name,
-            Key={"PK": {"S": u.pk}, "SK": {"S": SK_META}},
+            TableName=t.name(u.kind),
+            Key={"id": {"S": u.item_id}},
             UpdateExpression=expr,
             ExpressionAttributeNames=names,
             ExpressionAttributeValues=values,
