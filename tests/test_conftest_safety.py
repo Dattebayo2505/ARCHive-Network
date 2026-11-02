@@ -47,3 +47,26 @@ def test_pg_conn_is_connected_to_the_scratch_database(pg_conn):
 def test_pg_conn_starts_from_an_empty_schema(pg_conn):
     """Whatever a previous test committed, each test opens on a clean slate."""
     assert db.counts(pg_conn) == {"photo_album": 0, "media": 0}
+
+
+# --- DynamoDB: the moto `ddb` fixture must never name the configured table. ---
+
+
+def test_scratch_table_never_names_the_configured_table(monkeypatch):
+    monkeypatch.setenv("ARCHIVENETWORK_DYNAMODB_TABLE", "archers-network-dev")
+    assert conftest._scratch_table() == "archers-network-dev-test"
+
+
+def test_scratch_table_has_a_default_when_unconfigured(monkeypatch):
+    monkeypatch.delenv("ARCHIVENETWORK_DYNAMODB_TABLE", raising=False)
+    assert conftest._scratch_table().endswith(conftest.TEST_TABLE_SUFFIX)
+
+
+def test_ddb_targets_the_scratch_table_inside_moto(ddb):
+    assert ddb.name.endswith(conftest.TEST_TABLE_SUFFIX)
+    # moto intercepts the regional AWS host; the configured floci endpoint is never dialled.
+    assert ddb.client.meta.endpoint_url.startswith("https://dynamodb.")
+
+
+def test_ddb_starts_empty(ddb):
+    assert ddb.client.scan(TableName=ddb.name)["Count"] == 0

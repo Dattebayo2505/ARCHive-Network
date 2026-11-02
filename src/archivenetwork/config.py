@@ -2,6 +2,7 @@ import platform
 import sys
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Repo root: config.py -> archivenetwork -> src -> <root>. Used to locate vendored binaries
@@ -65,6 +66,16 @@ class Settings(BaseSettings):
     database_url: str | None = None
     media_root: Path = Path("workspace/store")
     media_base_url: str = "/store"
+
+    # --- Dev-mode on DynamoDB (the port). The endpoint is the same floci container as
+    # `floci_endpoint_url`; an empty value means real AWS, so it normalises to None. ---
+    dynamodb_table: str | None = None
+    dynamodb_endpoint_url: str | None = "http://127.0.0.1:4566"
+
+    @field_validator("dynamodb_endpoint_url", mode="before")
+    @classmethod
+    def _empty_endpoint_is_aws(cls, v):
+        return None if v == "" else v
 
     # --- S3 upload (on-demand). Independent of dev-mode/Postgres. AWS S3 only. ---
     # Credentials are optional: passed to boto3 only when both are set, else boto3's

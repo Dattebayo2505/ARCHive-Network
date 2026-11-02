@@ -345,3 +345,63 @@ def pg_conn(scratch_database: str):
         # Leave nothing committed behind, so a stray row can never outlive the run.
         db.reset_tables(conn)
         conn.close()
+
+
+# --- DynamoDB (moto unit tier) ---
+
+TEST_TABLE_SUFFIX = "-test"
+_DDB_REGION = "ap-southeast-1"
+
+
+def _scratch_table() -> str:
+    """A derived `-test` table name, never the configured one (same lesson as `_scratch_url`)."""
+    from archivenetwork.config import Settings
+
+    configured = Settings().dynamodb_table
+    scratch = (configured or "archers-network-dev") + TEST_TABLE_SUFFIX
+    assert scratch != configured, "scratch table must differ from the configured one"
+    return scratch
+
+
+def _create_scratch_table(client, name: str) -> None:
+    attrs = ["PK", "SK", "GSI1PK", "GSI1SK", "GSI2PK", "GSI3PK", "GSI3SK"]
+    gsis = [("GSI1", "GSI1PK", "GSI1SK"), ("GSI2", "GSI2PK", None), ("GSI3", "GSI3PK", "GSI3SK")]
+    client.create_table(
+        TableName=name,
+        BillingMode="PAY_PER_REQUEST",
+        AttributeDefinitions=[{"AttributeName": a, "AttributeType": "S"} for a in attrs],
+        KeySchema=[
+            {"AttributeName": "PK", "KeyType": "HASH"},
+            {"AttributeName": "SK", "KeyType": "RANGE"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": n,
+                "KeySchema": [{"AttributeName": pk, "KeyType": "HASH"}]
+                + ([{"AttributeName": sk, "KeyType": "RANGE"}] if sk else []),
+                "Projection": {"ProjectionType": "ALL"},
+            }
+            for n, pk, sk in gsis
+        ],
+    )
+
+
+@pytest.fixture
+def ddb(monkeypatch):
+    """A fresh scratch table inside moto. Never skips: moto needs no server."""
+    import boto3
+    from moto import mock_aws
+
+    from archivenetwork.loader import dynamo
+
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", _DDB_REGION)
+    # moto does not intercept a client with a custom endpoint; it would dial the real network.
+    monkeypatch.delenv("AWS_ENDPOINT_URL", raising=False)
+    monkeypatch.delenv("AWS_ENDPOINT_URL_DYNAMODB", raising=False)
+    with mock_aws():
+        client = boto3.client("dynamodb", region_name=_DDB_REGION)
+        name = _scratch_table()
+        _create_scratch_table(client, name)
+        yield dynamo.Table(client, name, on_emulator=True)
