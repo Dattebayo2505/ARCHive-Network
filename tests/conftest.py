@@ -286,19 +286,19 @@ TEST_TABLE_SUFFIX = "-test"
 _DDB_REGION = "ap-southeast-1"
 
 
-def _scratch_table() -> str:
-    """A derived `-test` table name, never the configured one (the old Postgres fixture's lesson)."""
+def _scratch_prefix() -> str:
+    """A derived `-test` table prefix, never the configured one (the old Postgres fixture's lesson)."""
     from archivenetwork.config import Settings
 
-    configured = Settings().dynamodb_table
+    configured = Settings().dynamodb_table_prefix
     scratch = (configured or "archers-network-dev") + TEST_TABLE_SUFFIX
-    assert scratch != configured, "scratch table must differ from the configured one"
+    assert scratch != configured, "scratch prefix must differ from the configured one"
     return scratch
 
 
 @pytest.fixture
 def ddb(monkeypatch):
-    """A fresh scratch table inside moto. Never skips: moto needs no server."""
+    """Fresh scratch tables (all 11) inside moto. Never skips: moto needs no server."""
     import boto3
     from moto import mock_aws
 
@@ -312,9 +312,9 @@ def ddb(monkeypatch):
     monkeypatch.delenv("AWS_ENDPOINT_URL_DYNAMODB", raising=False)
     with mock_aws():
         client = boto3.client("dynamodb", region_name=_DDB_REGION)
-        table = dynamo.Table(client, _scratch_table(), on_emulator=True)  # moto is an emulator
-        dynamo.create_table(table)
-        yield table
+        tables = dynamo.Tables(client, _scratch_prefix(), on_emulator=True)  # moto is an emulator
+        dynamo.create_tables(tables)
+        yield tables
 
 
 def floci_image() -> str | None:

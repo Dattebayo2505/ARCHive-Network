@@ -41,7 +41,7 @@ def _cms(ddb, pk: str, expr: str, values: dict, names: dict | None = None) -> No
 
 def test_connect_to_an_emulator_uses_dummy_credentials_and_bounded_timeouts():
     t = dynamo.connect("t", "http://127.0.0.1:4566", "ap-southeast-1")
-    assert t.on_emulator is True and t.name == "t"
+    assert t.on_emulator is True and t.prefix == "t"
     assert t.client.meta.endpoint_url == "http://127.0.0.1:4566"
     assert t.client._request_signer._credentials.access_key == "test"
     cfg = t.client.meta.config
@@ -61,66 +61,131 @@ def test_connect_without_an_endpoint_is_real_aws(monkeypatch):
 def test_from_settings_falls_back_to_the_default_region():
     from archivenetwork.config import Settings
 
-    s = Settings(_env_file=None, dynamodb_table="tbl", s3_region="")
+    s = Settings(_env_file=None, dynamodb_table_prefix="tbl", s3_region="")
     t = dynamo.from_settings(s)
-    assert t.name == "tbl" and t.client.meta.region_name == "ap-southeast-1"
+    assert t.prefix == "tbl" and t.client.meta.region_name == "ap-southeast-1"
 
 
-def test_create_table_is_idempotent(ddb):
-    assert dynamo.create_table(ddb) is False
+def test_from_settings_requires_the_prefix():
+    from archivenetwork.config import Settings
+
+    s = Settings(_env_file=None, dynamodb_table_prefix=None, dynamodb_table="legacy")
+    with pytest.raises(ValueError, match="ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX"):
+        dynamo.from_settings(s)
 
 
-def test_delete_then_create(ddb):
-    assert dynamo.delete_table(ddb) is True and dynamo.probe(ddb).table_exists is False
-    assert dynamo.create_table(ddb) is True and dynamo.probe(ddb).table_exists is True
-    assert dynamo.delete_table(ddb) is True and dynamo.delete_table(ddb) is False
+def test_table_names_follow_the_prefix():
+    t = dynamo.connect("p", "http://127.0.0.1:4566", "ap-southeast-1")
+    assert t.name("staff_term") == "p-staff-term"
+    assert t.name("users") == "p-users"
+    assert t.name("album") == "p-album"
 
 
-def test_created_table_has_the_three_gsis(ddb):
-    desc = ddb.client.describe_table(TableName=ddb.name)["Table"]
-    gsis = {g["IndexName"]: [k["AttributeName"] for k in g["KeySchema"]]
-            for g in desc["GlobalSecondaryIndexes"]}
-    assert gsis == {"GSI1": ["GSI1PK", "GSI1SK"], "GSI2": ["GSI2PK"], "GSI3": ["GSI3PK", "GSI3SK"]}
-    assert desc["BillingModeSummary"]["BillingMode"] == "PAY_PER_REQUEST"
+def test_tables_cover_every_kind_in_order():
+    assert tuple(dynamo.TABLES) == dynamo.KINDS
+    assert len(dynamo.KINDS) == 11
+
+
+def _key_schema(hash_: str, range_: str | None) -> list[dict]:
+    return [{"AttributeName": hash_, "KeyType": "HASH"}] + (
+        [{"AttributeName": range_, "KeyType": "RANGE"}] if range_ else []
+    )
+
+
+def test_created_tables_match_the_spec(ddb):
+    for kind, spec in dynamo.TABLES.items():
+        desc = ddb.client.describe_table(TableName=ddb.name(kind))["Table"]
+        assert desc["KeySchema"] == _key_schema(spec.hash, spec.range), kind
+        assert desc["BillingModeSummary"]["BillingMode"] == "PAY_PER_REQUEST"
+        gsis = {g["IndexName"]: g["KeySchema"] for g in desc.get("GlobalSecondaryIndexes", [])}
+        assert gsis == {ix.name: _key_schema(ix.hash, ix.range) for ix in spec.indexes}, kind
+        if not spec.indexes:
+            assert not desc.get("GlobalSecondaryIndexes"), kind  # moto returns [], AWS omits it
+
+
+def test_no_table_has_pk_sk_or_gsi_attributes(ddb):
+    for kind in dynamo.KINDS:
+        desc = ddb.client.describe_table(TableName=ddb.name(kind))["Table"]
+        names = [a["AttributeName"] for a in desc["AttributeDefinitions"]]
+        assert not [n for n in names if n in ("PK", "SK") or n.startswith("GSI")], kind
+
+
+def test_create_tables_is_idempotent(ddb):
+    assert dynamo.create_tables(ddb) == []
+
+
+def test_delete_then_create_tables(ddb):
+    assert dynamo.delete_tables(ddb) == list(dynamo.KINDS)
+    assert dynamo.probe(ddb).missing == list(dynamo.KINDS)
+    assert dynamo.create_tables(ddb) == list(dynamo.KINDS)
+    assert dynamo.probe(ddb).table_exists is True
 
 
 def test_table_admin_refuses_real_aws(ddb):
-    aws = dynamo.Table(ddb.client, ddb.name, on_emulator=False)
+    aws = dynamo.Tables(ddb.client, ddb.prefix, on_emulator=False)
     with pytest.raises(dynamo.NotOnEmulator):
-        dynamo.delete_table(aws)
+        dynamo.delete_tables(aws)
     with pytest.raises(dynamo.NotOnEmulator):
-        dynamo.create_table(aws)
+        dynamo.create_tables(aws)
     assert dynamo.probe(ddb).table_exists is True  # nothing was dropped
 
 
-def test_probe_reports_an_existing_table(ddb):
+def test_probe_reports_all_tables(ddb):
     p = dynamo.probe(ddb)
-    assert p.endpoint_reachable and p.table_exists and not p.refused and p.table == ddb.name
+    assert p.endpoint_reachable and p.table_exists and not p.refused
+    assert p.missing == [] and p.prefix == ddb.prefix
+    assert p.tables["album"] == ddb.name("album")
+    assert set(p.tables) == set(dynamo.KINDS)
 
 
-def test_probe_reports_a_missing_table_on_a_reachable_endpoint(ddb):
-    dynamo.delete_table(ddb)
+def test_probe_names_the_missing_tables(ddb):
+    ddb.client.delete_table(TableName=ddb.name("credit"))
     p = dynamo.probe(ddb)
-    assert p.endpoint_reachable is True and p.table_exists is False and p.refused is False
+    assert p.missing == ["credit"]
+    assert p.table_exists is False and p.endpoint_reachable is True and p.refused is False
+
+
+def test_probe_on_aws_covers_only_the_loader_tables(ddb):
+    aws = dynamo.Tables(ddb.client, ddb.prefix, on_emulator=False)
+    ddb.client.delete_table(TableName=ddb.name("users"))
+    ddb.client.delete_table(TableName=ddb.name("channel"))
+    p = dynamo.probe(aws)
+    assert set(p.tables) == set(dynamo.LOADER_KINDS)
+    assert p.table_exists is True and p.missing == []
 
 
 def test_probe_keeps_a_refusal_distinct_from_a_missing_table(ddb, monkeypatch):
-    def denied(**_kw):
-        raise ClientError(
-            {"Error": {"Code": "AccessDeniedException", "Message": "not authorized"}},
-            "DescribeTable",
-        )
+    real = ddb.client.describe_table
+
+    def denied(**kw):
+        if kw["TableName"] == ddb.name("staffer"):
+            raise ClientError(
+                {"Error": {"Code": "AccessDeniedException", "Message": "not authorized"}},
+                "DescribeTable",
+            )
+        return real(**kw)
 
     monkeypatch.setattr(ddb.client, "describe_table", denied)
     p = dynamo.probe(ddb)
     assert p.endpoint_reachable is True and p.table_exists is False
-    assert p.refused is True and "AccessDenied" in p.reason
+    assert p.refused is True and "AccessDenied" in p.reason and p.missing == []
 
 
 def test_probe_reports_an_unreachable_endpoint_without_raising():
     p = dynamo.probe(dynamo.connect("t", "http://127.0.0.1:1", "ap-southeast-1"))
     assert p.endpoint_reachable is False and p.reason
     assert p.endpoint == "http://127.0.0.1:1"
+    assert p.missing == [] and p.tables["album"] == "t-album"
+
+
+def test_featuring_on_an_album_and_a_media_with_the_same_id_are_two_edges(ddb):
+    # A derived album's id is its first photo's fbid, so the typed parent_key keeps them apart.
+    for parent in ("album", "media"):
+        ddb.client.put_item(TableName=ddb.name("featuring"), Item={
+            "parent_key": {"S": f"{parent}#g01"}, "staffer_id": {"S": "s1"},
+            "parent_type": {"S": parent}, "parent_id": {"S": "g01"},
+        })
+    assert ddb.client.scan(TableName=ddb.name("featuring"))["Count"] == 2
 
 
 # --- upsert: the write rules -----------------------------------------------------------------

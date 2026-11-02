@@ -58,7 +58,8 @@ class Settings(BaseSettings):
     preview_size: int = 1280
 
     # --- Dev-mode: load the built ready/ folder into DynamoDB + a local object store. ---
-    # Off unless `dynamodb_table` is set; every /api/dev/* route 404s without it.
+    # Off unless `dynamodb_table_prefix` is set; every /api/dev/* route 404s without it.
+    # Each item type has its own table, named `<prefix>-<suffix>` (loader.dynamo.TABLES).
     #
     # `media_root` / `media_base_url` are the *object-store root* — the part before the key.
     # A key begins with "fb-exports/<hashtag>/<album-slug>/" (see loader.storage.media_key).
@@ -68,6 +69,8 @@ class Settings(BaseSettings):
 
     # The DynamoDB endpoint is the same floci container as
     # `floci_endpoint_url`; an empty value means real AWS, so it normalises to None. ---
+    dynamodb_table_prefix: str | None = None
+    # Legacy: only read to tell an old .env it was renamed.
     dynamodb_table: str | None = None
     dynamodb_endpoint_url: str | None = "http://127.0.0.1:4566"
 

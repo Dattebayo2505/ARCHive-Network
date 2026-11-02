@@ -23,11 +23,13 @@ def test_devmode_settings_default_off(monkeypatch):
 
 
 def test_dynamodb_defaults(monkeypatch):
-    monkeypatch.delenv("ARCHIVENETWORK_DYNAMODB_TABLE", raising=False)
+    monkeypatch.delenv("ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX", raising=False)
     monkeypatch.delenv("ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL", raising=False)
     s = Settings(_env_file=None)
-    assert s.dynamodb_table is None  # dev-mode stays opt-in
+    assert s.dynamodb_table_prefix is None  # dev-mode stays opt-in
     assert s.dynamodb_endpoint_url == "http://127.0.0.1:4566"  # floci
+    monkeypatch.setenv("ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX", "archers-network-dev")
+    assert Settings(_env_file=None).dynamodb_table_prefix == "archers-network-dev"
 
 
 def test_empty_endpoint_means_real_aws(monkeypatch):
