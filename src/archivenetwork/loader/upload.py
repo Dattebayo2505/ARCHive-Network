@@ -1,7 +1,7 @@
 """Push a built ready folder's media to an object store, on demand.
 
 Deliberately DB-free: keys are pure-recompute via ``storage.key_for`` (never read from
-Postgres). Storage is written; nothing is inserted. Mirrors ``load()``'s resilient
+DynamoDB). Storage is written; nothing is inserted. Mirrors ``load()``'s resilient
 per-file philosophy (an orphan uri or one bad file never sinks the run), but the preflight
 ``ensure_ready`` fails fast on a whole-run blocker so we don't hammer every file.
 """

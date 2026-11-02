@@ -6,7 +6,7 @@ is required, that ContentType survives the wire, or that auto-create works on a 
 empty store.
 
 SKIPS CLEANLY when floci is not installed or Docker is unreachable — the same philosophy as
-the `pg_conn` fixture. Read the skip count: a skipped test is not a passing one.
+the floci DynamoDB tier. Read the skip count: a skipped test is not a passing one.
 """
 
 import pytest

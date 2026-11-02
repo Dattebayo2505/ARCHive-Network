@@ -1,37 +1,79 @@
-"""Dev-mode: run the real ETL against a local Postgres + local object store.
+"""Dev-mode: run the real ETL against a DynamoDB table (floci locally) + a local object store.
 
-Every route here 404s unless `settings.database_url` is set. The frontend toggle only *reveals*
-the panel — the backend decides whether dev-mode is usable.
+Every route here 404s unless `settings.dynamodb_table` is set. The frontend toggle only
+*reveals* the panel; the backend decides whether dev-mode is usable.
+
+Handlers call `_table()` in their bodies, never through `Depends`: tests monkeypatch the module
+attribute, and a `Depends` reference would silently bypass the patch.
 """
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from pathlib import Path
+from typing import Literal
 
-import psycopg
-from fastapi import APIRouter, HTTPException, Request
+from botocore.exceptions import BotoCoreError, ClientError
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from ..config import settings
-from ..loader import db
+from ..loader import dynamo
 from ..loader.load import load
 from ..loader.storage import LocalStorage
 from ..loader.validate import validate
 
 router = APIRouter()
 
+_BOTO_ERRORS = (BotoCoreError, ClientError)
+NOT_CONFIGURED = "dev-mode is not configured (set ARCHIVENETWORK_DYNAMODB_TABLE)"
+REFUSE_AWS = (
+    "Refusing to create or delete a table on real AWS; production tables come from "
+    "Terraform (infra/)."
+)
 
-class SchemaRequest(BaseModel):
+
+class TableRequest(BaseModel):
     reset: bool = False
 
 
-def _require_db() -> str:
-    if not settings.database_url:
-        raise HTTPException(
-            status_code=404,
-            detail="dev-mode is not configured (set ARCHIVENETWORK_DATABASE_URL)",
-        )
-    return settings.database_url
+def _require_table() -> str:
+    if not settings.dynamodb_table:
+        raise HTTPException(status_code=404, detail=NOT_CONFIGURED)
+    return settings.dynamodb_table
+
+
+def _table() -> dynamo.Table:
+    _require_table()
+    return dynamo.from_settings(settings)
+
+
+def _unreachable(p: dynamo.Probe) -> HTTPException:
+    return HTTPException(
+        status_code=502, detail=f"Can't reach DynamoDB at {p.endpoint} — {p.reason}"
+    )
+
+
+def _boto_failed(exc: Exception, suffix: str = "") -> HTTPException:
+    return HTTPException(status_code=502, detail=f"DynamoDB request failed — {exc}.{suffix}")
+
+
+def _reachable_table() -> tuple[dynamo.Table, dynamo.Probe]:
+    t = _table()
+    p = dynamo.probe(t)
+    if not p.endpoint_reachable:
+        raise _unreachable(p)
+    return t, p
+
+
+def _ready_table() -> dynamo.Table:
+    """The one guard load, rows and validate share: reachable, not refused, table present."""
+    t, p = _reachable_table()
+    if p.refused:
+        raise HTTPException(status_code=502, detail=f"DynamoDB refused the request — {p.reason}")
+    if not p.table_exists:
+        raise HTTPException(status_code=409, detail="The table does not exist — create it first.")
+    return t
 
 
 def _store() -> LocalStorage:
@@ -52,141 +94,123 @@ def _ready_root(request: Request) -> tuple[Path, str]:
 
 @router.get("/api/dev/status")
 def status() -> dict:
-    if not settings.database_url:
+    if not settings.dynamodb_table:
         return {
             "enabled": False,
-            "connected": False,
-            "reason": "ARCHIVENETWORK_DATABASE_URL is not set",
+            "endpoint_reachable": False,
+            "table_exists": False,
+            "reason": "ARCHIVENETWORK_DYNAMODB_TABLE is not set",
         }
-    try:
-        with db.connect(settings.database_url) as conn:
-            ready = db.tables_exist(conn)
-            row_counts = db.counts(conn) if ready else {}
-    except psycopg.Error as exc:
-        # A failure here is ambiguous on its face — "server down" and "database missing" are
-        # the same libpq error. Probe the server so the UI can offer the right next step
-        # (start Postgres vs. press Create database) instead of just printing the error.
-        found = db.probe(settings.database_url)
-        return {
-            "enabled": True,
-            "connected": False,
-            "reason": str(exc),
-            "server_up": found.server_up,
-            "database": found.database,
-            "database_exists": found.database_exists,
-        }
+    t = _table()
+    p = dynamo.probe(t)
+    reason = p.reason
+    row_counts: dict[str, int] = {}
+    if p.table_exists:
+        try:
+            row_counts = dynamo.counts(t)
+        except _BOTO_ERRORS as exc:
+            reason = str(exc)
     return {
         "enabled": True,
-        "connected": True,
-        "server_up": True,
-        "database": db.database_name(settings.database_url),
-        "database_exists": True,
-        "tables_exist": ready,
+        **asdict(p),
+        "reason": reason,
+        "on_emulator": t.on_emulator,
         "counts": row_counts,
         "media_root": str(settings.media_root),
         "media_base_url": settings.media_base_url,
     }
 
 
-def _database_state() -> dict:
-    found = db.probe(_require_db())
-    return {
-        "server_up": found.server_up,
-        "database": found.database,
-        "database_exists": found.database_exists,
-        "reason": found.reason,
-    }
+@router.get("/api/dev/table")
+def table_status() -> dict:
+    """Is the endpoint up, and does the table exist? Never 500s on a stopped emulator."""
+    return asdict(dynamo.probe(_table()))
 
 
-@router.get("/api/dev/database")
-def database_status() -> dict:
-    """Is the server up, and does our database exist? Never 500s on a down server."""
-    return _database_state()
-
-
-@router.post("/api/dev/database")
-def database_create() -> dict:
-    url = _require_db()
-    found = db.probe(url)
-    if not found.server_up:
-        raise HTTPException(
-            status_code=502, detail=f"Can't reach the PostgreSQL server — {found.reason}"
-        )
-    created = db.create_database(url)
-    return {**_database_state(), "created": created}
-
-
-@router.delete("/api/dev/database")
-def database_drop() -> dict:
-    """Destructive — drops the whole database, tables and rows with it. Dev only."""
-    url = _require_db()
-    found = db.probe(url)
-    if not found.server_up:
-        raise HTTPException(
-            status_code=502, detail=f"Can't reach the PostgreSQL server — {found.reason}"
-        )
-    dropped = db.drop_database(url)
-    return {**_database_state(), "dropped": dropped}
-
-
-@router.post("/api/dev/schema")
-def schema(body: SchemaRequest | None = None) -> dict:
-    url = _require_db()
+@router.post("/api/dev/table")
+def table_create(body: TableRequest | None = None) -> dict:
+    t, _ = _reachable_table()
     reset = bool(body and body.reset)
-    with db.connect(url) as conn:
+    try:
         if reset:
-            db.reset_tables(conn)
-        else:
-            db.create_tables(conn)
-        return {"tables_exist": db.tables_exist(conn), "reset": reset, "counts": db.counts(conn)}
+            dynamo.delete_table(t)
+        created = dynamo.create_table(t)
+        row_counts = dynamo.counts(t)
+    except dynamo.NotOnEmulator as exc:
+        raise HTTPException(status_code=409, detail=REFUSE_AWS) from exc
+    except _BOTO_ERRORS as exc:
+        raise _boto_failed(exc) from exc
+    return {**asdict(dynamo.probe(t)), "created": created, "reset": reset, "counts": row_counts}
+
+
+@router.delete("/api/dev/table")
+def table_delete() -> dict:
+    """Destructive: drops the whole table, every item with it. Emulator only."""
+    t, _ = _reachable_table()
+    try:
+        deleted = dynamo.delete_table(t)
+    except dynamo.NotOnEmulator as exc:
+        raise HTTPException(status_code=409, detail=REFUSE_AWS) from exc
+    except _BOTO_ERRORS as exc:
+        raise _boto_failed(exc) from exc
+    return {**asdict(dynamo.probe(t)), "deleted": deleted}
 
 
 @router.post("/api/dev/load")
 def run_load(request: Request) -> dict:
-    url = _require_db()
+    _require_table()
     root, workspace_id = _ready_root(request)
-    with db.connect(url) as conn:
-        if not db.tables_exist(conn):
-            raise HTTPException(status_code=409, detail="Tables do not exist — create them first.")
-        result = load(root, workspace_id, _store(), conn)
-        return {
-            "albums_inserted": result.albums_inserted,
-            "albums_updated": result.albums_updated,
-            "media_inserted": result.media_inserted,
-            "media_updated": result.media_updated,
-            "files_stored": result.files_stored,
-            "files_skipped": result.files_skipped,
-            "orphans": result.orphans,
-            "errors": result.errors,
-            "counts": db.counts(conn),
-        }
+    t = _ready_table()
+    try:
+        result = load(root, workspace_id, _store(), t)
+        row_counts = dynamo.counts(t)
+    except _BOTO_ERRORS as exc:
+        raise _boto_failed(exc, " Re-running the load is safe.") from exc
+    return {
+        "albums_inserted": result.albums_inserted,
+        "albums_updated": result.albums_updated,
+        "media_inserted": result.media_inserted,
+        "media_updated": result.media_updated,
+        "files_stored": result.files_stored,
+        "files_skipped": result.files_skipped,
+        "orphans": result.orphans,
+        "errors": result.errors,
+        "skipped_deleted": result.skipped_deleted,
+        "counts": row_counts,
+    }
 
 
 @router.get("/api/dev/rows")
-def rows(table: str = "media", limit: int = 50, offset: int = 0) -> dict:
-    url = _require_db()
-    if table not in {"media", "photo_album"}:
-        raise HTTPException(status_code=400, detail="table must be 'media' or 'photo_album'")
+def rows(
+    kind: Literal["media", "album"] = Query("media", alias="type"),
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    t = _ready_table()
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
-    with db.connect(url) as conn, conn.cursor() as cur:
-        # `table` is allow-listed above, so the interpolation cannot carry user input.
-        cur.execute(f"SELECT count(*) FROM {table}")
-        total = cur.fetchone()[0]
-        cur.execute(f"SELECT * FROM {table} ORDER BY 1 LIMIT %s OFFSET %s", (limit, offset))
-        columns = [c.name for c in cur.description]
-        data = [dict(zip(columns, r)) for r in cur.fetchall()]
-    return {"table": table, "total": total, "limit": limit, "offset": offset, "rows": data}
+    try:
+        items = dynamo.scan_items(t, kind)
+    except _BOTO_ERRORS as exc:
+        raise _boto_failed(exc) from exc
+    return {
+        "type": kind,
+        "total": len(items),
+        "limit": limit,
+        "offset": offset,
+        "rows": items[offset:offset + limit],
+    }
 
 
 @router.get("/api/dev/validate")
 def run_validate(request: Request) -> dict:
-    url = _require_db()
+    _require_table()
     root, _ = _ready_root(request)
-    with db.connect(url) as conn:
-        if not db.tables_exist(conn):
-            raise HTTPException(status_code=409, detail="Tables do not exist — create them first.")
-        checks = validate(root, _store(), conn)
+    t = _ready_table()
+    try:
+        checks = validate(root, _store(), t)
+    except _BOTO_ERRORS as exc:
+        raise _boto_failed(exc) from exc
     return {
         "ok": all(c.ok for c in checks),
         "checks": [{"name": c.name, "ok": c.ok, "detail": c.detail} for c in checks],

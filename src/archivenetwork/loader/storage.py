@@ -16,8 +16,8 @@ UNCATEGORIZED = "uncategorized"
 
 # A custom endpoint (the floci emulator) must fail fast. boto3 otherwise waits out a 60s
 # default connect timeout, multiplied by its default retry count, before the route can
-# render a 502 — long enough that the UI reads as hung rather than failed. This is the
-# same lesson `db.CONNECT_TIMEOUT` records for psycopg.
+# render a 502 — long enough that the UI reads as hung rather than failed. `dynamo.connect`
+# reuses these bounds for the same reason.
 ENDPOINT_CONNECT_TIMEOUT = 3
 ENDPOINT_READ_TIMEOUT = 10
 

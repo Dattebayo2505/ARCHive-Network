@@ -4,7 +4,7 @@ A sibling of `routes_s3` with the same shape and the same independence: no datab
 session, no export required — the container is a machine-level thing, and asking a volunteer
 to have a workspace open before they may restart Docker would be theatre.
 
-The split mirrors `/api/dev/database` vs `/api/dev/schema`: `GET /api/docker/status` answers
+The split mirrors `GET` vs `POST /api/dev/table`: `GET /api/docker/status` answers
 *can we*, and only then does the panel offer the verbs. `POST` refuses with a 409 when it
 can't, so a stale frontend can never turn a missing binary into a 500.
 """
