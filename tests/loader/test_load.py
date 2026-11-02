@@ -16,6 +16,7 @@ from archivenetwork.loader.items import (
 from archivenetwork.loader.load import load
 from archivenetwork.loader.read import read_ready
 from archivenetwork.loader.storage import LocalStorage, media_key
+from archivenetwork.loader.validate import validate
 
 
 def _items(ddb) -> dict[str, dict]:
@@ -294,3 +295,5 @@ def test_a_load_that_dies_midway_converges_on_rerun(ready_root: Path, tmp_path: 
     for row in data.media:
         expected = media_key(row.fbid, row.hashtag, row.group, Path(row.uri).suffix)
         assert items[f"MEDIA#{row.fbid}"]["storage_path"] == expected
+    for check in validate(ready_root, store, ddb):
+        assert check.ok, f"{check.name}: {check.detail}"
