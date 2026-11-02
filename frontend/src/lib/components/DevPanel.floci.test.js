@@ -20,9 +20,9 @@ const api = vi.hoisted(() => ({
 	autoCurate: vi.fn(),
 	devLoad: vi.fn(),
 	devValidate: vi.fn(),
-	devTable: vi.fn(),
-	devTableCreate: vi.fn(),
-	devTableDelete: vi.fn(),
+	devTables: vi.fn(),
+	devTablesCreate: vi.fn(),
+	devTablesDelete: vi.fn(),
 	storeUrl: (key) => `/store/${key}`
 }));
 

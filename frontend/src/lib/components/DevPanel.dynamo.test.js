@@ -18,9 +18,9 @@ const api = vi.hoisted(() => ({
 	autoCurate: vi.fn(),
 	devLoad: vi.fn(),
 	devValidate: vi.fn(),
-	devTable: vi.fn(),
-	devTableCreate: vi.fn(),
-	devTableDelete: vi.fn(),
+	devTables: vi.fn(),
+	devTablesCreate: vi.fn(),
+	devTablesDelete: vi.fn(),
 	storeUrl: (key) => `/store/${key}`
 }));
 
@@ -29,17 +29,36 @@ vi.mock('$lib/api.js', () => api);
 import DevPanel from './DevPanel.svelte';
 
 const ENDPOINT = 'http://127.0.0.1:4566';
+const PREFIX = 'p';
+const KINDS = [
+	'album',
+	'media',
+	'credit',
+	'featuring',
+	'staffer',
+	'staff_term',
+	'department',
+	'category',
+	'channel',
+	'service',
+	'users'
+];
+const tableName = (kind) => `${PREFIX}-${kind === 'staff_term' ? 'staff-term' : kind}`;
+const TABLES = Object.fromEntries(KINDS.map((k) => [k, tableName(k)]));
+const COUNTS = Object.fromEntries(KINDS.map((k) => [k, 0]));
 
 const status = (over = {}) => ({
 	enabled: true,
 	endpoint: ENDPOINT,
 	on_emulator: true,
 	endpoint_reachable: true,
-	table: 'archers-network-dev',
+	prefix: PREFIX,
+	tables: TABLES,
+	missing: [],
 	table_exists: true,
 	refused: false,
 	reason: null,
-	counts: { album: 3, media: 12 },
+	counts: { ...COUNTS, album: 3, media: 12 },
 	media_root: 'workspace/store',
 	media_base_url: '/store',
 	...over
@@ -55,25 +74,31 @@ beforeEach(() => {
 	api.s3Status.mockResolvedValue({ aws: { enabled: false }, floci: { enabled: false } });
 	api.dockerStatus.mockResolvedValue({ available: false, installed: false });
 	api.flociUiTarget.mockResolvedValue({ ready: false });
-	api.devTable.mockResolvedValue({ endpoint_reachable: true, table_exists: true });
-	api.devTableCreate.mockResolvedValue({
+	api.devTables.mockResolvedValue({
+		endpoint_reachable: true,
+		table_exists: true,
+		prefix: PREFIX,
+		tables: TABLES,
+		missing: []
+	});
+	api.devTablesCreate.mockResolvedValue({
 		ok: true,
 		status: 200,
-		body: { ...status(), created: true, reset: false }
+		body: { ...status(), created: [...KINDS], reset: false }
 	});
 });
 
 describe('Dev panel on DynamoDB', () => {
-	it('names the table setting when dev mode is off', async () => {
+	it('names the prefix setting when dev mode is off', async () => {
 		api.devStatus.mockResolvedValue({
 			enabled: false,
 			endpoint_reachable: false,
 			table_exists: false,
-			reason: 'ARCHIVENETWORK_DYNAMODB_TABLE is not set'
+			reason: 'ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX is not set'
 		});
 		const { container } = render(DevPanel);
 		await screen.findByText('Dev mode is not configured');
-		expect(container.textContent).toContain('ARCHIVENETWORK_DYNAMODB_TABLE');
+		expect(container.textContent).toContain('ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX');
 	});
 
 	it('points at docker compose when floci is unreachable', async () => {
@@ -85,12 +110,38 @@ describe('Dev panel on DynamoDB', () => {
 		expect(container.textContent).toContain('docker compose up -d');
 	});
 
-	it('offers Create table when the table is missing', async () => {
-		api.devStatus.mockResolvedValue(status({ table_exists: false, counts: {} }));
+	it('offers Create tables when the tables are missing', async () => {
+		api.devStatus.mockResolvedValue(
+			status({ table_exists: false, missing: [...KINDS], counts: {} })
+		);
 		render(DevPanel);
-		await screen.findByText("The table doesn't exist yet");
-		await fireEvent.click(screen.getByRole('button', { name: 'Create table' }));
-		await waitFor(() => expect(api.devTableCreate).toHaveBeenCalledWith(false));
+		await screen.findByText("The tables don't exist yet");
+		await fireEvent.click(screen.getByRole('button', { name: 'Create tables' }));
+		await waitFor(() => expect(api.devTablesCreate).toHaveBeenCalledWith(false));
+		await screen.findByText('Created 11 tables.');
+	});
+
+	it('names the missing tables', async () => {
+		api.devStatus.mockResolvedValue({
+			enabled: true,
+			endpoint: ENDPOINT,
+			endpoint_reachable: true,
+			prefix: PREFIX,
+			table_exists: false,
+			refused: false,
+			missing: ['credit'],
+			tables: TABLES,
+			on_emulator: true,
+			counts: {}
+		});
+		const { container } = render(DevPanel);
+		await screen.findByText('1 of 11 tables is missing');
+		expect(container.textContent).toContain('p-credit');
+		const credit = [...screen.getByTestId('table-list').querySelectorAll('li')].find((li) =>
+			li.textContent.includes('p-credit')
+		);
+		expect(credit.textContent).toContain('missing');
+		expect(screen.getByRole('button', { name: 'Create tables' })).toBeTruthy();
 	});
 
 	it('shows item counts and never says PostgreSQL when ready', async () => {
@@ -101,21 +152,37 @@ describe('Dev panel on DynamoDB', () => {
 		expect(container.textContent).not.toContain('PostgreSQL');
 	});
 
+	it('lists every probed table with its count', async () => {
+		render(DevPanel);
+		await screen.findByText('Connected');
+		const list = screen.getByTestId('table-list');
+		for (const name of Object.values(TABLES)) expect(list.textContent).toContain(name);
+		expect(list.querySelectorAll('li')).toHaveLength(11);
+	});
+
+	it('offers Reset and Delete tables on the emulator', async () => {
+		render(DevPanel);
+		await screen.findByText('Connected');
+		expect(screen.getByRole('button', { name: 'Reset tables' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Delete tables' })).toBeTruthy();
+	});
+
 	it('hides Reset and Delete on real AWS', async () => {
 		api.devStatus.mockResolvedValue(status({ on_emulator: false, endpoint: 'AWS (ap-southeast-1)' }));
 		render(DevPanel);
 		await screen.findByText('Connected');
-		expect(screen.queryByRole('button', { name: 'Reset table' })).toBeNull();
-		expect(screen.queryByRole('button', { name: 'Delete table' })).toBeNull();
+		// The emulator test above proves these labels exist, so null here is not vacuous.
+		expect(screen.queryByRole('button', { name: 'Reset tables' })).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Delete tables' })).toBeNull();
 	});
 
-	it('does not offer Create table when DynamoDB refused', async () => {
+	it('does not offer Create tables when DynamoDB refused', async () => {
 		api.devStatus.mockResolvedValue(
 			status({ table_exists: false, refused: true, counts: {}, reason: 'AccessDenied' })
 		);
 		render(DevPanel);
 		await screen.findByText('DynamoDB refused the request');
-		expect(screen.queryByRole('button', { name: 'Create table' })).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Create tables' })).toBeNull();
 	});
 
 	it('lists tombstoned items under What was skipped', async () => {
@@ -131,26 +198,24 @@ describe('Dev panel on DynamoDB', () => {
 				files_skipped: 0,
 				orphans: [],
 				errors: [],
-				skipped_deleted: ['MEDIA#g01'],
-				counts: { album: 1, media: 2 }
+				skipped_deleted: ['media:g01'],
+				counts: { ...COUNTS, album: 1, media: 2 }
 			}
 		});
 		const { container } = render(DevPanel);
 		await screen.findByText('Connected');
 		await fireEvent.click(screen.getByRole('button', { name: 'Run load' }));
 		await screen.findByText('What was skipped');
-		expect(container.textContent).toContain('tombstoned: MEDIA#g01');
+		expect(container.textContent).toContain('tombstoned: media:g01');
 		expect(container.textContent).toContain('1 tombstoned');
 	});
 
 	describe('JSON view', () => {
 		const item = {
-			PK: 'MEDIA#g01',
-			SK: '#META',
 			id: 'g01',
 			media_type: 'photo',
+			album_id: 'g01',
 			storage_path: 'fb-exports/archevt/headline-one/g01.jpg',
-			GSI1PK: 'ALBUM#g01',
 			overrides: { title: 'CMS title' }
 		};
 
@@ -177,7 +242,7 @@ describe('Dev panel on DynamoDB', () => {
 			const pre = await screen.findByTestId('rows-json');
 			expect(JSON.parse(pre.textContent)).toEqual([item]);
 			// Attributes outside the curated columns are exactly what this view is for.
-			expect(pre.textContent).toContain('"GSI1PK": "ALBUM#g01"');
+			expect(pre.textContent).toContain('"album_id": "g01"');
 			expect(screen.queryByRole('table')).toBeNull();
 		});
 

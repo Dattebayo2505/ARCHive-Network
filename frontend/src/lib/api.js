@@ -429,15 +429,15 @@ export async function autoCurate(perAlbum = null, fetchFn = fetch) {
 	return { ok: res.ok, status: res.status, body: await res.json() };
 }
 
-// --- Dev-mode: the DynamoDB table (floci locally) + object store. Every route 404s unless the
-// backend has ARCHIVENETWORK_DYNAMODB_TABLE set, so the panel must handle `enabled: false`. ---
+// --- Dev-mode: the per-type DynamoDB tables (floci locally) + object store. Every route 404s unless
+// the backend has ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX set, so the panel must handle `enabled: false`. ---
 
 /** Build the URL an object is served from: <base>/<storage_path>. In prod the base is a CDN. */
 export function storeUrl(storagePath, baseUrl = '/store') {
 	return url(`${baseUrl}/${storagePath}`);
 }
 
-/** Endpoint + table status. Never throws on a missing table — it reports it. */
+/** Endpoint + per-table status. Never throws on a missing table — it reports it. */
 export async function devStatus(fetchFn = fetch) {
 	return (await fetchFn(url('/api/dev/status'))).json();
 }
@@ -461,21 +461,27 @@ export async function devValidate(fetchFn = fetch) {
 	return { ok: res.ok, status: res.status, body: await res.json() };
 }
 
-/** Is the endpoint up, and does the table exist? Never throws. */
-export async function devTable(fetchFn = fetch) {
+/** Is the endpoint up, and which of the tables exist? Never throws. */
+export async function devTables(fetchFn = fetch) {
+	const off = (reason) => ({
+		endpoint_reachable: false,
+		table_exists: false,
+		missing: [],
+		tables: {},
+		reason
+	});
 	try {
-		const res = await fetchFn(url('/api/dev/table'));
-		if (!res.ok)
-			return { endpoint_reachable: false, table_exists: false, reason: 'dev mode is off' };
+		const res = await fetchFn(url('/api/dev/tables'));
+		if (!res.ok) return off('dev mode is off');
 		return res.json();
 	} catch {
-		return { endpoint_reachable: false, table_exists: false, reason: UNREACHABLE };
+		return off(UNREACHABLE);
 	}
 }
 
-/** Create the table (emulator only); `reset` deletes and recreates it empty (destructive). */
-export async function devTableCreate(reset = false, fetchFn = fetch) {
-	const res = await fetchFn(url('/api/dev/table'), {
+/** Create the missing tables (emulator only); `reset` drops and recreates all 11 empty. */
+export async function devTablesCreate(reset = false, fetchFn = fetch) {
+	const res = await fetchFn(url('/api/dev/tables'), {
 		method: 'POST',
 		headers: jsonHeaders,
 		body: JSON.stringify({ reset })
@@ -483,9 +489,9 @@ export async function devTableCreate(reset = false, fetchFn = fetch) {
 	return { ok: res.ok, status: res.status, body: await res.json() };
 }
 
-/** Delete the whole table (emulator only) — destructive, takes every item with it. */
-export async function devTableDelete(fetchFn = fetch) {
-	const res = await fetchFn(url('/api/dev/table'), { method: 'DELETE' });
+/** Delete all 11 tables (emulator only) — destructive, takes every item with them. */
+export async function devTablesDelete(fetchFn = fetch) {
+	const res = await fetchFn(url('/api/dev/tables'), { method: 'DELETE' });
 	return { ok: res.ok, status: res.status, body: await res.json() };
 }
 

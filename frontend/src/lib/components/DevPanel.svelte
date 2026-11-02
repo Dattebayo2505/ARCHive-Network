@@ -4,9 +4,9 @@
 		devLoad,
 		devRows,
 		devStatus,
-		devTable,
-		devTableCreate,
-		devTableDelete,
+		devTables,
+		devTablesCreate,
+		devTablesDelete,
 		devValidate,
 		dockerFloci,
 		dockerStatus,
@@ -27,7 +27,7 @@
 	// The dev pane runs the real downstream ETL locally: it reads the built ready/ folder,
 	// copies each image into a local object store, and upserts album + media items into
 	// DynamoDB. Dev-mode is a *backend* capability — every /api/dev/* route 404s unless
-	// ARCHIVENETWORK_DYNAMODB_TABLE is set — so this panel must degrade honestly when it isn't.
+	// ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX is set — so this panel must degrade honestly when it isn't.
 	//
 	// Auto-curate is the exception: it is a *selection* action, needs no table, and so lives
 	// outside the table-gated block below.
@@ -252,7 +252,7 @@
 	let offset = $state(0);
 	/** @type {{type: string, total: number, limit: number, offset: number, rows: Record<string, any>[]} | null} */
 	let rows = $state(null);
-	// The table shows curated columns; JSON shows each item whole (GSI keys, overrides, loaded_at).
+	// The table shows curated columns; JSON shows each item whole (index keys, overrides, loaded_at).
 	let view = $state('table');
 	const LIMIT = 10;
 
@@ -263,18 +263,22 @@
 		status = await devStatus();
 	}
 
+	// A probe's `tables` holds only the probed kinds: all 11 on floci, the 5 loader tables on AWS.
+	const tableTotal = (p) => Object.keys(p?.tables ?? {}).length;
+	const missingNames = (p) => (p?.missing ?? []).map((k) => p.tables?.[k] ?? k).join(', ');
+
 	/** The explicit "is it there?" check. Re-reads the probe that /api/dev/status carries. */
 	async function checkTable() {
 		busy = 'table-status';
 		tableError = '';
 		tableNotice = '';
-		const found = await devTable();
+		const found = await devTables();
 		if (!found.endpoint_reachable) tableError = found.reason ?? "Can't reach DynamoDB.";
 		else if (found.refused) tableError = found.reason ?? 'DynamoDB refused the request.';
 		else
 			tableNotice = found.table_exists
-				? `Table "${found.table}" exists.`
-				: `DynamoDB is up, but table "${found.table}" does not exist yet.`;
+				? `All ${tableTotal(found)} tables exist under "${found.prefix}".`
+				: `DynamoDB is up, but ${found.missing.length} of ${tableTotal(found)} tables are missing: ${missingNames(found)}.`;
 		await refreshStatus();
 		busy = '';
 	}
@@ -299,21 +303,24 @@
 
 	const createTable = () =>
 		runTable(
-			() => devTableCreate(false),
+			() => devTablesCreate(false),
 			'table-create',
-			(b) => (b.created ? `Created table "${b.table}".` : `Table "${b.table}" was already there.`)
+			(b) =>
+				b.created?.length
+					? `Created ${b.created.length} tables.`
+					: `All ${tableTotal(b)} tables were already there.`
 		);
 
 	const resetTable = () =>
 		runTable(
-			() => devTableCreate(true),
+			() => devTablesCreate(true),
 			'table-reset',
-			(b) => `Reset table "${b.table}"; it is empty.`
+			() => 'Reset all 11 tables; they are empty.'
 		);
 
 	const deleteTable = () =>
-		runTable(devTableDelete, 'table-delete', (b) =>
-			b.deleted ? `Deleted table "${b.table}".` : `Table "${b.table}" was already gone.`
+		runTable(devTablesDelete, 'table-delete', (b) =>
+			b.deleted?.length ? `Deleted ${b.deleted.length} tables.` : 'The tables were already gone.'
 		);
 
 	async function refreshRows() {
@@ -535,6 +542,30 @@
 	>
 		{busy === key ? busyLabel : label}
 	</button>
+{/snippet}
+
+<!-- Every probed table with its item count; a missing one says so in words, not only colour.
+     Counts arrive only once every table exists, so a partial set shows "—" beside the present ones. -->
+{#snippet tableList()}
+	<ul
+		class="grid grid-cols-1 gap-px border-b border-surface-200 bg-surface-200 sm:grid-cols-2 lg:grid-cols-3"
+		data-testid="table-list"
+		aria-label="DynamoDB tables"
+	>
+		{#each Object.entries(status.tables ?? {}) as [kind, name] (kind)}
+			{@const gone = status.missing?.includes(kind)}
+			<li class="flex items-baseline justify-between gap-3 bg-surface-50 px-5 py-2">
+				<code class="min-w-0 truncate font-mono text-xs text-surface-800" title={name}>{name}</code>
+				{#if gone}
+					<span class="shrink-0 text-xs font-semibold text-warning-700">missing</span>
+				{:else}
+					<span class="shrink-0 font-mono text-xs tabular-nums text-surface-600"
+						>{status.counts?.[kind] ?? '—'}</span
+					>
+				{/if}
+			</li>
+		{/each}
+	</ul>
 {/snippet}
 
 <!-- The one outbound link in this panel. The hover state is a SOLID green chip rather than the
@@ -982,7 +1013,7 @@
 				{#if status === null}
 					<div class="flex items-center gap-2.5">
 						<span class="size-2.5 animate-pulse rounded-full bg-surface-400" aria-hidden="true"></span>
-						<p class="text-sm text-surface-600">Checking the table…</p>
+						<p class="text-sm text-surface-600">Checking the tables…</p>
 					</div>
 				{:else if !status.enabled}
 					<div class="max-w-prose">
@@ -991,19 +1022,27 @@
 							<p class="text-sm font-medium text-surface-900">Dev mode is not configured</p>
 						</div>
 						<p class="mt-2 text-sm leading-relaxed text-surface-600">
-							The backend has no DynamoDB table to talk to. Set <code
+							The backend has no DynamoDB tables to talk to. Set <code
 								class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
-								>ARCHIVENETWORK_DYNAMODB_TABLE</code
+								>ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX</code
 							>
 							in a <code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
 								>.env</code
 							> file at the repo root, then restart the API.
 						</p>
+						<!-- An old .env naming the single table gets a "renamed" reason, worth showing verbatim. -->
+						{#if status.reason && !status.reason.endsWith('is not set')}
+							<p class="mt-2 font-mono text-xs leading-relaxed break-words text-warning-700">
+								{status.reason}
+							</p>
+						{/if}
 					</div>
 				{:else if !status.endpoint_reachable || status.refused || !status.table_exists}
-					<!-- An unreachable endpoint, a refusal and a missing table each need a different fix,
-					     and only the last is one this panel can make — so only it earns Create table. -->
+					<!-- An unreachable endpoint, a refusal and missing tables each need a different fix,
+					     and only the last is one this panel can make — so only it earns Create tables. -->
 					{@const missing = status.endpoint_reachable && !status.refused}
+					{@const total = tableTotal(status)}
+					{@const gone = status.missing?.length ?? 0}
 					<div class="max-w-prose">
 						<div class="flex items-center gap-2.5">
 							<span
@@ -1011,8 +1050,10 @@
 								aria-hidden="true"
 							></span>
 							<p class="text-sm font-medium text-surface-900">
-								{#if missing}
-									The table doesn't exist yet
+								{#if missing && gone < total}
+									{gone} of {total} tables {gone === 1 ? 'is' : 'are'} missing
+								{:else if missing}
+									The tables don't exist yet
 								{:else if status.refused}
 									DynamoDB refused the request
 								{:else}
@@ -1027,18 +1068,22 @@
 									class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
 									>{status.endpoint}</code
 								>
-								is up, but has no table named
-								<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
-									>{status.table}</code
-								>. Create it here.
+								is up, but {gone === 1 ? 'this table is' : 'these tables are'} missing:
+								<code
+									class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs break-words text-surface-800"
+									>{missingNames(status)}</code
+								>.
+								{status.on_emulator
+									? 'Create them here.'
+									: 'On AWS they come from Terraform (infra/), not this panel.'}
 							{:else if status.refused}
 								<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
 									>{status.endpoint}</code
 								>
-								answered but refused to describe
+								answered but refused to describe the
 								<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
-									>{status.table}</code
-								>. Check the credentials and permissions.
+									>{status.prefix}-*</code
+								> tables. Check the credentials and permissions.
 							{:else if status.on_emulator}
 								Nothing answered at <code
 									class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
@@ -1063,7 +1108,7 @@
 					<div class="flex gap-2">
 						{@render secondaryBtn('Check status', 'Checking…', 'table-status', checkTable)}
 						{#if missing && status.on_emulator}
-							{@render primaryBtn('Create table', 'Creating…', 'table-create', createTable)}
+							{@render primaryBtn('Create tables', 'Creating…', 'table-create', createTable)}
 						{/if}
 					</div>
 				{:else}
@@ -1073,8 +1118,9 @@
 							<p class="text-sm font-medium text-surface-900">Connected</p>
 						</div>
 						<p class="mt-2 text-xs text-surface-600">
-							Table <code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
-								>{status.table}</code
+							{tableTotal(status)} tables <code
+								class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
+								>{status.prefix}-*</code
 							>
 							· endpoint
 							<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
@@ -1095,9 +1141,9 @@
 						<!-- Table admin is emulator-only (the backend 409s on AWS; Terraform owns those
 						     tables). Delete sits last behind a named confirm: the widest blast radius here. -->
 						{#if status.on_emulator}
-							{@render secondaryBtn('Reset table', 'Resetting…', 'table-reset', () => (confirmReset = true))}
+							{@render secondaryBtn('Reset tables', 'Resetting…', 'table-reset', () => (confirmReset = true))}
 							{@render secondaryBtn(
-								'Delete table',
+								'Delete tables',
 								'Deleting…',
 								'table-delete',
 								() => (confirmDeleteTable = true)
@@ -1133,6 +1179,7 @@
 						</div>
 					{/each}
 				</div>
+				{@render tableList()}
 
 				<!-- ── Load ─────────────────────────────────────────────── -->
 				<section class="border-b border-surface-200 p-5">
@@ -1438,10 +1485,11 @@
 					{/if}
 				</section>
 			{:else if connected && !status.table_exists && !status.refused}
-				<div class="border-t border-surface-200 px-5 py-8 text-center">
-					<p class="text-sm font-medium text-surface-800">The table isn't there yet</p>
+				<div class="border-t border-surface-200">{@render tableList()}</div>
+				<div class="px-5 py-8 text-center">
+					<p class="text-sm font-medium text-surface-800">Some tables aren't there yet</p>
 					<p class="mx-auto mt-1 max-w-prose text-sm text-surface-600">
-						Create <code class="font-mono text-xs">{status.table}</code> to start loading this workspace.
+						Create <code class="font-mono text-xs">{missingNames(status)}</code> to start loading this workspace.
 					</p>
 				</div>
 			{/if}
@@ -1465,8 +1513,8 @@
 
 <ConfirmDialog
 	open={confirmReset}
-	title="Reset the table?"
-	message="This deletes the {status?.table} table and recreates it empty. Items are lost, including any simulated CMS edits; the files already in the object store are left alone. Your export and ready folder are untouched."
+	title="Reset the tables?"
+	message="This deletes all 11 {status?.prefix}-* tables and recreates them empty. Items are lost, including any simulated CMS edits; the files already in the object store are left alone. Your export and ready folder are untouched."
 	confirmLabel="Delete and recreate"
 	cancelLabel="Cancel"
 	destructive
@@ -1479,9 +1527,9 @@
 
 <ConfirmDialog
 	open={confirmDeleteTable}
-	title="Delete the {status?.table} table?"
-	message="This deletes the whole table and every item in it. The files already in the object store, your export, and your ready folder are all left alone. You can create it again from this panel."
-	confirmLabel="Delete table"
+	title="Delete the {status?.prefix}-* tables?"
+	message="This deletes all 11 tables and every item in them. The files already in the object store, your export, and your ready folder are all left alone. You can create them again from this panel."
+	confirmLabel="Delete tables"
 	cancelLabel="Cancel"
 	destructive
 	onConfirm={() => {
