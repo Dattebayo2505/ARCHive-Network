@@ -81,8 +81,8 @@ variables. Backend settings use the `ARCHIVENETWORK_` prefix (see
 | `ARCHIVENETWORK_HOST` | `127.0.0.1` | API bind host. |
 | `ARCHIVENETWORK_PORT` | `8000` | API bind port. |
 | `ARCHIVENETWORK_CORS_ORIGINS` / `ARCHIVENETWORK_CORS_ORIGIN_REGEX` | localhost:5173/3000 | Origins allowed to call the API. |
-| `ARCHIVENETWORK_DYNAMODB_TABLE` | — (unset) | **Enables Dev Mode.** The DynamoDB table the loader writes, e.g. `archers-network-dev`. Every `/api/dev/*` route 404s while unset. |
-| `ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL` | `http://127.0.0.1:4566` | Where that table lives: the local floci emulator by default (dummy `test`/`test` credentials). Set it **empty** to mean real AWS (default credential chain); the panel then refuses to create, reset or delete tables, since production tables come from Terraform. |
+| `ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX` | — (unset) | **Enables Dev Mode.** The prefix of the 11 per-type DynamoDB tables, e.g. `archers-network-dev` → `archers-network-dev-album`, `-media`, `-credit`, `-featuring`, `-staffer`, `-staff-term`, `-department`, `-category`, `-channel`, `-service`, `-users`. The loader writes only album and media. Every `/api/dev/*` route 404s while unset. It replaces `ARCHIVENETWORK_DYNAMODB_TABLE`: an old `.env` line with only that name is reported as renamed in the Dev panel instead of silently turning Dev Mode off. |
+| `ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL` | `http://127.0.0.1:4566` | Where those tables live: the local floci emulator by default (dummy `test`/`test` credentials). Set it **empty** to mean real AWS (default credential chain); the panel then refuses to create, reset or delete tables, since production tables come from Terraform. |
 | `ARCHIVENETWORK_MEDIA_ROOT` | `workspace/store` | Dev-mode local object store (stands in for the S3 bucket). Keys are written below it as `fb-exports/<hashtag>/<album-slug>/<fbid>.jpg`. |
 | `ARCHIVENETWORK_FLOCI_VERSION_CHECK` | `true` | Log at startup whether the local floci emulator is the latest release (one GitHub call; `false` turns it off). |
 | `ARCHIVENETWORK_MEDIA_BASE_URL` | `/store` | Where the object store is served. In production this is a CDN domain instead. |
@@ -93,7 +93,7 @@ Settings are also read from a **gitignored `.env`** at the repo root, so nothing
 has to be exported into your shell or committed:
 
 ```ini
-ARCHIVENETWORK_DYNAMODB_TABLE=archers-network-dev
+ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX=archers-network-dev
 ```
 
 ## Usage
@@ -154,15 +154,16 @@ cd frontend && npm run build && node build
 ### Dev Mode — run the downstream ETL locally (optional)
 
 Curation is the tool's job, but you can rehearse the **downstream** phase locally:
-load the built `ready/` folder into a real DynamoDB table and inspect what lands.
+load the built `ready/` folder into real DynamoDB tables and inspect what lands.
 
-1. Start floci with `docker compose up -d` (Docker required; port 4566), and name a table
-   in `.env` (see **Configuration** above). Nothing else in the tool changes; without
-   `ARCHIVENETWORK_DYNAMODB_TABLE`, Dev Mode stays off and every `/api/dev/*` route 404s.
+1. Start floci with `docker compose up -d` (Docker required; port 4566), and set a table
+   prefix in `.env` (see **Configuration** above). Nothing else in the tool changes; without
+   `ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX`, Dev Mode stays off and every `/api/dev/*` route
+   404s. The tables don't have to exist yet: the panel creates all 11.
 2. In the UI, open the **settings gear** (header) and switch on **Dev Mode**. A
    **Dev Mode** entry appears in the album rail.
 3. The panel gives you: **Auto-curate** (pick ≤10 photos per album at random plus
-   every video — real, editable picks, not auto-kept), **Create / Reset / Delete table**
+   every video — real, editable picks, not auto-kept), **Create / Reset / Delete tables**
    (emulator only), **Run load**, a **validation report**, and a paginated **item browser**
    (album and media items) that renders each image straight from its `storage_path`.
 
@@ -171,8 +172,9 @@ export, never the tool's in-memory objects — because that is all the real
 downstream ETL will have. Photos are copied into a local object store
 (`workspace/store/`) under the same key an S3 bucket would use
 (`fb-exports/<hashtag>/<album-slug>/<fbid>.jpg`), so `LocalStorage` and
-`S3Storage` are interchangeable. The loader writes **album and media items** into one
-DynamoDB table with `UpdateItem` only, so a load never overwrites what the CMS edited, and
+`S3Storage` are interchangeable. The loader writes **album and media items** into their own
+DynamoDB tables (`<prefix>-album`, `<prefix>-media`) with `UpdateItem` only, so a load
+never overwrites what the CMS edited, and
 an item the CMS deleted stays deleted (it is skipped and reported, its bytes not re-uploaded). Taxonomy, credits, staff and users are CMS-written, with no source in the
 export.
 

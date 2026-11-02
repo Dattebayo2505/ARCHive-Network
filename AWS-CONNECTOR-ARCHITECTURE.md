@@ -180,7 +180,7 @@ VPC, bastion, tunnel or connection pool, and has true 35-day point-in-time recov
 
 **What runs today.** The loader reaches DynamoDB through Dev Mode, on the floci emulator by
 default. The PostgreSQL loader (psycopg 3, `ARCHIVENETWORK_DATABASE_URL`) was removed in the
-November 2026 port; no Postgres data was migrated, because the table rebuilds from `ready/` in
+November 2026 port; no Postgres data was migrated, because the tables rebuild from `ready/` in
 one load. Code: `loader/items.py` (what the loader may write), `loader/dynamo.py` (every boto3
 call), `loader/load.py` / `loader/validate.py` (orchestration), `web/routes_dev.py` (the API).
 
@@ -191,30 +191,42 @@ call), `loader/load.py` / `loader/validate.py` (orchestration), `web/routes_dev.
   connection URL, password or pool. Region `ap-southeast-1`, shared with the bucket.
 - **Two targets, like S3.** An `endpoint_url` points the client at the local floci emulator
   (port `4566`, which also serves DynamoDB), always with dummy `test`/`test` credentials.
-  An empty endpoint means AWS. Settings: `ARCHIVENETWORK_DYNAMODB_TABLE` (the Dev Mode gate:
-  every `/api/dev/*` route 404s when unset; dev table `archers-network-dev`) and
-  `ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL` (default `http://127.0.0.1:4566`).
-- **Table admin is emulator-only.** `GET/POST/DELETE /api/dev/table` probe, create (or reset)
-  and delete the table on floci. Pointed at AWS they refuse with a `409`: production tables
-  come from Terraform (`infra/`). A stopped emulator answers `502` naming the endpoint, never a
-  hang or a misleading "create the table first".
-- **Tables.** `archers-network` holds the album and media items the loader writes, plus
-  everything the CMS writes. `archers-network-users` holds CMS logins and is **never granted to
-  the loader**.
+  An empty endpoint means AWS. Settings: `ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX` (the Dev Mode
+  gate: every `/api/dev/*` route 404s when unset; dev prefix `archers-network-dev`) and
+  `ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL` (default `http://127.0.0.1:4566`). The prefix replaced
+  `ARCHIVENETWORK_DYNAMODB_TABLE`; an `.env` with only the old name is reported as renamed by
+  `/api/dev/status` rather than read as "never configured".
+- **Table admin is emulator-only.** `GET/POST/DELETE /api/dev/tables` probe, create (only the
+  missing ones, or reset all 11) and delete the tables on floci. Pointed at AWS they refuse with
+  a `409`: production tables come from Terraform (`infra/`). A stopped emulator answers `502`
+  naming the endpoint, never a hang or a misleading "create the tables first".
+- **Tables: one per item type, 11 in all**, named `<prefix>-<type>`. On AWS the prefix is
+  `archers-network`: `archers-network-album`, `-media`, `-credit`, `-featuring`, `-staffer`,
+  `-staff-term`, `-department`, `-category`, `-channel`, `-service` and `-users`. Entities are
+  keyed by `id`; edges by the ids they link (`credit`: `media_id` + `staffer_id`; `featuring`:
+  `parent_key` + `staffer_id`; `staff-term`: `staffer_id` + `term`). The loader writes album and
+  media items only. Everything else is CMS-written, and `-users` (CMS logins) is **never granted
+  to the loader**.
 - **Writes: `UpdateItem` only.** The loader never uses `PutItem`, `BatchWriteItem` or
   `batch_writer()`. Each of them replaces the whole item, which would silently erase every field
   the CMS has edited. Each write sets only the loader's own attributes, freezes `storage_path`
   with `if_not_exists`, and carries `attribute_not_exists(deleted_at)`, so a photo the CMS
   deleted is not brought back by the next weekly export.
-- **IAM.** The curator's role gets `GetItem`, `BatchGetItem`, `Query`, `Scan`, `DescribeTable` and
-  `UpdateItem` on the main table only. `UpdateItem` is meant to be narrowed to the loader's
-  attributes and key prefixes (`dynamodb:Attributes`, `dynamodb:LeadingKeys`); that condition
-  syntax is **unverified** until the spike. The S3 write narrows to `fb-exports/*`, because the
-  CMS owns a separate `cms/` prefix.
+- **IAM.** The curator's role gets `UpdateItem`, `BatchGetItem` and `GetItem` on **the album and
+  media tables only**, plus `Scan` and `DescribeTable` on the five tables the loader reads
+  (album, media, credit, featuring, staffer: validate, counts and the probe). So on real AWS the
+  probe, the counts and the ready guard cover only those five (`LOADER_KINDS`); on an emulator
+  they cover all 11. Without that split, an AccessDenied on a CMS table would turn every Dev
+  route into a `502`. The table ARN now does what `dynamodb:LeadingKeys` used to, so that
+  condition is gone; `UpdateItem` stays narrowed to the loader's attributes
+  (`dynamodb:Attributes`) with `ReturnValues = NONE`, a condition syntax still **unverified**
+  until the spike. The loader is granted nothing on `-users` (or any other table). The S3 write
+  narrows to `fb-exports/*`, because the CMS owns a separate `cms/` prefix.
 - **Testing.** The same two tiers as §1: `moto[dynamodb]` in memory, and floci in Docker as a
   real-endpoint tier. A local spike (2026-10-30) confirmed that both honour the loader's write
   rules: `if_not_exists`, `REMOVE`, condition expressions and sorted, sparse GSIs. Use floci
   **2.0 or later**: 1.7.0 dropped DynamoDB tables on a container restart once a GSI had a sort
-  key, and 2.4.0 keeps them (re-checked 2026-11-02). Tests never touch the configured table:
+  key, and 2.4.0 keeps them (re-checked 2026-11-02). Tests never touch the configured tables:
   the moto `ddb` fixture and the floci tier (`tests/loader/test_dynamo_floci.py`, its own
-  container at the compose pin) each use a derived `-test` / throwaway table.
+  container at the compose pin) each create all 11 under a derived `<prefix>-test` / throwaway
+  prefix.
