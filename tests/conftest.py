@@ -363,29 +363,6 @@ def _scratch_table() -> str:
     return scratch
 
 
-def _create_scratch_table(client, name: str) -> None:
-    attrs = ["PK", "SK", "GSI1PK", "GSI1SK", "GSI2PK", "GSI3PK", "GSI3SK"]
-    gsis = [("GSI1", "GSI1PK", "GSI1SK"), ("GSI2", "GSI2PK", None), ("GSI3", "GSI3PK", "GSI3SK")]
-    client.create_table(
-        TableName=name,
-        BillingMode="PAY_PER_REQUEST",
-        AttributeDefinitions=[{"AttributeName": a, "AttributeType": "S"} for a in attrs],
-        KeySchema=[
-            {"AttributeName": "PK", "KeyType": "HASH"},
-            {"AttributeName": "SK", "KeyType": "RANGE"},
-        ],
-        GlobalSecondaryIndexes=[
-            {
-                "IndexName": n,
-                "KeySchema": [{"AttributeName": pk, "KeyType": "HASH"}]
-                + ([{"AttributeName": sk, "KeyType": "RANGE"}] if sk else []),
-                "Projection": {"ProjectionType": "ALL"},
-            }
-            for n, pk, sk in gsis
-        ],
-    )
-
-
 @pytest.fixture
 def ddb(monkeypatch):
     """A fresh scratch table inside moto. Never skips: moto needs no server."""
@@ -402,6 +379,6 @@ def ddb(monkeypatch):
     monkeypatch.delenv("AWS_ENDPOINT_URL_DYNAMODB", raising=False)
     with mock_aws():
         client = boto3.client("dynamodb", region_name=_DDB_REGION)
-        name = _scratch_table()
-        _create_scratch_table(client, name)
-        yield dynamo.Table(client, name, on_emulator=True)
+        table = dynamo.Table(client, _scratch_table(), on_emulator=True)  # moto is an emulator
+        dynamo.create_table(table)
+        yield table
