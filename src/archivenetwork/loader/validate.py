@@ -1,8 +1,10 @@
-"""Assertions about what actually landed in the table and the object store (Official-Schema §5.4).
+"""Assertions about what actually landed in the tables and the object store (Official-Schema §5.4).
 
-DynamoDB enforces no referential integrity, so these checks are the only guard. One full Scan
-feeds all of them. The table accumulates across workspaces and CMS edits, so reconciliation with
-the manifests is **one-way**: every manifest item must be in the table, not the reverse.
+DynamoDB enforces no referential integrity, so these checks are the only guard. One Scan per
+table it reads (album, media, staffer, credit, featuring) feeds all of them; the staffer scan
+skips uniqueness guards, so a guard can never satisfy check 3. The tables accumulate across
+workspaces and CMS edits, so reconciliation with the manifests is **one-way**: every manifest
+item must be in the media table, not the reverse.
 """
 
 from __future__ import annotations
@@ -11,7 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import dynamo
-from .items import SK_META
 from .read import read_ready
 from .storage import Storage
 
@@ -23,22 +24,16 @@ class Check:
     detail: str = ""
 
 
-def _key_id(pk: str) -> str:
-    return pk.split("#", 1)[1]
-
-
-def validate(ready_root: Path, storage: Storage, table: dynamo.Table) -> list[Check]:
+def validate(ready_root: Path, storage: Storage, tables: dynamo.Tables) -> list[Check]:
     data = read_ready(ready_root)
-    items = dynamo.scan_items(table)
-    meta = [i for i in items if i["SK"] == SK_META]
-    media = [i for i in meta if i["PK"].startswith("MEDIA#")]
-    album_ids = {_key_id(i["PK"]) for i in meta if i["PK"].startswith("ALBUM#")}
-    staffer_ids = {_key_id(i["PK"]) for i in meta if i["PK"].startswith("STAFFER#")}
+    media = dynamo.scan_items(tables, "media")
+    album_ids = {i["id"] for i in dynamo.scan_items(tables, "album")}
+    staffer_ids = {i["id"] for i in dynamo.scan_items(tables, "staffer")}
     checks: list[Check] = []
 
     # 1. A tombstoned item is excluded: the CMS may have removed its object along with it.
     missing = [
-        _key_id(m["PK"])
+        m["id"]
         for m in media
         if "deleted_at" not in m
         and not (m.get("storage_path") and storage.exists(m["storage_path"]))
@@ -51,9 +46,7 @@ def validate(ready_root: Path, storage: Storage, table: dynamo.Table) -> list[Ch
         )
     )
 
-    dangling = [
-        _key_id(m["PK"]) for m in media if m.get("album_id") and m["album_id"] not in album_ids
-    ]
+    dangling = [m["id"] for m in media if m.get("album_id") and m["album_id"] not in album_ids]
     checks.append(
         Check(
             "every media.album_id names an existing album",
@@ -62,10 +55,14 @@ def validate(ready_root: Path, storage: Storage, table: dynamo.Table) -> list[Ch
         )
     )
 
-    edges = [i for i in items if i["SK"].startswith(("CREDIT#", "FEAT#"))]
-    orphan_edges = [
-        f"{e['PK']}/{e['SK']}" for e in edges if _key_id(e["SK"]) not in staffer_ids
+    edges = [
+        (f"credit:{e['media_id']}/{e['staffer_id']}", e["staffer_id"])
+        for e in dynamo.scan_items(tables, "credit")
+    ] + [
+        (f"featuring:{e['parent_key']}/{e['staffer_id']}", e["staffer_id"])
+        for e in dynamo.scan_items(tables, "featuring")
     ]
+    orphan_edges = [label for label, staffer_id in edges if staffer_id not in staffer_ids]
     checks.append(
         Check(
             "every credit and featuring edge names an existing staffer",
@@ -74,7 +71,7 @@ def validate(ready_root: Path, storage: Storage, table: dynamo.Table) -> list[Ch
         )
     )
 
-    no_ts = [_key_id(m["PK"]) for m in media if not m.get("creation_at")]
+    no_ts = [m["id"] for m in media if not m.get("creation_at")]
     checks.append(
         Check(
             "every media has a creation_at",
@@ -87,10 +84,9 @@ def validate(ready_root: Path, storage: Storage, table: dynamo.Table) -> list[Ch
     # A missing storage_path is check 1's failure, so only a present one is prefix-checked here.
     miskeyed = []
     for m in media:
-        own_id, path = _key_id(m["PK"]), m.get("storage_path")
+        own_id, path = m["id"], m.get("storage_path")
         if m.get("fbid"):
-            bad = m["fbid"] != own_id or m.get("id") != own_id
-            bad = bad or bool(path and not path.startswith("fb-exports/"))
+            bad = m["fbid"] != own_id or bool(path and not path.startswith("fb-exports/"))
         else:
             bad = bool(path and not path.startswith("cms/"))
         if bad:

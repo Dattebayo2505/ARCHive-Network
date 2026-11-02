@@ -7,7 +7,9 @@ it uploads anything, or it could re-key a photo and strand or duplicate its obje
 
 Every write is one `UpdateItem` (`dynamo.upsert`), never a `PutItem`. There is no load-wide
 transaction: each item is atomic and a re-run converges. A CMS tombstone (`deleted_at`) wins:
-the item is skipped, its bytes are not re-uploaded, and its key is reported in `skipped_deleted`.
+the item is skipped, its bytes are not re-uploaded, and it is reported in `skipped_deleted` as
+`album:<id>` / `media:<id>`. Items are keyed `(kind, id)` throughout: a derived album shares its
+first photo's fbid, so an id alone is ambiguous across the album and media tables.
 boto errors propagate; the route maps them.
 """
 
@@ -18,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from . import dynamo
-from .items import album_pk, album_update, media_pk, media_update
+from .items import album_update, media_update
 from .read import MediaRow, read_ready
 from .storage import Storage
 
@@ -33,7 +35,7 @@ class LoadResult:
     files_skipped: int = 0
     orphans: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
-    # Item keys (`MEDIA#g01`) the CMS tombstoned; len() is the spec's skipped_deleted count.
+    # `kind:id` (`media:g01`) of each item the CMS tombstoned; len() is the skipped_deleted count.
     skipped_deleted: list[str] = field(default_factory=list)
 
 
@@ -41,7 +43,7 @@ def load(
     ready_root: Path,
     workspace_id: str,
     storage: Storage,
-    table: dynamo.Table,
+    tables: dynamo.Tables,
     *,
     now: datetime | None = None,
 ) -> LoadResult:
@@ -60,18 +62,18 @@ def load(
 
     # 2. Pre-fetch what already exists: the frozen keys, the tombstones, and insert-vs-update.
     existing = dynamo.prefetch(
-        table,
-        [album_pk(a.fb_album_id) for a in data.albums]
-        + [media_pk(row.fbid) for row, _ in resolved],
+        tables,
+        [("album", a.fb_album_id) for a in data.albums]
+        + [("media", row.fbid) for row, _ in resolved],
     )
 
     # 3. Store the bytes (idempotent), reusing the frozen key where one exists.
     keyed: list[tuple[MediaRow, str]] = []
     for row, src in resolved:
-        pk = media_pk(row.fbid)
-        prior = existing.get(pk)
+        ref = ("media", row.fbid)
+        prior = existing.get(ref)
         if prior and prior.deleted:
-            result.skipped_deleted.append(pk)
+            result.skipped_deleted.append(":".join(ref))
             continue
         key = (prior and prior.storage_path) or storage.key_for(
             row.fbid, row.hashtag, row.group, src.suffix
@@ -89,23 +91,23 @@ def load(
     # 4. Albums, then 5. media. The condition in `upsert` still guards a tombstone that landed
     # after the pre-fetch.
     for album in data.albums:
-        pk = album_pk(album.fb_album_id)
-        prior = existing.get(pk)
+        ref = ("album", album.fb_album_id)
+        prior = existing.get(ref)
         if prior and prior.deleted:
-            result.skipped_deleted.append(pk)
+            result.skipped_deleted.append(":".join(ref))
             continue
-        if dynamo.upsert(table, album_update(album, now)) == "skipped_deleted":
-            result.skipped_deleted.append(pk)
-        elif pk in existing:
+        if dynamo.upsert(tables, album_update(album, now)) == "skipped_deleted":
+            result.skipped_deleted.append(":".join(ref))
+        elif ref in existing:
             result.albums_updated += 1
         else:
             result.albums_inserted += 1
 
     for row, key in keyed:
-        pk = media_pk(row.fbid)
-        if dynamo.upsert(table, media_update(row, key, workspace_id, now)) == "skipped_deleted":
-            result.skipped_deleted.append(pk)
-        elif pk in existing:
+        ref = ("media", row.fbid)
+        if dynamo.upsert(tables, media_update(row, key, workspace_id, now)) == "skipped_deleted":
+            result.skipped_deleted.append(":".join(ref))
+        elif ref in existing:
             result.media_updated += 1
         else:
             result.media_inserted += 1

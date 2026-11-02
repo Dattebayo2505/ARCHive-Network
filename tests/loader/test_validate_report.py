@@ -25,14 +25,15 @@ def _checks(ready_root, store, ddb):
     return {c.name: c for c in validate(ready_root, store, ddb)}
 
 
-def _update(ddb, pk: str, expr: str, values: dict | None = None) -> None:
+def _update(ddb, kind: str, item_id: str, expr: str, values: dict | None = None) -> None:
     kw = {"ExpressionAttributeValues": values} if values else {}
-    ddb.client.update_item(TableName=ddb.name, Key={"PK": {"S": pk}, "SK": {"S": "#META"}},
+    ddb.client.update_item(TableName=ddb.name(kind), Key={"id": {"S": item_id}},
                            UpdateExpression=expr, **kw)
 
 
-def _put(ddb, **attrs) -> None:
-    ddb.client.put_item(TableName=ddb.name, Item={k: {"S": v} for k, v in attrs.items()})
+def _put(ddb, kind: str, **attrs) -> None:
+    # A raw PutItem is fine here: these are CMS-made fixtures, not loader writes.
+    ddb.client.put_item(TableName=ddb.name(kind), Item={k: {"S": v} for k, v in attrs.items()})
 
 
 def test_a_clean_load_passes_every_check(ready_root: Path, tmp_path: Path, ddb):
@@ -71,39 +72,60 @@ def test_detects_a_ready_file_no_manifest_references(ready_root: Path, tmp_path:
 
 def test_detects_a_dangling_album_id(ready_root: Path, tmp_path: Path, ddb):
     store = _loaded(ready_root, tmp_path, ddb)
-    _update(ddb, "MEDIA#g01", "SET album_id = :a", {":a": {"S": "nope"}})
+    _update(ddb, "media", "g01", "SET album_id = :a", {":a": {"S": "nope"}})
     check = _checks(ready_root, store, ddb)["every media.album_id names an existing album"]
     assert check.ok is False and "g01" in check.detail
 
 
 def test_detects_an_edge_to_a_missing_staffer(ready_root: Path, tmp_path: Path, ddb):
     store = _loaded(ready_root, tmp_path, ddb)
-    _put(ddb, PK="MEDIA#g01", SK="CREDIT#s1", staffer_id="s1")
+    _put(ddb, "credit", media_id="g01", staffer_id="s1")
     check = _checks(ready_root, store, ddb)[
         "every credit and featuring edge names an existing staffer"
     ]
-    assert check.ok is False and "s1" in check.detail
+    assert check.ok is False and "credit:g01/s1" in check.detail
+
+
+def test_detects_a_featuring_edge_to_a_missing_staffer(ready_root: Path, tmp_path: Path, ddb):
+    store = _loaded(ready_root, tmp_path, ddb)
+    _put(ddb, "featuring", parent_key="media#g01", parent_type="media", parent_id="g01",
+         staffer_id="s9")
+    check = _checks(ready_root, store, ddb)[
+        "every credit and featuring edge names an existing staffer"
+    ]
+    assert check.ok is False and "featuring:media#g01/s9" in check.detail
+
+
+def test_a_guard_item_is_not_a_staffer(ready_root: Path, tmp_path: Path, ddb):
+    store = _loaded(ready_root, tmp_path, ddb)
+    _put(ddb, "staffer", id="UNIQUE#full_name#x", staffer_id="s1")
+    _put(ddb, "credit", media_id="g01", staffer_id="UNIQUE#full_name#x")
+    check = _checks(ready_root, store, ddb)[
+        "every credit and featuring edge names an existing staffer"
+    ]
+    assert check.ok is False
 
 
 def test_an_edge_to_an_existing_staffer_passes(ready_root: Path, tmp_path: Path, ddb):
     store = _loaded(ready_root, tmp_path, ddb)
-    _put(ddb, PK="STAFFER#s1", SK="#META", id="s1")
-    _put(ddb, PK="MEDIA#g01", SK="CREDIT#s1", staffer_id="s1")
-    _put(ddb, PK="ALBUM#g01", SK="FEAT#s1", staffer_id="s1")
+    _put(ddb, "staffer", id="s1")
+    _put(ddb, "credit", media_id="g01", staffer_id="s1")
+    _put(ddb, "featuring", parent_key="album#g01", parent_type="album", parent_id="g01",
+         staffer_id="s1")
     for check in _checks(ready_root, store, ddb).values():
         assert check.ok, f"{check.name}: {check.detail}"
 
 
 def test_detects_media_without_storage_path(ready_root: Path, tmp_path: Path, ddb):
     store = _loaded(ready_root, tmp_path, ddb)
-    _update(ddb, "MEDIA#g01", "REMOVE storage_path")
+    _update(ddb, "media", "g01", "REMOVE storage_path")
     check = _checks(ready_root, store, ddb)["every media.storage_path resolves in the store"]
     assert check.ok is False and "g01" in check.detail
 
 
 def test_detects_media_without_creation_at(ready_root: Path, tmp_path: Path, ddb):
     store = _loaded(ready_root, tmp_path, ddb)
-    _update(ddb, "MEDIA#g01", "REMOVE creation_at")
+    _update(ddb, "media", "g01", "REMOVE creation_at")
     check = _checks(ready_root, store, ddb)["every media has a creation_at"]
     assert check.ok is False and "g01" in check.detail
 
@@ -113,7 +135,7 @@ def test_cms_made_media_does_not_break_reconciliation(ready_root: Path, tmp_path
     key = "cms/media/01J9ZZZZZZZZZZZZZZZZZZZZZZ.jpg"
     (store.root / key).parent.mkdir(parents=True)
     (store.root / key).write_bytes(b"\xff\xd8CMS")
-    _put(ddb, PK="MEDIA#01J9ZZZZZZZZZZZZZZZZZZZZZZ", SK="#META", id="01J9ZZZZZZZZZZZZZZZZZZZZZZ",
+    _put(ddb, "media", id="01J9ZZZZZZZZZZZZZZZZZZZZZZ",
          storage_path=key, creation_at="2026-11-01T00:00:00Z")
     checks = _checks(ready_root, store, ddb)
     assert checks["every media with an fbid is keyed by it"].ok
@@ -125,7 +147,7 @@ def test_cms_made_media_outside_cms_prefix_fails(ready_root: Path, tmp_path: Pat
     key = "fb-exports/x/y/01JA.jpg"
     (store.root / key).parent.mkdir(parents=True)
     (store.root / key).write_bytes(b"\xff\xd8CMS")
-    _put(ddb, PK="MEDIA#01JA", SK="#META", id="01JA", storage_path=key,
+    _put(ddb, "media", id="01JA", storage_path=key,
          creation_at="2026-11-01T00:00:00Z")
     check = _checks(ready_root, store, ddb)["every media with an fbid is keyed by it"]
     assert check.ok is False and "01JA" in check.detail
@@ -133,7 +155,7 @@ def test_cms_made_media_outside_cms_prefix_fails(ready_root: Path, tmp_path: Pat
 
 def test_detects_media_keyed_off_its_fbid(ready_root: Path, tmp_path: Path, ddb):
     store = _loaded(ready_root, tmp_path, ddb)
-    _update(ddb, "MEDIA#g01", "SET fbid = :f", {":f": {"S": "other"}})
+    _update(ddb, "media", "g01", "SET fbid = :f", {":f": {"S": "other"}})
     check = _checks(ready_root, store, ddb)["every media with an fbid is keyed by it"]
     assert check.ok is False and "g01" in check.detail
 
@@ -143,7 +165,7 @@ def test_a_second_workspace_load_still_validates(ready_root: Path, tmp_path: Pat
     key = "fb-exports/archevt/last-week/old1.jpg"
     (store.root / key).parent.mkdir(parents=True)
     (store.root / key).write_bytes(b"\xff\xd8OLD")
-    _put(ddb, PK="MEDIA#old1", SK="#META", id="old1", fbid="old1", storage_path=key,
+    _put(ddb, "media", id="old1", fbid="old1", storage_path=key,
          creation_at="2026-10-26T00:00:00Z")
 
     load(ready_root, "ws-1", store, ddb)
@@ -155,14 +177,13 @@ def test_a_second_workspace_load_still_validates(ready_root: Path, tmp_path: Pat
 
 def test_a_tombstoned_item_whose_object_is_gone_passes(ready_root: Path, tmp_path: Path, ddb):
     store = _loaded(ready_root, tmp_path, ddb)
-    _update(ddb, "MEDIA#g01", "SET deleted_at = :d", {":d": {"S": "2026-11-03T00:00:00Z"}})
+    _update(ddb, "media", "g01", "SET deleted_at = :d", {":d": {"S": "2026-11-03T00:00:00Z"}})
     next(store.root.rglob("g01.jpg")).unlink()
     assert _checks(ready_root, store, ddb)["every media.storage_path resolves in the store"].ok
 
 
 def test_detects_a_manifest_item_missing_from_the_table(ready_root: Path, tmp_path: Path, ddb):
     store = _loaded(ready_root, tmp_path, ddb)
-    ddb.client.delete_item(TableName=ddb.name,
-                           Key={"PK": {"S": "MEDIA#g01"}, "SK": {"S": "#META"}})
+    ddb.client.delete_item(TableName=ddb.name("media"), Key={"id": {"S": "g01"}})
     check = _checks(ready_root, store, ddb)["every manifest item is in the table"]
     assert check.ok is False and "g01" in check.detail
