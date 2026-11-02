@@ -3,8 +3,8 @@
  * controls, and the post-upload tab.
  *
  * `$lib/api.js` is mocked wholesale — every one of the panel's mount-time effects calls it,
- * and none of them is the subject here. The database half is stubbed as "not configured", so
- * the DB-gated block collapses and the assertions below only ever see the floci section.
+ * and none of them is the subject here. The DynamoDB half is stubbed as "not configured", so
+ * the table-gated block collapses and the assertions below only ever see the floci section.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,12 +18,11 @@ const api = vi.hoisted(() => ({
 	dockerFloci: vi.fn(),
 	flociUiTarget: vi.fn(),
 	autoCurate: vi.fn(),
-	devSchema: vi.fn(),
 	devLoad: vi.fn(),
 	devValidate: vi.fn(),
-	devDatabase: vi.fn(),
-	devDatabaseCreate: vi.fn(),
-	devDatabaseDrop: vi.fn(),
+	devTable: vi.fn(),
+	devTableCreate: vi.fn(),
+	devTableDelete: vi.fn(),
 	storeUrl: (key) => `/store/${key}`
 }));
 

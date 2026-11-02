@@ -373,7 +373,7 @@
 			class:hover:bg-surface-200={!active}
 			onclick={() => onSelect('__dev__')}
 			aria-current={active ? 'true' : undefined}
-			title="Load this build into PostgreSQL and inspect the rows."
+			title="Load this build into DynamoDB and inspect the items."
 		>
 			<svg
 				viewBox="0 0 24 24"
