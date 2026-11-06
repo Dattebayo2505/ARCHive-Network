@@ -230,3 +230,7 @@ fixtures derive a separate `-test` table name.
 - `workspace/` — all generated output (imports, per-workspace state, the built
   `ready/` folder); gitignored.
 - `vendor/` — the committed cross-platform zip extractors (`7za.exe`, `7zz_mac`, `7zzs_x64`, `7zzs_x32`).
+- `infra/` — a git submodule, [arch-config-shared](https://github.com/archers-network/arch-config-shared):
+  the AWS Terraform and the shared DynamoDB table contract (`infra/schema/`). The app runs
+  without it; fetch it with `git submodule update --init` (or clone with `--recurse-submodules`)
+  when you work on infrastructure or the table schema. Its root README covers how to change it.
