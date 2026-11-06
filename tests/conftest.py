@@ -280,68 +280,50 @@ def legacy_unanchored_ready_root(ready_root: Path, grouping_export_root: Path) -
     return ready_root
 
 
-TEST_DB_SUFFIX = "_test"
+# --- DynamoDB (moto unit tier) ---
+
+TEST_TABLE_SUFFIX = "-test"
+_DDB_REGION = "ap-southeast-1"
 
 
-def _scratch_url() -> str:
-    """The configured server, pointed at a *derived* scratch database — never the real one.
-
-    `pg_conn` drops tables, so it must not touch the database the app runs on. Asking for a
-    second env var would be safer still, but an unset one makes every Postgres test skip
-    silently, and a skipped test reads as a passing one. Deriving the name instead keeps the
-    suite running unattended while making `archivenetwork_dev` unreachable from it.
-    """
+def _scratch_prefix() -> str:
+    """A derived `-test` table prefix, never the configured one (the old Postgres fixture's lesson)."""
     from archivenetwork.config import Settings
-    from archivenetwork.loader import db
 
-    url = Settings().database_url
-    if not url:
-        pytest.skip("ARCHIVENETWORK_DATABASE_URL not set; skipping Postgres-backed test")
-
-    configured = db.database_name(url)
-    if not configured:
-        pytest.skip("ARCHIVENETWORK_DATABASE_URL carries no database name")
-
-    scratch = configured + TEST_DB_SUFFIX
-    # Belt and braces: if someone points the env var straight at the scratch database, the
-    # derivation would be a no-op and we would be dropping tables in the configured one.
-    assert scratch != configured, "scratch database must differ from the configured one"
-    return db.with_database(url, scratch)
-
-
-@pytest.fixture(scope="session")
-def scratch_database() -> str:
-    """Ensure the derived scratch database exists; return its URL. Skips if the server is down."""
-    from archivenetwork.loader import db
-
-    url = _scratch_url()
-    probe = db.probe(url)
-    if not probe.server_up:
-        pytest.skip(f"Postgres unreachable, skipping: {probe.reason}")
-    db.create_database(url)  # idempotent
-    return url
+    configured = Settings().dynamodb_table_prefix
+    scratch = (configured or "archers-network-dev") + TEST_TABLE_SUFFIX
+    assert scratch != configured, "scratch prefix must differ from the configured one"
+    return scratch
 
 
 @pytest.fixture
-def pg_conn(scratch_database: str):
-    """A connection to the scratch Postgres, with the schema freshly recreated.
+def ddb(monkeypatch):
+    """Fresh scratch tables (all 11) inside moto. Never skips: moto needs no server."""
+    import boto3
+    from moto import mock_aws
 
-    Skips unless ARCHIVENETWORK_DATABASE_URL is set. It DROPS tables — which is why it runs
-    against `<dbname>_test` (see `_scratch_url`), never the configured database itself.
+    from archivenetwork.loader import dynamo
+
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", _DDB_REGION)
+    # moto does not intercept a client with a custom endpoint; it would dial the real network.
+    monkeypatch.delenv("AWS_ENDPOINT_URL", raising=False)
+    monkeypatch.delenv("AWS_ENDPOINT_URL_DYNAMODB", raising=False)
+    with mock_aws():
+        client = boto3.client("dynamodb", region_name=_DDB_REGION)
+        tables = dynamo.Tables(client, _scratch_prefix(), on_emulator=True)  # moto is an emulator
+        dynamo.create_tables(tables)
+        yield tables
+
+
+def floci_image() -> str | None:
+    """The floci image both integration tiers start: the compose pin, never `latest`.
+
+    None when the compose file carries no exact tag, so a tier skips instead of pulling
+    `floci/floci:None`.
     """
-    import psycopg
+    from archivenetwork.loader import dockerctl, flociversion
 
-    from archivenetwork.loader import db
-
-    try:
-        conn = db.connect(scratch_database)
-    except psycopg.OperationalError as exc:  # not installed / not running / bad credentials
-        pytest.skip(f"Postgres unreachable, skipping: {exc}")
-
-    db.reset_tables(conn)
-    try:
-        yield conn
-    finally:
-        # Leave nothing committed behind, so a stray row can never outlive the run.
-        db.reset_tables(conn)
-        conn.close()
+    pinned = flociversion.pinned_version(dockerctl.COMPOSE_FILE)
+    return f"floci/floci:{pinned}" if pinned else None

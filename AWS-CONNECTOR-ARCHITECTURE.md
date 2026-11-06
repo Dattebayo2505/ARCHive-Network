@@ -1,6 +1,6 @@
 # AWS Architecture & Connectors
 
-ARCHiveNetwork is designed with a decoupled architecture for AWS services. Infrastructure components (Object Storage via S3, Relational Database via PostgreSQL RDS) are abstracted behind backend interfaces and environment configuration so that local development and cloud production use identical data schemas and business logic.
+ARCHiveNetwork is designed with a decoupled architecture for AWS services. Infrastructure components (Object Storage via S3, and the database, which is **DynamoDB** as of 2026-10-30, see §2) are abstracted behind backend interfaces and environment configuration so that local development and cloud production share the same business logic. Dev Mode loads into the same DynamoDB item model production uses, on the local floci emulator (§2).
 
 ---
 
@@ -34,6 +34,7 @@ S3 settings are defined in [src/archivenetwork/config.py](src/archivenetwork/con
 | `ARCHIVENETWORK_S3_SECRET_ACCESS_KEY` | `s3_secret_access_key` | `None` | Optional explicit AWS Secret Access Key (**only honoured together with the key ID**) |
 | `ARCHIVENETWORK_FLOCI_ENDPOINT_URL` | `floci_endpoint_url` | `"http://127.0.0.1:4566"` | Local emulator endpoint (testing target) |
 | `ARCHIVENETWORK_FLOCI_BUCKET` | `floci_bucket` | `"archivenetwork-dev"` | Bucket used on the emulator; auto-created |
+| `ARCHIVENETWORK_FLOCI_VERSION_CHECK` | `floci_version_check` | `true` | At startup, log whether floci is the latest release: running vs the version pinned in `docker-compose.yml` vs GitHub's latest. Also `GET /api/docker/floci-version`. Set `false` when offline |
 
 > **Two targets, chosen per request.** `POST /api/s3/upload` takes a **required**
 > `?target=aws|floci` parameter — a forgotten parameter is a `422`, never an implicit write to
@@ -58,7 +59,7 @@ S3 settings are defined in [src/archivenetwork/config.py](src/archivenetwork/con
 
 > **Liveness is a separate question from configuration.** `floci.enabled` is always `true` (the
 > settings have defaults); `floci.reachable` comes from `storage.probe_endpoint()`, a bounded
-> TCP connect. This is the same split as the Postgres pane's `server_up` vs `database_exists`,
+> TCP connect. This is the same split as the DynamoDB pane's `endpoint_reachable` vs `table_exists`,
 > and for the same reason: the panel must distinguish "not configured" from "configured but
 > down". The probe records no *cause* — a refused connection cannot tell Docker-off from
 > container-not-started from port-occupied — but the message it feeds does name Docker, because
@@ -91,13 +92,13 @@ class Storage(Protocol):
 ```
 
 - **`S3Storage`**: Implements `Storage` using `boto3.client("s3")`.
-- **Key Determinism**: Both `LocalStorage` (dev) and `S3Storage` (prod) compute identical keys via `media_key()` (e.g., `fb-exports/archevt/animusika-2026/1470662168409180.jpg`) *from the same inputs*. The database stores backend-agnostic keys without hardcoding domains. This guarantees the two **backends** agree; it does **not** guarantee an uploaded key matches the key already stored in Postgres — see the freeze below.
+- **Key Determinism**: Both `LocalStorage` (dev) and `S3Storage` (prod) compute identical keys via `media_key()` (e.g., `fb-exports/archevt/animusika-2026/1470662168409180.jpg`) *from the same inputs*. The database stores backend-agnostic keys without hardcoding domains. This guarantees the two **backends** agree; it does **not** guarantee an uploaded key matches the key already stored on the DynamoDB item — see the freeze below.
 - **The `storage_path` freeze (do not remove it)**: the key is derived from *mutable* things (the album's canonical hashtag, its name), so unlike the old date-partitioned key it is **not self-healing**. What makes it safe is that `storage_path` is deliberately absent from the `ON CONFLICT ... DO UPDATE SET` clause in `load.py`, and `load()` reuses any key already on the row: a renamed album keeps its original, *stale-but-valid* key instead of stranding its objects. (`hashtag` **is** updatable — the tag may be corrected on a re-load; the key may not.)
 - **Idempotency**: `S3Storage.put()` calls `self.exists(key)` (`head_object`) before uploading. If an object already exists at that key, the upload is skipped and the file is counted under `skipped`. **This is a key-existence check only** — it compares no size, mtime or ETag, so *changed content at an existing key is never re-uploaded*. Re-capturing a video still or rebuilding a corrected image therefore leaves the bucket serving the old object, reported as `skipped` (which reads as "already correct"). Forcing a re-push means deleting the object first.
 - **Preflight Check**: `ensure_ready()` performs `head_bucket()` to fail fast if credentials or bucket access are invalid. It needs `s3:ListBucket` — see *Required IAM actions* above.
 
 ### On-Demand Upload Loader
-The uploader in [src/archivenetwork/loader/upload.py](src/archivenetwork/loader/upload.py#L28-L49) operates independently of Postgres:
+The uploader in [src/archivenetwork/loader/upload.py](src/archivenetwork/loader/upload.py#L28-L49) operates independently of DynamoDB:
 1. Calls `storage.ensure_ready()` for preflight verification.
 2. Scans the transformed build directory (`workspace/ready/<workspace_id>/`).
 3. Reads media manifests via `read_ready()`.
@@ -105,7 +106,7 @@ The uploader in [src/archivenetwork/loader/upload.py](src/archivenetwork/loader/
 5. Uploads missing media via `storage.put(...)` and returns an `UploadResult` (`uploaded`, `skipped`, `orphans`, `errors`). Per-file failures are **swallowed into `errors`** (and a uri with no file on disk into `orphans`); one bad file never sinks the run, so a completed `UploadResult` is *not* by itself proof that everything reached the bucket.
 
 > **The recompute can diverge from the database.** Step 4 derives the key from the *current*
-> ready folder, while `load()` honours the frozen `storage_path` on an existing row. Rename an
+> ready folder, while `load()` honours the frozen `storage_path` on an existing item. Rename an
 > album (or correct its canonical hashtag), rebuild, re-load, then upload: the object lands under
 > `fb-exports/<tag>/<new-slug>/<fbid>.jpg` while every DB row still points at `<old-slug>`. Both
 > operations report success, but any consumer resolving images as `<cdn>/<storage_path>` 404s for
@@ -166,11 +167,66 @@ Two tiers, because they prove different things.
 Start the emulator from the repo root with **`docker compose up -d`** — [docker-compose.yml](docker-compose.yml) is checked in and already binds port `4566` and persists objects under the gitignored `workspace/floci-data/`. Ad-hoc equivalent: `docker run -p 4566:4566 floci/floci:latest`. The port must match `ARCHIVENETWORK_FLOCI_ENDPOINT_URL`. On ARM hosts use the `:latest-jvm` tag.
 
 > **Read the skip count.** The integration tier skips cleanly when floci is not installed or
-> Docker is unreachable — the same philosophy as the `pg_conn` fixture. `N skipped` means those
+> Docker is unreachable — the same philosophy as the floci DynamoDB tier. `N skipped` means those
 > tests **did not run**, and a skipped test is not a passing one. Use `pytest -rs` to see why.
 
 ---
 
-## 2. AWS RDS Connector (PostgreSQL Database) — *Planned / Future Integration*
+## 2. AWS DynamoDB Connector — *Live (Dev Mode, on floci)*
 
-*To be documented once integrated.*
+**The production database is Amazon DynamoDB** (decided 2026-10-30). Aurora DSQL and RDS
+PostgreSQL were considered and set aside: DynamoDB costs about $0/mo at this workload, needs no
+VPC, bastion, tunnel or connection pool, and has true 35-day point-in-time recovery.
+
+**What runs today.** The loader reaches DynamoDB through Dev Mode, on the floci emulator by
+default. The PostgreSQL loader (psycopg 3, `ARCHIVENETWORK_DATABASE_URL`) was removed in the
+November 2026 port; no Postgres data was migrated, because the tables rebuild from `ready/` in
+one load. Code: `loader/items.py` (what the loader may write), `loader/dynamo.py` (every boto3
+call), `loader/load.py` / `loader/validate.py` (orchestration), `web/routes_dev.py` (the API).
+
+**The connector:**
+
+- **Client.** `boto3`, the same library and credential chain as the S3 connector (§1): explicit
+  keys only for local work, otherwise environment, `~/.aws`, IAM Identity Center or a role. No
+  connection URL, password or pool. Region `ap-southeast-1`, shared with the bucket.
+- **Two targets, like S3.** An `endpoint_url` points the client at the local floci emulator
+  (port `4566`, which also serves DynamoDB), always with dummy `test`/`test` credentials.
+  An empty endpoint means AWS. Settings: `ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX` (the Dev Mode
+  gate: every `/api/dev/*` route 404s when unset; dev prefix `archers-network-dev`) and
+  `ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL` (default `http://127.0.0.1:4566`). The prefix replaced
+  `ARCHIVENETWORK_DYNAMODB_TABLE`; an `.env` with only the old name is reported as renamed by
+  `/api/dev/status` rather than read as "never configured".
+- **Table admin is emulator-only.** `GET/POST/DELETE /api/dev/tables` probe, create (only the
+  missing ones, or reset all 11) and delete the tables on floci. Pointed at AWS they refuse with
+  a `409`: production tables come from Terraform (`infra/`). A stopped emulator answers `502`
+  naming the endpoint, never a hang or a misleading "create the tables first".
+- **Tables: one per item type, 11 in all**, named `<prefix>-<type>`. On AWS the prefix is
+  `archers-network`: `archers-network-album`, `-media`, `-credit`, `-featuring`, `-staffer`,
+  `-staff-term`, `-department`, `-category`, `-channel`, `-service` and `-users`. Entities are
+  keyed by `id`; edges by the ids they link (`credit`: `media_id` + `staffer_id`; `featuring`:
+  `parent_key` + `staffer_id`; `staff-term`: `staffer_id` + `term`). The loader writes album and
+  media items only. Everything else is CMS-written, and `-users` (CMS logins) is **never granted
+  to the loader**.
+- **Writes: `UpdateItem` only.** The loader never uses `PutItem`, `BatchWriteItem` or
+  `batch_writer()`. Each of them replaces the whole item, which would silently erase every field
+  the CMS has edited. Each write sets only the loader's own attributes, freezes `storage_path`
+  with `if_not_exists`, and carries `attribute_not_exists(deleted_at)`, so a photo the CMS
+  deleted is not brought back by the next weekly export.
+- **IAM.** The curator's role gets `UpdateItem`, `BatchGetItem` and `GetItem` on **the album and
+  media tables only**, plus `Scan` and `DescribeTable` on the five tables the loader reads
+  (album, media, credit, featuring, staffer: validate, counts and the probe). So on real AWS the
+  probe, the counts and the ready guard cover only those five (`LOADER_KINDS`); on an emulator
+  they cover all 11. Without that split, an AccessDenied on a CMS table would turn every Dev
+  route into a `502`. The table ARN now does what `dynamodb:LeadingKeys` used to, so that
+  condition is gone; `UpdateItem` stays narrowed to the loader's attributes
+  (`dynamodb:Attributes`) with `ReturnValues = NONE`, a condition syntax still **unverified**
+  until the spike. The loader is granted nothing on `-users` (or any other table). The S3 write
+  narrows to `fb-exports/*`, because the CMS owns a separate `cms/` prefix.
+- **Testing.** The same two tiers as §1: `moto[dynamodb]` in memory, and floci in Docker as a
+  real-endpoint tier. A local spike (2026-10-30) confirmed that both honour the loader's write
+  rules: `if_not_exists`, `REMOVE`, condition expressions and sorted, sparse GSIs. Use floci
+  **2.0 or later**: 1.7.0 dropped DynamoDB tables on a container restart once a GSI had a sort
+  key, and 2.4.0 keeps them (re-checked 2026-11-02). Tests never touch the configured tables:
+  the moto `ddb` fixture and the floci tier (`tests/loader/test_dynamo_floci.py`, its own
+  container at the compose pin) each create all 11 under a derived `<prefix>-test` / throwaway
+  prefix.

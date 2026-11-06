@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,7 +10,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .loader import flociversion
+from .loader.dockerctl import COMPOSE_FILE
 from .web.registry import WorkspaceRegistry
+
+# uvicorn's own logger, so the line prints in the server console with uvicorn's formatting.
+_log = logging.getLogger("uvicorn.error")
+
+
+def _log_floci_version() -> None:
+    report = flociversion.report(settings.floci_endpoint_url, COMPOSE_FILE)
+    level = logging.INFO if report.status in ("up_to_date", "unknown") else logging.WARNING
+    _log.log(level, "floci version check: %s", report.message)
+
+
+def _start_floci_version_check(app: FastAPI) -> None:
+    """Run the check off the event loop: it makes network calls, and startup must not wait."""
+    app.state.floci_version_thread = None
+    if settings.floci_version_check:
+        thread = threading.Thread(target=_log_floci_version, name="floci-version", daemon=True)
+        thread.start()
+        app.state.floci_version_thread = thread
 
 
 @asynccontextmanager
@@ -31,6 +53,7 @@ async def _lifespan(app: FastAPI):
         (previous or loop.default_exception_handler)(context)
 
     loop.set_exception_handler(_quiet_reset)
+    _start_floci_version_check(app)
     try:
         yield
     finally:
@@ -48,7 +71,7 @@ def create_app() -> FastAPI:
         # Must cover every method the routers serve — a method missing here fails the browser's
         # *preflight* with `400 Disallowed CORS method`, so the route is never reached and the
         # failure looks like a broken endpoint rather than a CORS policy. `DELETE` was the
-        # casualty (`/api/dev/database`). `*` keeps the list from drifting as routes are added;
+        # casualty (`DELETE /api/dev/tables`). `*` keeps the list from drifting as routes are added;
         # it is not a widening — `allow_origins`/`allow_origin_regex` still gate who may ask.
         allow_methods=["*"],
         allow_headers=["*"],

@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from archivenetwork.app import create_app
@@ -39,9 +40,9 @@ def test_cors_allows_any_localhost_port():
 def test_cors_allows_every_method_the_api_actually_serves():
     """The preflight allow-list must be derived from the routes, not guessed.
 
-    `allow_methods` used to be a hardcoded ["GET", "POST", "OPTIONS"], so `DELETE
-    /api/dev/database` — the API's only DELETE — failed its preflight with
-    `400 Disallowed CORS method` and the Dev panel's "Drop database" button did nothing.
+    `allow_methods` used to be a hardcoded ["GET", "POST", "OPTIONS"], so the Dev panel's
+    then-only DELETE route failed its preflight with `400 Disallowed CORS method` and its
+    button did nothing. `DELETE /api/dev/tables` is the route that keeps this honest now.
     The backend route was fine; the browser never got to call it.
 
     Asserting against the live route table (rather than hardcoding DELETE) means the next
@@ -63,7 +64,7 @@ def test_cors_allows_every_method_the_api_actually_serves():
 
     for method in sorted(served):
         pre = client.options(
-            "/api/dev/database",
+            "/api/dev/tables",
             headers={
                 "Origin": "http://localhost:5173",
                 "Access-Control-Request-Method": method,
@@ -77,3 +78,31 @@ def test_cors_blocks_foreign_origin():
     client = TestClient(create_app())
     resp = client.get("/", headers={"Origin": "http://evil.example"})
     assert resp.headers.get("access-control-allow-origin") is None
+
+
+def test_startup_logs_the_floci_version_check(monkeypatch, caplog):
+    """Entering the TestClient runs the lifespan, which logs the check once (off the event loop)."""
+    import logging
+
+    from archivenetwork import app as app_module
+    from archivenetwork.loader.flociversion import assess
+
+    monkeypatch.setattr(app_module.settings, "floci_version_check", True)
+    monkeypatch.setattr(app_module.flociversion, "report",
+                        lambda endpoint, compose: assess("2.4.0", "2.4.0", "2.5.0"))
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        app = app_module.create_app()
+        with TestClient(app):
+            app.state.floci_version_thread.join(timeout=5)
+    assert any("floci 2.5.0 is out" in r.getMessage() and r.levelno == logging.WARNING
+               for r in caplog.records)
+
+
+def test_the_floci_version_check_can_be_switched_off(monkeypatch):
+    from archivenetwork import app as app_module
+
+    monkeypatch.setattr(app_module.settings, "floci_version_check", False)
+    monkeypatch.setattr(app_module.flociversion, "report",
+                        lambda *a: pytest.fail("checked despite the switch"))
+    with TestClient(app_module.create_app()):
+        pass

@@ -9,7 +9,7 @@ that the ready folder stands alone.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -29,6 +29,8 @@ class AlbumRow:
     date: datetime | None
     is_derived: bool
     hashtag: str | None = None
+    # Every tag in the album's text, as written and without `#`; `hashtag` is its canonical one.
+    hashtags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -44,6 +46,7 @@ class MediaRow:
     creation_at: datetime | None
     hashtag: str | None = None
     group: str = "unanchored"  # the object-key's second segment: album slug | videos | unanchored
+    hashtags: list[str] = field(default_factory=list)  # the album's list when anchored
 
 
 @dataclass
@@ -179,6 +182,7 @@ def read_ready(ready_root: Path) -> ReadResult:
                 # A derived caption-album is written as <synthId>.json, so its stem IS its id.
                 is_derived=album_path.stem == album_id,
                 hashtag=album_tag,
+                hashtags=list(tags),
             )
         )
         for p in photos:
@@ -194,6 +198,7 @@ def read_ready(ready_root: Path) -> ReadResult:
                 uri=p["uri"],
                 creation_at=epoch_to_dt(ts) if ts else None,
                 hashtag=album_tag,
+                hashtags=list(tags),
                 group=album_group,
             )
 
@@ -219,6 +224,7 @@ def read_ready(ready_root: Path) -> ReadResult:
             uri=hit["uri"],
             creation_at=epoch_to_dt(ts) if ts else None,
             hashtag=canonical_tag(own_tags),
+            hashtags=list(own_tags),
             group="videos" if video else "unanchored",
         )
 
@@ -236,6 +242,7 @@ def read_ready(ready_root: Path) -> ReadResult:
             uri=video["uri"],
             creation_at=epoch_to_dt(ts) if ts else None,
             hashtag=canonical_tag(_tags(video.get("description"))),
+            hashtags=_tags(video.get("description")),
             group="videos",
         )
 

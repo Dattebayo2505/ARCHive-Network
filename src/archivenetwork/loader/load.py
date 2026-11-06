@@ -1,52 +1,28 @@
-"""Orchestrate the ETL: resolve files -> store the bytes -> upsert the rows.
+"""Orchestrate the ETL into DynamoDB: resolve files -> pre-fetch -> store the bytes -> UpdateItem.
 
-The object store is written **before** the database, so a row can never point at an object that
-does not exist. The storage key is **frozen after first insert**: a re-load reuses the key already
-recorded on the row, so it can never re-key a photo and thereby strand or duplicate an object.
+The object store is written **before** the item, so an item can never point at an object that
+does not exist. That is also why the `BatchGetItem` pre-fetch comes first: the storage key is
+**frozen after first insert**, so a re-load must know the key already recorded on the item before
+it uploads anything, or it could re-key a photo and strand or duplicate its object.
+
+Every write is one `UpdateItem` (`dynamo.upsert`), never a `PutItem`. There is no load-wide
+transaction: each item is atomic and a re-run converges. A CMS tombstone (`deleted_at`) wins:
+the item is skipped, its bytes are not re-uploaded, and it is reported in `skipped_deleted` as
+`album:<id>` / `media:<id>`. Items are keyed `(kind, id)` throughout: a derived album shares its
+first photo's fbid, so an id alone is ambiguous across the album and media tables.
+boto errors propagate; the route maps them.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
-import psycopg
-
-from .read import read_ready
+from . import dynamo
+from .items import album_update, media_update
+from .read import MediaRow, read_ready
 from .storage import Storage
-
-_UPSERT_ALBUM = """
-INSERT INTO photo_album (fb_album_id, title, caption, date, is_derived, hashtag)
-VALUES (%s, %s, %s, %s, %s, %s)
-ON CONFLICT (fb_album_id) DO UPDATE SET
-    title      = EXCLUDED.title,
-    caption    = EXCLUDED.caption,
-    date       = EXCLUDED.date,
-    is_derived = EXCLUDED.is_derived,
-    hashtag    = EXCLUDED.hashtag
-RETURNING (xmax = 0) AS inserted
-"""
-
-# `storage_path` is deliberately ABSENT from the UPDATE set — this is what enforces the key
-# freeze at the SQL level, and it is what makes the hashtag/album-grouped key safe: an album
-# rename yields a stale-but-valid key instead of a stranded object. Do not add it.
-# (`hashtag` IS updatable — the *tag* may be corrected on a re-load; the *key* may not.)
-_UPSERT_MEDIA = """
-INSERT INTO media (fbid, media_type, fb_album_id, title, caption,
-                   storage_path, original_fb_uri, creation_at, source_workspace_id, hashtag)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-ON CONFLICT (fbid) DO UPDATE SET
-    media_type          = EXCLUDED.media_type,
-    fb_album_id         = EXCLUDED.fb_album_id,
-    title               = EXCLUDED.title,
-    caption             = EXCLUDED.caption,
-    original_fb_uri     = EXCLUDED.original_fb_uri,
-    creation_at         = EXCLUDED.creation_at,
-    source_workspace_id = EXCLUDED.source_workspace_id,
-    hashtag             = EXCLUDED.hashtag,
-    updated_at          = now()
-RETURNING (xmax = 0) AS inserted
-"""
 
 
 @dataclass
@@ -59,16 +35,24 @@ class LoadResult:
     files_skipped: int = 0
     orphans: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # `kind:id` (`media:g01`) of each item the CMS tombstoned; len() is the skipped_deleted count.
+    skipped_deleted: list[str] = field(default_factory=list)
 
 
 def load(
-    ready_root: Path, workspace_id: str, storage: Storage, conn: psycopg.Connection
+    ready_root: Path,
+    workspace_id: str,
+    storage: Storage,
+    tables: dynamo.Tables,
+    *,
+    now: datetime | None = None,
 ) -> LoadResult:
+    now = now or datetime.now(UTC).replace(microsecond=0)  # one stamp for the whole run
     data = read_ready(ready_root)
     result = LoadResult()
 
     # 1. Resolve every uri to a real file. A uri with no file is an orphan: reported, never loaded.
-    resolved: list[tuple] = []
+    resolved: list[tuple[MediaRow, Path]] = []
     for row in data.media:
         src = ready_root / row.uri
         if not src.exists():
@@ -76,18 +60,22 @@ def load(
             continue
         resolved.append((row, src))
 
-    # 2. Fetch the keys of rows that already exist — this is the freeze.
-    existing: dict[str, str] = {}
-    fbids = [row.fbid for row, _ in resolved]
-    if fbids:
-        with conn.cursor() as cur:
-            cur.execute("SELECT fbid, storage_path FROM media WHERE fbid = ANY(%s)", (fbids,))
-            existing = dict(cur.fetchall())
+    # 2. Pre-fetch what already exists: the frozen keys, the tombstones, and insert-vs-update.
+    existing = dynamo.prefetch(
+        tables,
+        [("album", a.fb_album_id) for a in data.albums]
+        + [("media", row.fbid) for row, _ in resolved],
+    )
 
     # 3. Store the bytes (idempotent), reusing the frozen key where one exists.
-    keyed: list[tuple] = []
+    keyed: list[tuple[MediaRow, str]] = []
     for row, src in resolved:
-        key = existing.get(row.fbid) or storage.key_for(
+        ref = ("media", row.fbid)
+        prior = existing.get(ref)
+        if prior and prior.deleted:
+            result.skipped_deleted.append(":".join(ref))
+            continue
+        key = (prior and prior.storage_path) or storage.key_for(
             row.fbid, row.hashtag, row.group, src.suffix
         )
         try:
@@ -100,44 +88,28 @@ def load(
             continue
         keyed.append((row, key))
 
-    # 4. Albums first (the FK parent), then media.
-    with conn.cursor() as cur:
-        for album in data.albums:
-            cur.execute(
-                _UPSERT_ALBUM,
-                (
-                    album.fb_album_id,
-                    album.title,
-                    album.caption,
-                    album.date,
-                    album.is_derived,
-                    album.hashtag,
-                ),
-            )
-            if cur.fetchone()[0]:
-                result.albums_inserted += 1
-            else:
-                result.albums_updated += 1
+    # 4. Albums, then 5. media. The condition in `upsert` still guards a tombstone that landed
+    # after the pre-fetch.
+    for album in data.albums:
+        ref = ("album", album.fb_album_id)
+        prior = existing.get(ref)
+        if prior and prior.deleted:
+            result.skipped_deleted.append(":".join(ref))
+            continue
+        if dynamo.upsert(tables, album_update(album, now)) == "skipped_deleted":
+            result.skipped_deleted.append(":".join(ref))
+        elif ref in existing:
+            result.albums_updated += 1
+        else:
+            result.albums_inserted += 1
 
-        for row, key in keyed:
-            cur.execute(
-                _UPSERT_MEDIA,
-                (
-                    row.fbid,
-                    row.media_type,
-                    row.fb_album_id,
-                    row.title,
-                    row.caption,
-                    key,
-                    row.uri,
-                    row.creation_at,
-                    workspace_id,
-                    row.hashtag,
-                ),
-            )
-            if cur.fetchone()[0]:
-                result.media_inserted += 1
-            else:
-                result.media_updated += 1
-    conn.commit()
+    for row, key in keyed:
+        ref = ("media", row.fbid)
+        if dynamo.upsert(tables, media_update(row, key, workspace_id, now)) == "skipped_deleted":
+            result.skipped_deleted.append(":".join(ref))
+        elif ref in existing:
+            result.media_updated += 1
+        else:
+            result.media_inserted += 1
+
     return result

@@ -59,7 +59,7 @@
 				<span class="min-w-0">
 					<span class="block text-sm font-medium text-surface-900">Dev Mode</span>
 					<span class="mt-0.5 block text-xs leading-snug text-surface-500">
-						Load the build into PostgreSQL and inspect the rows. Adds a Dev Mode entry to the
+						Load the build into DynamoDB and inspect the items. Adds a Dev Mode entry to the
 						album rail.
 					</span>
 				</span>

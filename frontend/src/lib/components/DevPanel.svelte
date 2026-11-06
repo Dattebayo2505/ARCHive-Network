@@ -1,13 +1,12 @@
 <script>
 	import {
 		autoCurate,
-		devDatabase,
-		devDatabaseCreate,
-		devDatabaseDrop,
 		devLoad,
 		devRows,
-		devSchema,
 		devStatus,
+		devTables,
+		devTablesCreate,
+		devTablesDelete,
 		devValidate,
 		dockerFloci,
 		dockerStatus,
@@ -26,24 +25,22 @@
 	import ConfirmDialog from './ConfirmDialog.svelte';
 
 	// The dev pane runs the real downstream ETL locally: it reads the built ready/ folder,
-	// copies each image into a local object store, and upserts photo_album + media into
-	// PostgreSQL. Dev-mode is a *backend* capability — every /api/dev/* route 404s unless
-	// ARCHIVENETWORK_DATABASE_URL is set — so this panel must degrade honestly when it isn't.
+	// copies each image into a local object store, and upserts album + media items into
+	// DynamoDB. Dev-mode is a *backend* capability — every /api/dev/* route 404s unless
+	// ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX is set — so this panel must degrade honestly when it isn't.
 	//
-	// Auto-curate is the exception: it is a *selection* action, needs no database, and so lives
-	// outside the DB-gated block below.
+	// Auto-curate is the exception: it is a *selection* action, needs no table, and so lives
+	// outside the table-gated block below.
 	let { selectedPhotos = 0, selectedVideos = 0, onCurated = () => {} } = $props();
 
 	let status = $state(null); // null while first loading
-	// The *database*, as opposed to its tables. A failed connection cannot tell you which of
-	// two very different things went wrong, so /api/dev/status now carries a server probe
-	// (`server_up`, `database`, `database_exists`) alongside the raw error. That probe is the
-	// single source of truth here — these two hold only the outcome of the last db action.
-	let dbError = $state('');
-	let dbNotice = $state('');
-	let confirmDropDb = $state(false);
-	let busy = $state(''); // '' | 'schema' | 'reset' | 'load' | 'validate' | 'curate' | 's3'
-	//                     | 'db-status' | 'db-create' | 'db-drop'
+	// /api/dev/status carries the probe, keeping `endpoint_reachable` apart from `table_exists`
+	// so the panel offers the right fix. These two hold only the outcome of the last table action.
+	let tableError = $state('');
+	let tableNotice = $state('');
+	let confirmDeleteTable = $state(false);
+	let busy = $state(''); // '' | 'load' | 'validate' | 'curate' | 's3'
+	//                     | 'table-status' | 'table-create' | 'table-reset' | 'table-delete'
 	//                     | 'docker-start' | 'docker-restart' | 'docker-stop' | 'docker-rebuild'
 	let loadResult = $state(null);
 	let report = $state(null);
@@ -230,6 +227,8 @@
 			uiTarget = null;
 		} else if (await waitForFloci()) {
 			await warmFlociUi();
+			// The table's reachability rides on floci, so its status is stale now too.
+			await refreshStatus();
 		}
 		busy = '';
 	}
@@ -251,58 +250,77 @@
 
 	let table = $state('media');
 	let offset = $state(0);
+	/** @type {{type: string, total: number, limit: number, offset: number, rows: Record<string, any>[]} | null} */
 	let rows = $state(null);
+	// The table shows curated columns; JSON shows each item whole (index keys, overrides, loaded_at).
+	let view = $state('table');
 	const LIMIT = 10;
 
-	const connected = $derived(status?.enabled && status?.connected);
-	const ready = $derived(connected && status?.tables_exist);
+	const connected = $derived(status?.enabled && status?.endpoint_reachable);
+	const ready = $derived(connected && status?.table_exists);
 
 	async function refreshStatus() {
 		status = await devStatus();
 	}
 
+	// A probe's `tables` holds only the probed kinds: all 11 on floci, the 5 loader tables on AWS.
+	const tableTotal = (p) => Object.keys(p?.tables ?? {}).length;
+	const missingNames = (p) => (p?.missing ?? []).map((k) => p.tables?.[k] ?? k).join(', ');
+
 	/** The explicit "is it there?" check. Re-reads the probe that /api/dev/status carries. */
-	async function checkDatabase() {
-		busy = 'db-status';
-		dbError = '';
-		dbNotice = '';
-		const found = await devDatabase();
-		if (!found.server_up) dbError = found.reason ?? "Can't reach the PostgreSQL server.";
+	async function checkTable() {
+		busy = 'table-status';
+		tableError = '';
+		tableNotice = '';
+		const found = await devTables();
+		if (!found.endpoint_reachable) tableError = found.reason ?? "Can't reach DynamoDB.";
+		else if (found.refused) tableError = found.reason ?? 'DynamoDB refused the request.';
 		else
-			dbNotice = found.database_exists
-				? `Database "${found.database}" exists.`
-				: `The server is up, but database "${found.database}" does not exist yet.`;
+			tableNotice = found.table_exists
+				? `All ${tableTotal(found)} tables exist under "${found.prefix}".`
+				: `DynamoDB is up, but ${found.missing.length} of ${tableTotal(found)} tables are missing: ${missingNames(found)}.`;
 		await refreshStatus();
 		busy = '';
 	}
 
-	// Create/drop, then re-read status: a freshly created database still has no tables, and a
-	// dropped one takes the tables and rows with it — both change what the rest of this panel
-	// may offer.
-	async function runDatabase(action, key, describe) {
+	// Create/reset/delete, then re-read status: each changes what the rest of the panel may
+	// offer, and a reset or delete takes every item with it.
+	async function runTable(action, key, describe) {
 		busy = key;
-		dbError = '';
-		dbNotice = '';
+		tableError = '';
+		tableNotice = '';
+		reset();
 		const res = await action();
-		if (!res.ok) dbError = res.body?.detail ?? 'The database operation failed.';
-		else dbNotice = describe(res.body);
+		if (!res.ok) tableError = res.body?.detail ?? 'The table operation failed.';
+		else {
+			tableNotice = describe(res.body);
+			offset = 0;
+		}
 		await refreshStatus();
 		await refreshRows();
 		busy = '';
 	}
 
-	const createDatabase = () =>
-		runDatabase(devDatabaseCreate, 'db-create', (b) =>
-			b.created
-				? `Created database "${b.database}". Create the tables next.`
-				: `Database "${b.database}" was already there.`
+	const createTable = () =>
+		runTable(
+			() => devTablesCreate(false),
+			'table-create',
+			(b) =>
+				b.created?.length
+					? `Created ${b.created.length} tables.`
+					: `All ${tableTotal(b)} tables were already there.`
 		);
 
-	const dropDatabase = () =>
-		runDatabase(devDatabaseDrop, 'db-drop', (b) =>
-			b.dropped
-				? `Dropped database "${b.database}".`
-				: `Database "${b.database}" was already gone.`
+	const resetTable = () =>
+		runTable(
+			() => devTablesCreate(true),
+			'table-reset',
+			() => 'Reset all 11 tables; they are empty.'
+		);
+
+	const deleteTable = () =>
+		runTable(devTablesDelete, 'table-delete', (b) =>
+			b.deleted?.length ? `Deleted ${b.deleted.length} tables.` : 'The tables were already gone.'
 		);
 
 	async function refreshRows() {
@@ -319,7 +337,7 @@
 		refreshStatus();
 	});
 
-	// Independent of dev-mode: S3 is gated on its own setting, not the database. Warming the
+	// Independent of dev-mode: S3 is gated on its own setting, not the table. Warming the
 	// Floci UI rides along, so the deep link is live well before anyone clicks it.
 	$effect(() => {
 		refreshS3().then(warmFlociUi);
@@ -331,7 +349,7 @@
 		refreshDocker();
 	});
 
-	// Re-page / re-table whenever the browser's inputs change, and once the schema appears.
+	// Re-page / re-type whenever the browser's inputs change, and once the table appears.
 	$effect(() => {
 		void table;
 		void offset;
@@ -343,17 +361,6 @@
 		loadResult = null;
 		report = null;
 		error = '';
-	}
-
-	async function createSchema(destructive) {
-		busy = destructive ? 'reset' : 'schema';
-		reset();
-		const res = await devSchema(destructive);
-		if (!res.ok) error = res.body?.detail ?? 'Could not create the tables.';
-		else if (destructive) offset = 0;
-		await refreshStatus();
-		await refreshRows();
-		busy = '';
 	}
 
 	async function runLoad() {
@@ -381,7 +388,15 @@
 		loadResult
 			? [
 					{ label: 'Albums', value: `+${loadResult.albums_inserted}`, sub: `${loadResult.albums_updated} updated` },
-					{ label: 'Media', value: `+${loadResult.media_inserted}`, sub: `${loadResult.media_updated} updated` },
+					{
+						label: 'Media',
+						value: `+${loadResult.media_inserted}`,
+						sub:
+							`${loadResult.media_updated} updated` +
+							(loadResult.skipped_deleted?.length
+								? ` · ${loadResult.skipped_deleted.length} tombstoned`
+								: '')
+					},
 					{ label: 'Files stored', value: loadResult.files_stored, sub: `${loadResult.files_skipped} already there` },
 					{
 						label: 'Orphans',
@@ -397,8 +412,8 @@
 	const pages = $derived(rows ? Math.max(1, Math.ceil(rows.total / rows.limit)) : 1);
 	const columns = $derived(
 		table === 'media'
-			? ['fbid', 'media_type', 'fb_album_id', 'hashtag', 'caption', 'creation_at', 'storage_path']
-			: ['fb_album_id', 'title', 'hashtag', 'is_derived', 'date', 'caption']
+			? ['id', 'media_type', 'album_id', 'hashtags', 'description', 'creation_at', 'storage_path']
+			: ['id', 'title', 'source', 'hashtags', 'date', 'description']
 	);
 
 	// ── Column sizing ────────────────────────────────────────────────────────────────
@@ -502,6 +517,7 @@
 	function cell(value) {
 		if (value === null || value === undefined || value === '') return '—';
 		if (typeof value === 'boolean') return value ? 'yes' : 'no';
+		if (Array.isArray(value)) return value.length ? value.join(' ') : '—';
 		return String(value);
 	}
 </script>
@@ -526,6 +542,30 @@
 	>
 		{busy === key ? busyLabel : label}
 	</button>
+{/snippet}
+
+<!-- Every probed table with its item count; a missing one says so in words, not only colour.
+     Counts arrive only once every table exists, so a partial set shows "—" beside the present ones. -->
+{#snippet tableList()}
+	<ul
+		class="grid grid-cols-1 gap-px border-b border-surface-200 bg-surface-200 sm:grid-cols-2 lg:grid-cols-3"
+		data-testid="table-list"
+		aria-label="DynamoDB tables"
+	>
+		{#each Object.entries(status.tables ?? {}) as [kind, name] (kind)}
+			{@const gone = status.missing?.includes(kind)}
+			<li class="flex items-baseline justify-between gap-3 bg-surface-50 px-5 py-2">
+				<code class="min-w-0 truncate font-mono text-xs text-surface-800" title={name}>{name}</code>
+				{#if gone}
+					<span class="shrink-0 text-xs font-semibold text-warning-700">missing</span>
+				{:else}
+					<span class="shrink-0 font-mono text-xs tabular-nums text-surface-600"
+						>{status.counts?.[kind] ?? '—'}</span
+					>
+				{/if}
+			</li>
+		{/each}
+	</ul>
 {/snippet}
 
 <!-- The one outbound link in this panel. The hover state is a SOLID green chip rather than the
@@ -567,14 +607,14 @@
 			<p class="mt-1 max-w-prose text-sm leading-relaxed text-surface-600">
 				Runs the downstream ETL locally: reads this workspace's built <code
 					class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800">ready/</code
-				> folder, copies each image into a local object store, and upserts it into PostgreSQL. Your
+				> folder, copies each image into a local object store, and upserts it into DynamoDB. Your
 				original export is never touched.
 			</p>
 		</header>
 
 		<!-- ── Curation ─────────────────────────────────────────────────────────────────
 		     A sibling panel, not a section of the one below: auto-curate is a *selection*
-		     action and needs no database, so it must stay outside the DB-gated block. -->
+		     action and needs no table, so it must stay outside the table-gated block. -->
 		<section class="mb-4 rounded-xl border border-surface-300 bg-surface-50 p-5">
 			<div class="flex flex-wrap items-start justify-between gap-3">
 				<div class="max-w-prose">
@@ -973,7 +1013,7 @@
 				{#if status === null}
 					<div class="flex items-center gap-2.5">
 						<span class="size-2.5 animate-pulse rounded-full bg-surface-400" aria-hidden="true"></span>
-						<p class="text-sm text-surface-600">Checking the database…</p>
+						<p class="text-sm text-surface-600">Checking the tables…</p>
 					</div>
 				{:else if !status.enabled}
 					<div class="max-w-prose">
@@ -982,20 +1022,27 @@
 							<p class="text-sm font-medium text-surface-900">Dev mode is not configured</p>
 						</div>
 						<p class="mt-2 text-sm leading-relaxed text-surface-600">
-							The backend has no database to talk to. Set <code
+							The backend has no DynamoDB tables to talk to. Set <code
 								class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
-								>ARCHIVENETWORK_DATABASE_URL</code
+								>ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX</code
 							>
 							in a <code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
 								>.env</code
 							> file at the repo root, then restart the API.
 						</p>
+						<!-- An old .env naming the single table gets a "renamed" reason, worth showing verbatim. -->
+						{#if status.reason && !status.reason.endsWith('is not set')}
+							<p class="mt-2 font-mono text-xs leading-relaxed break-words text-warning-700">
+								{status.reason}
+							</p>
+						{/if}
 					</div>
-				{:else if !status.connected}
-					<!-- Two very different failures arrive as the same libpq error, so the probe in
-					     /api/dev/status splits them. A missing database is one button away from
-					     fixed; a dead server is not something this panel can repair. -->
-					{@const missing = status.server_up && !status.database_exists}
+				{:else if !status.endpoint_reachable || status.refused || !status.table_exists}
+					<!-- An unreachable endpoint, a refusal and missing tables each need a different fix,
+					     and only the last is one this panel can make — so only it earns Create tables. -->
+					{@const missing = status.endpoint_reachable && !status.refused}
+					{@const total = tableTotal(status)}
+					{@const gone = status.missing?.length ?? 0}
 					<div class="max-w-prose">
 						<div class="flex items-center gap-2.5">
 							<span
@@ -1003,33 +1050,55 @@
 								aria-hidden="true"
 							></span>
 							<p class="text-sm font-medium text-surface-900">
-								{#if missing}
-									The database doesn't exist yet
-								{:else if status.server_up}
-									Can't open the database
+								{#if missing && gone < total}
+									{gone} of {total} tables {gone === 1 ? 'is' : 'are'} missing
+								{:else if missing}
+									The tables don't exist yet
+								{:else if status.refused}
+									DynamoDB refused the request
 								{:else}
-									Can't reach the PostgreSQL server
+									Can't reach DynamoDB
 								{/if}
 							</p>
 						</div>
 
-						{#if missing}
-							<p class="mt-2 text-sm leading-relaxed text-surface-600">
-								The server at <code
+						<p class="mt-2 text-sm leading-relaxed text-surface-600">
+							{#if missing}
+								DynamoDB at <code
 									class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
-									>127.0.0.1:5432</code
+									>{status.endpoint}</code
 								>
-								is running and accepted your credentials, but it has no database named
+								is up, but {gone === 1 ? 'this table is' : 'these tables are'} missing:
+								<code
+									class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs break-words text-surface-800"
+									>{missingNames(status)}</code
+								>.
+								{status.on_emulator
+									? 'Create them here.'
+									: 'On AWS they come from Terraform (infra/), not this panel.'}
+							{:else if status.refused}
 								<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
-									>{status.database}</code
-								>. Create it here, then create the tables.
-							</p>
-						{:else}
-							<p class="mt-2 text-sm leading-relaxed text-surface-600">
-								{status.server_up
-									? 'The server is up but refused this database.'
-									: 'Nothing answered on that host and port. Start PostgreSQL, then check again.'}
-							</p>
+									>{status.endpoint}</code
+								>
+								answered but refused to describe the
+								<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
+									>{status.prefix}-*</code
+								> tables. Check the credentials and permissions.
+							{:else if status.on_emulator}
+								Nothing answered at <code
+									class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
+									>{status.endpoint}</code
+								>. Start floci with <code
+									class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
+									>docker compose up -d</code
+								> (or the Docker controls above), then check again.
+							{:else}
+								<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-xs text-surface-800"
+									>{status.endpoint}</code
+								> did not answer with this machine's AWS credentials.
+							{/if}
+						</p>
+						{#if !missing && status.reason}
 							<p class="mt-2 font-mono text-xs leading-relaxed break-words text-error-700">
 								{status.reason}
 							</p>
@@ -1037,27 +1106,25 @@
 					</div>
 
 					<div class="flex gap-2">
-						{@render secondaryBtn('Check status', 'Checking…', 'db-status', checkDatabase)}
-						{#if missing}
-							{@render primaryBtn('Create database', 'Creating…', 'db-create', createDatabase)}
+						{@render secondaryBtn('Check status', 'Checking…', 'table-status', checkTable)}
+						{#if missing && status.on_emulator}
+							{@render primaryBtn('Create tables', 'Creating…', 'table-create', createTable)}
 						{/if}
 					</div>
 				{:else}
 					<div>
 						<div class="flex items-center gap-2.5">
-							<span
-								class="size-2.5 rounded-full {status.tables_exist
-									? 'bg-success-500'
-									: 'bg-warning-500'}"
-								aria-hidden="true"
-							></span>
-							<p class="text-sm font-medium text-surface-900">
-								{status.tables_exist ? 'Connected' : 'Connected — tables not created yet'}
-							</p>
+							<span class="size-2.5 rounded-full bg-success-500" aria-hidden="true"></span>
+							<p class="text-sm font-medium text-surface-900">Connected</p>
 						</div>
 						<p class="mt-2 text-xs text-surface-600">
-							Database <code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
-								>{status.database}</code
+							{tableTotal(status)} tables <code
+								class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
+								>{status.prefix}-*</code
+							>
+							· endpoint
+							<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
+								>{status.endpoint}</code
 							>
 							· object store
 							<code class="rounded bg-surface-200 px-1 py-0.5 font-mono text-surface-800"
@@ -1070,59 +1137,58 @@
 						</p>
 					</div>
 					<div class="flex flex-wrap justify-end gap-2">
-						{@render secondaryBtn('Check status', 'Checking…', 'db-status', checkDatabase)}
-						{#if !status.tables_exist}
-							{@render primaryBtn('Create tables', 'Creating…', 'schema', () => createSchema(false))}
-						{:else}
-							{@render secondaryBtn('Reset tables', 'Resetting…', 'reset', () => (confirmReset = true))}
+						{@render secondaryBtn('Check status', 'Checking…', 'table-status', checkTable)}
+						<!-- Table admin is emulator-only (the backend 409s on AWS; Terraform owns those
+						     tables). Delete sits last behind a named confirm: the widest blast radius here. -->
+						{#if status.on_emulator}
+							{@render secondaryBtn('Reset tables', 'Resetting…', 'table-reset', () => (confirmReset = true))}
+							{@render secondaryBtn(
+								'Delete tables',
+								'Deleting…',
+								'table-delete',
+								() => (confirmDeleteTable = true)
+							)}
 						{/if}
-						<!-- Drop the whole database, not just its tables. Sits last and behind a named
-						     confirm: it is the widest-blast-radius control on this panel. -->
-						{@render secondaryBtn(
-							'Drop database',
-							'Dropping…',
-							'db-drop',
-							() => (confirmDropDb = true)
-						)}
 					</div>
 				{/if}
 
-				{#if dbError}
+				{#if tableError}
 					<p
 						class="w-full rounded-lg border border-error-200 bg-error-50 px-3 py-2 font-mono text-xs break-words text-error-800"
 						role="alert"
 					>
-						{dbError}
+						{tableError}
 					</p>
-				{:else if dbNotice}
+				{:else if tableNotice}
 					<p
 						class="w-full rounded-lg border border-surface-200 bg-surface-100 px-3 py-2 text-sm text-surface-800"
 						aria-live="polite"
 					>
-						{dbNotice}
+						{tableNotice}
 					</p>
 				{/if}
 			</section>
 
 			{#if ready}
-				<!-- Row counts. Hairline grid, same idiom as the build summary. -->
+				<!-- Item counts. Hairline grid, same idiom as the build summary. -->
 				<div class="grid grid-cols-2 gap-px border-y border-surface-200 bg-surface-200">
-					{#each [{ label: 'photo_album rows', value: status.counts.photo_album }, { label: 'media rows', value: status.counts.media }] as stat (stat.label)}
+					{#each [{ label: 'album items', value: status.counts.album }, { label: 'media items', value: status.counts.media }] as stat (stat.label)}
 						<div class="bg-surface-50 px-5 py-3">
 							<p class="text-xl font-semibold tabular-nums text-surface-900">{stat.value}</p>
 							<p class="mt-0.5 font-mono text-xs text-surface-600">{stat.label}</p>
 						</div>
 					{/each}
 				</div>
+				{@render tableList()}
 
 				<!-- ── Load ─────────────────────────────────────────────── -->
 				<section class="border-b border-surface-200 p-5">
 					<div class="flex flex-wrap items-center justify-between gap-3">
 						<div>
-							<h2 class="text-sm font-semibold text-surface-900">Load into PostgreSQL</h2>
+							<h2 class="text-sm font-semibold text-surface-900">Load into DynamoDB</h2>
 							<p class="mt-0.5 text-xs text-surface-600">
-								Storage first, then the rows. Re-running is safe — nothing is uploaded or inserted
-								twice.
+								Storage first, then the items. Re-running is safe — nothing is uploaded twice, and
+								CMS edits and deletions are never overwritten.
 							</p>
 						</div>
 						{@render primaryBtn('Run load', 'Loading…', 'load', runLoad)}
@@ -1157,7 +1223,7 @@
 							{/each}
 						</div>
 
-						{#if loadResult.orphans.length || loadResult.errors.length}
+						{#if loadResult.orphans.length || loadResult.errors.length || loadResult.skipped_deleted?.length}
 							<details class="group mt-3">
 								<summary
 									class="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-surface-700 select-none"
@@ -1177,7 +1243,8 @@
 								<pre
 									class="mt-2 max-h-44 overflow-auto rounded-lg bg-surface-100 p-3 font-mono text-xs leading-relaxed text-surface-700">{[
 										...loadResult.orphans,
-										...loadResult.errors
+										...loadResult.errors,
+										...(loadResult.skipped_deleted ?? []).map((k) => `tombstoned: ${k}`)
 									].join('\n')}</pre>
 							</details>
 						{/if}
@@ -1190,7 +1257,7 @@
 						<div>
 							<h2 class="text-sm font-semibold text-surface-900">Validation</h2>
 							<p class="mt-0.5 text-xs text-surface-600">
-								Checks the loaded rows against the ready folder and the object store.
+								Checks the loaded items against the ready folder and the object store.
 							</p>
 						</div>
 						{@render secondaryBtn('Run checks', 'Checking…', 'validate', runValidate)}
@@ -1249,32 +1316,49 @@
 					{/if}
 				</section>
 
-				<!-- ── Row browser ──────────────────────────────────────── -->
+				<!-- ── Item browser ──────────────────────────────────────── -->
 				<section class="p-5">
 					<div class="flex flex-wrap items-center justify-between gap-3">
-						<h2 class="text-sm font-semibold text-surface-900">Rows</h2>
-						<div
-							class="flex rounded-lg border border-surface-300 p-0.5"
-							role="tablist"
-							aria-label="Table"
-						>
-							{#each ['media', 'photo_album'] as t (t)}
-								<button
-									type="button"
-									role="tab"
-									aria-selected={table === t}
-									onclick={() => {
-										table = t;
-										offset = 0;
-									}}
-									class="rounded-md px-3 py-1 font-mono text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 {table ===
-									t
-										? 'bg-primary-100 font-semibold text-primary-900'
-										: 'text-surface-600 hover:bg-surface-200'}"
-								>
-									{t}
-								</button>
-							{/each}
+						<h2 class="text-sm font-semibold text-surface-900">Items</h2>
+						<div class="flex flex-wrap items-center gap-2">
+							<div class="flex rounded-lg border border-surface-300 p-0.5" role="group" aria-label="View as">
+								{#each [['table', 'Table'], ['json', 'JSON']] as [v, label] (v)}
+									<button
+										type="button"
+										aria-pressed={view === v}
+										onclick={() => (view = v)}
+										class="rounded-md px-3 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 {view ===
+										v
+											? 'bg-primary-100 font-semibold text-primary-900'
+											: 'text-surface-600 hover:bg-surface-200'}"
+									>
+										{label}
+									</button>
+								{/each}
+							</div>
+							<div
+								class="flex rounded-lg border border-surface-300 p-0.5"
+								role="tablist"
+								aria-label="Item type"
+							>
+								{#each ['media', 'album'] as t (t)}
+									<button
+										type="button"
+										role="tab"
+										aria-selected={table === t}
+										onclick={() => {
+											table = t;
+											offset = 0;
+										}}
+										class="rounded-md px-3 py-1 font-mono text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 {table ===
+										t
+											? 'bg-primary-100 font-semibold text-primary-900'
+											: 'text-surface-600 hover:bg-surface-200'}"
+									>
+										{t}
+									</button>
+								{/each}
+							</div>
 						</div>
 					</div>
 
@@ -1287,84 +1371,94 @@
 						</div>
 					{:else if rows.total === 0}
 						<div class="mt-4 rounded-lg border border-dashed border-surface-300 px-4 py-8 text-center">
-							<p class="text-sm font-medium text-surface-800">No rows yet</p>
+							<p class="text-sm font-medium text-surface-800">No items yet</p>
 							<p class="mt-1 text-sm text-surface-600">
-								Run the load above to populate <code class="font-mono text-xs">{table}</code>.
+								Run the load above to populate <code class="font-mono text-xs">{table}</code> items.
 							</p>
 						</div>
 					{:else}
-						<div class="mt-4 overflow-x-auto rounded-lg border border-surface-200">
-							<table
-								class="w-full min-w-[46rem] table-fixed border-collapse text-left"
-								bind:clientWidth={tableWidth}
-							>
-								<!-- Declared once here rather than per-<th>: with `table-fixed` the colgroup
-								     is what actually sizes the columns. See `colPcts` for why these are
-								     plain percentages and never a mixed %/px calc(). -->
-								<colgroup>
-									{#if table === 'media'}
-										<col style="width: {previewPct}%" />
-									{/if}
-									{#each columns as col, i (col)}
-										<col style="width: {colPcts[i]}%" />
-									{/each}
-								</colgroup>
-								<thead>
-									<tr class="border-b border-surface-200 bg-surface-100">
+						{#if view === 'json'}
+							<pre
+								data-testid="rows-json"
+								class="mt-4 max-h-[32rem] overflow-auto rounded-lg border border-surface-200 bg-surface-100 p-3 font-mono text-xs leading-relaxed text-surface-800">{JSON.stringify(
+									rows.rows,
+									null,
+									2
+								)}</pre>
+						{:else}
+							<div class="mt-4 overflow-x-auto rounded-lg border border-surface-200">
+								<table
+									class="w-full min-w-[46rem] table-fixed border-collapse text-left"
+									bind:clientWidth={tableWidth}
+								>
+									<!-- Declared once here rather than per-<th>: with `table-fixed` the colgroup
+									     is what actually sizes the columns. See `colPcts` for why these are
+									     plain percentages and never a mixed %/px calc(). -->
+									<colgroup>
 										{#if table === 'media'}
-											<th class="px-3 py-2"><span class="sr-only">Preview</span></th>
+											<col style="width: {previewPct}%" />
 										{/if}
 										{#each columns as col, i (col)}
-											<th
-												class="relative px-3 py-2 font-mono text-xs font-semibold text-surface-700 select-none"
-											>
-												<span class="block truncate" title={col}>{col}</span>
-												{#if i < columns.length - 1}
-													<button
-														type="button"
-														onpointerdown={(e) => startResize(e, i)}
-														onkeydown={(e) => onHandleKey(e, i)}
-														aria-label="Resize the {col} column"
-														title="Drag to resize · arrow keys also work"
-														class="absolute top-1/2 right-0 z-10 h-6 w-3 -translate-y-1/2 translate-x-1/2 cursor-col-resize rounded-xs before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-surface-300 before:transition-colors hover:before:bg-primary-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 focus-visible:before:bg-primary-600"
-													></button>
-												{/if}
-											</th>
+											<col style="width: {colPcts[i]}%" />
 										{/each}
-									</tr>
-								</thead>
-								<tbody>
-									{#each rows.rows as row (row.media_id ?? row.fb_album_id)}
-										<tr class="border-b border-surface-200 last:border-0 hover:bg-surface-100">
+									</colgroup>
+									<thead>
+										<tr class="border-b border-surface-200 bg-surface-100">
 											{#if table === 'media'}
-												<td class="px-3 py-1.5">
-													<!-- `min-w-9` is still load-bearing under `table-fixed`: Tailwind's preflight
-													     `img { max-width: 100% }` resolves against the column box, so a squeezed
-													     column would collapse the preview to nothing. The colgroup pins this
-													     column at PREVIEW_PX; the min-width is the floor if that ever gives. -->
-													<img
-														src={storeUrl(row.storage_path, status.media_base_url)}
-														alt=""
-														loading="lazy"
-														width="36"
-														height="36"
-														class="size-9 min-w-9 rounded object-cover ring-1 ring-surface-300"
-													/>
-												</td>
+												<th class="px-3 py-2"><span class="sr-only">Preview</span></th>
 											{/if}
-											{#each columns as col (col)}
-												<!-- `table-fixed` + the colgroup own the width now, so the cell only has
-												     to truncate what it's given. The title keeps the full value reachable. -->
-												<td
-													class="truncate px-3 py-1.5 font-mono text-xs text-surface-700"
-													title={cell(row[col])}>{cell(row[col])}</td
+											{#each columns as col, i (col)}
+												<th
+													class="relative px-3 py-2 font-mono text-xs font-semibold text-surface-700 select-none"
 												>
+													<span class="block truncate" title={col}>{col}</span>
+													{#if i < columns.length - 1}
+														<button
+															type="button"
+															onpointerdown={(e) => startResize(e, i)}
+															onkeydown={(e) => onHandleKey(e, i)}
+															aria-label="Resize the {col} column"
+															title="Drag to resize · arrow keys also work"
+															class="absolute top-1/2 right-0 z-10 h-6 w-3 -translate-y-1/2 translate-x-1/2 cursor-col-resize rounded-xs before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-surface-300 before:transition-colors hover:before:bg-primary-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 focus-visible:before:bg-primary-600"
+														></button>
+													{/if}
+												</th>
 											{/each}
 										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
+									</thead>
+									<tbody>
+										{#each rows.rows as row (row.id)}
+											<tr class="border-b border-surface-200 last:border-0 hover:bg-surface-100">
+												{#if table === 'media'}
+													<td class="px-3 py-1.5">
+														<!-- `min-w-9` is still load-bearing under `table-fixed`: Tailwind's preflight
+														     `img { max-width: 100% }` resolves against the column box, so a squeezed
+														     column would collapse the preview to nothing. The colgroup pins this
+														     column at PREVIEW_PX; the min-width is the floor if that ever gives. -->
+														<img
+															src={storeUrl(row.storage_path, status.media_base_url)}
+															alt=""
+															loading="lazy"
+															width="36"
+															height="36"
+															class="size-9 min-w-9 rounded object-cover ring-1 ring-surface-300"
+														/>
+													</td>
+												{/if}
+												{#each columns as col (col)}
+													<!-- `table-fixed` + the colgroup own the width now, so the cell only has
+													     to truncate what it's given. The title keeps the full value reachable. -->
+													<td
+														class="truncate px-3 py-1.5 font-mono text-xs text-surface-700"
+														title={cell(row[col])}>{cell(row[col])}</td
+													>
+												{/each}
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						{/if}
 
 						<div class="mt-3 flex items-center justify-between gap-3">
 							<p class="font-mono text-xs text-surface-600">
@@ -1390,12 +1484,12 @@
 						</div>
 					{/if}
 				</section>
-			{:else if status?.enabled && status?.connected && !status?.tables_exist}
-				<div class="border-t border-surface-200 px-5 py-8 text-center">
-					<p class="text-sm font-medium text-surface-800">The schema isn't there yet</p>
+			{:else if connected && !status.table_exists && !status.refused}
+				<div class="border-t border-surface-200">{@render tableList()}</div>
+				<div class="px-5 py-8 text-center">
+					<p class="text-sm font-medium text-surface-800">Some tables aren't there yet</p>
 					<p class="mx-auto mt-1 max-w-prose text-sm text-surface-600">
-						Create <code class="font-mono text-xs">photo_album</code> and
-						<code class="font-mono text-xs">media</code> to start loading this workspace.
+						Create <code class="font-mono text-xs">{missingNames(status)}</code> to start loading this workspace.
 					</p>
 				</div>
 			{/if}
@@ -1419,30 +1513,30 @@
 
 <ConfirmDialog
 	open={confirmReset}
-	title="Reset the database?"
-	message="This drops the photo_album and media tables and recreates them empty. Rows are lost; the files already in the object store are left alone. Your export and ready folder are untouched."
-	confirmLabel="Drop and recreate"
+	title="Reset the tables?"
+	message="This deletes all 11 {status?.prefix}-* tables and recreates them empty. Items are lost, including any simulated CMS edits; the files already in the object store are left alone. Your export and ready folder are untouched."
+	confirmLabel="Delete and recreate"
 	cancelLabel="Cancel"
 	destructive
 	onConfirm={() => {
 		confirmReset = false;
-		createSchema(true);
+		resetTable();
 	}}
 	onCancel={() => (confirmReset = false)}
 />
 
 <ConfirmDialog
-	open={confirmDropDb}
-	title="Drop the {status?.database} database?"
-	message="This deletes the entire database — the photo_album and media tables and every row in them — not just their contents. Any open connections to it are closed first. The files already in the object store, your export, and your ready folder are all left alone. You can create it again from this panel."
-	confirmLabel="Drop database"
+	open={confirmDeleteTable}
+	title="Delete the {status?.prefix}-* tables?"
+	message="This deletes all 11 tables and every item in them. The files already in the object store, your export, and your ready folder are all left alone. You can create them again from this panel."
+	confirmLabel="Delete tables"
 	cancelLabel="Cancel"
 	destructive
 	onConfirm={() => {
-		confirmDropDb = false;
-		dropDatabase();
+		confirmDeleteTable = false;
+		deleteTable();
 	}}
-	onCancel={() => (confirmDropDb = false)}
+	onCancel={() => (confirmDeleteTable = false)}
 />
 
 <ConfirmDialog

@@ -1,0 +1,4 @@
+[submodule "infra"]
+	path = infra
+	url = https://github.com/archers-network/arch-config-shared.git
+	branch = main

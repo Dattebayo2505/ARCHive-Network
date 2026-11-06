@@ -2,6 +2,7 @@ import platform
 import sys
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Repo root: config.py -> archivenetwork -> src -> <root>. Used to locate vendored binaries
@@ -44,8 +45,8 @@ def _default_seven_zip() -> Path | None:
 
 
 class Settings(BaseSettings):
-    # `.env` (gitignored) is where the local Postgres URL lives, so a credential never has to
-    # be exported into the shell or committed. Real env vars still win over the file.
+    # `.env` (gitignored) is where local settings live (the Dev-mode table, S3 credentials), so
+    # nothing has to be exported into the shell or committed. Real env vars still win over the file.
     model_config = SettingsConfigDict(
         env_prefix="ARCHIVENETWORK_", env_file=".env", extra="ignore"
     )
@@ -56,17 +57,29 @@ class Settings(BaseSettings):
     thumb_size: int = 512
     preview_size: int = 1280
 
-    # --- Dev-mode: load the built ready/ folder into a local Postgres + local object store. ---
-    # Off unless `database_url` is set; every /api/dev/* route 404s without it.
+    # --- Dev-mode: load the built ready/ folder into DynamoDB + a local object store. ---
+    # Off unless `dynamodb_table_prefix` is set; every /api/dev/* route 404s without it.
+    # Each item type has its own table, named `<prefix>-<suffix>` (loader.dynamo.TABLES).
     #
     # `media_root` / `media_base_url` are the *object-store root* — the part before the key.
     # A key begins with "fb-exports/<hashtag>/<album-slug>/" (see loader.storage.media_key).
     # Read URL = <media_base_url>/<storage_path>; in prod that base is a CDN domain instead.
-    database_url: str | None = None
     media_root: Path = Path("workspace/store")
     media_base_url: str = "/store"
 
-    # --- S3 upload (on-demand). Independent of dev-mode/Postgres. AWS S3 only. ---
+    # The DynamoDB endpoint is the same floci container as
+    # `floci_endpoint_url`; an empty value means real AWS, so it normalises to None. ---
+    dynamodb_table_prefix: str | None = None
+    # Legacy: only read to tell an old .env it was renamed.
+    dynamodb_table: str | None = None
+    dynamodb_endpoint_url: str | None = "http://127.0.0.1:4566"
+
+    @field_validator("dynamodb_endpoint_url", mode="before")
+    @classmethod
+    def _empty_endpoint_is_aws(cls, v):
+        return None if v == "" else v
+
+    # --- S3 upload (on-demand). Independent of dev-mode/DynamoDB. AWS S3 only. ---
     # Credentials are optional: passed to boto3 only when both are set, else boto3's
     # default credential chain (env / ~/.aws / SSO / instance role) resolves them.
     s3_bucket: str | None = None
@@ -83,6 +96,9 @@ class Settings(BaseSettings):
     # layout byte-identical to production's.
     floci_endpoint_url: str = "http://127.0.0.1:4566"
     floci_bucket: str = "archivenetwork-dev"
+    # Log at startup whether floci is the latest release (loader/flociversion.py). It makes
+    # one GitHub call, so switch it off (ARCHIVENETWORK_FLOCI_VERSION_CHECK=false) when offline.
+    floci_version_check: bool = True
 
     host: str = "127.0.0.1"
     port: int = 8000

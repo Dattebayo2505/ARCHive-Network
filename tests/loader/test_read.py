@@ -221,3 +221,51 @@ def test_unanchored_media_has_no_tag_and_the_unanchored_group(
     assert s01.fb_album_id is None
     assert s01.hashtag is None
     assert s01.group == "unanchored"
+
+
+def test_album_carries_every_tag_in_written_order(ready_root: Path):
+    by_title = {a.title: a for a in read_ready(ready_root).albums}
+    assert by_title["HEADLINE ONE"].hashtags == ["ARCHEVT", "ArchersNetwork"]
+    assert by_title["HEADLINE TWO"].hashtags == ["ARCHSports"]
+
+
+def test_album_media_inherits_the_albums_tag_list(ready_root: Path):
+    g01 = next(m for m in read_ready(ready_root).media if m.fbid == "g01")
+    assert g01.hashtags == ["ARCHEVT", "ArchersNetwork"]
+
+
+def test_album_rows_never_share_one_mutable_tag_list(ready_root: Path):
+    r = read_ready(ready_root)
+    g01 = next(m for m in r.media if m.fbid == "g01")
+    g02 = next(m for m in r.media if m.fbid == "g02")
+    album = next(a for a in r.albums if a.fb_album_id == "g01")
+    assert g01.hashtags is not g02.hashtags and g01.hashtags is not album.hashtags
+
+
+def test_untagged_unanchored_media_has_no_tags(legacy_unanchored_ready_root: Path):
+    s01 = next(m for m in read_ready(legacy_unanchored_ready_root).media if m.fbid == "s01")
+    assert s01.hashtags == []
+
+
+def test_an_album_less_video_keeps_its_own_tag_list(tmp_path: Path):
+    posts = tmp_path / "posts"
+    (posts / "album").mkdir(parents=True)
+    (posts / "media" / "videos").mkdir(parents=True)
+    (posts / "media" / "videos" / "v01.jpg").write_bytes(b"\xff\xd8\xff\xdbJPEG")
+    (posts / "videos.json").write_text(
+        json.dumps(
+            {
+                "videos_v2": [
+                    {
+                        "uri": "posts/media/videos/v01.jpg",
+                        "creation_timestamp": 1_700_000_500,
+                        "description": "Watch this clip #ArchersAfterDark #ARCHENT",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    v01 = {m.fbid: m for m in read_ready(tmp_path).media}["v01"]
+    assert v01.hashtags == ["ArchersAfterDark", "ARCHENT"]
+    assert v01.hashtag == "ARCHENT"

@@ -207,8 +207,8 @@ def curate(request: Request, body: CurateRequest | None = None):
     """Auto-curate: pick ≤N photos per album and every video, replacing the selection.
 
     Lives here, not under `/api/dev/*`: this is a *selection* operation and has nothing to do
-    with Postgres, so gating it on `database_url` (as every dev route is) would be wrong. The
-    Dev panel is merely where the button lives.
+    with DynamoDB, so gating it on `dynamodb_table_prefix` (as every dev route is) would be wrong.
+    The Dev panel is merely where the button lives.
     """
     session = _session(request)
     per_album = body.per_album if body and body.per_album else settings.max_per_album
