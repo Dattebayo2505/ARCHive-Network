@@ -171,7 +171,10 @@ def test_the_ui_route_uses_the_configured_endpoint_and_owns_its_wait(client, mon
         return _ui()
 
     monkeypatch.setattr(routes_docker.flociui, "ensure", ensure)
-    monkeypatch.setattr(routes_docker.settings, "floci_endpoint_url", "http://floci.local:9999")
+    from types import SimpleNamespace
+
+    floci_env = SimpleNamespace(endpoint_url="http://floci.local:9999")
+    client.app.state.envs = SimpleNamespace(floci=lambda: floci_env)
     client.get("/api/docker/floci-ui?wait=2")
     assert seen == {"endpoint": "http://floci.local:9999"}
 
@@ -191,3 +194,28 @@ def test_floci_version_reports_running_pinned_and_latest(client, monkeypatch):
     body = client.get("/api/docker/floci-version").json()
     assert body["status"] == "update_available"
     assert (body["running"], body["pinned"], body["latest"]) == ("2.4.0", "2.4.0", "2.5.0")
+
+
+def test_docker_routes_use_the_floci_env_endpoint(monkeypatch, tmp_path):
+    from archivenetwork.loader.envs import load_registry
+
+    toml = tmp_path / "environments.toml"
+    toml.write_text(
+        'default = "local"\n[env.local]\nkind = "floci"\nlabel = "L"\n'
+        'endpoint_url = "http://127.0.0.1:1"\nregion = "ap-southeast-1"\n'
+        's3_bucket = "b"\ntable_prefix = "p"\n',
+        encoding="utf-8",
+    )
+    app = create_app()
+    app.state.envs = load_registry(toml)
+    seen = []
+    from archivenetwork.loader.flociversion import assess
+
+    monkeypatch.setattr(routes_docker.flociversion, "report",
+                        lambda endpoint, compose: seen.append(endpoint) or assess(None, "2.4.0", None))
+    monkeypatch.setattr(routes_docker.flociui, "ensure",
+                        lambda endpoint: seen.append(endpoint) or _ui())
+    c = TestClient(app)
+    assert c.get("/api/docker/floci-version").status_code == 200
+    assert c.get("/api/docker/floci-ui").status_code == 200
+    assert seen == ["http://127.0.0.1:1", "http://127.0.0.1:1"]

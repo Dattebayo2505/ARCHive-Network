@@ -1,5 +1,7 @@
 import platform
+import re
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from pydantic import field_validator
@@ -52,6 +54,9 @@ class Settings(BaseSettings):
     )
 
     workspace_dir: Path = Path("workspace")
+    # Named environments (loader/envs.py): the committed file plus a gitignored overlay.
+    environments_file: Path = PROJECT_ROOT / "environments.toml"
+    environments_local_file: Path = PROJECT_ROOT / "environments.local.toml"
     seven_zip_exe: Path | None = _default_seven_zip()
     max_per_album: int = 10
     thumb_size: int = 512
@@ -111,6 +116,44 @@ class Settings(BaseSettings):
     # Both servers are local, but Vite falls back to :5174/:5175/… when :5173 is
     # taken. Allow any localhost / 127.0.0.1 port so a port bump never breaks CORS.
     cors_origin_regex: str = r"http://(localhost|127\.0\.0\.1)(:\d+)?"
+
+
+# Settings that moved to environments.toml / environments.local.toml. Still present in `.env` or
+# the environment, they are reported by name so nobody believes they are being read.
+STALE_KEYS: tuple[str, ...] = tuple(
+    "ARCHIVENETWORK_" + name.upper()
+    for name in (
+        "dynamodb_table_prefix",
+        "dynamodb_table",
+        "dynamodb_endpoint_url",
+        "s3_bucket",
+        "s3_region",
+        "s3_access_key_id",
+        "s3_secret_access_key",
+        "floci_endpoint_url",
+        "floci_bucket",
+        "media_root",
+        "media_base_url",
+    )
+)
+_ENV_LINE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
+
+
+def stale_settings(env_file: Path, environ: Mapping[str, str]) -> list[str]:
+    """Sorted names of retired settings set in `environ` or as `NAME=` lines in `env_file`.
+
+    Names only: the values may be credentials, so they never leave this function.
+    """
+    found = {k for k in STALE_KEYS if k in environ}
+    try:
+        lines = env_file.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        lines = []
+    for line in lines:
+        m = _ENV_LINE.match(line)
+        if m and m.group(1).upper() in STALE_KEYS:
+            found.add(m.group(1).upper())
+    return sorted(found)
 
 
 settings = Settings()

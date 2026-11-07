@@ -11,24 +11,28 @@ can't, so a stale frontend can never turn a missing binary into a 500.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
-from ..config import settings
 from ..loader import dockerctl, flociui, flociversion
 from ..loader.dockerctl import Action
 
 router = APIRouter()
 
 
+def _floci_endpoint(request: Request) -> str:
+    """The default env's emulator: the one floci the Docker controls manage."""
+    return request.app.state.envs.floci().endpoint_url
+
+
 @router.get("/api/docker/floci-version")
-def floci_version() -> dict:
+def floci_version(request: Request) -> dict:
     """Running vs pinned vs latest floci (`loader/flociversion.py`). Never fails: an
     unreachable floci or GitHub comes back as `null` fields with a status explaining it."""
-    return flociversion.report(settings.floci_endpoint_url, dockerctl.COMPOSE_FILE).as_dict()
+    return flociversion.report(_floci_endpoint(request), dockerctl.COMPOSE_FILE).as_dict()
 
 
 @router.get("/api/docker/floci-ui")
-def ui() -> dict:
+def ui(request: Request) -> dict:
     """Where to send someone who wants to look at the bucket.
 
     Lives here rather than in the browser because the two calls involved are cross-origin to
@@ -39,7 +43,7 @@ def ui() -> dict:
     The wait budget is not a query parameter: no caller passes one, and a caller-controlled
     sleep on a server route is a lever with no user. `flociui.DEFAULT_WAIT` owns it.
     """
-    return flociui.ensure(settings.floci_endpoint_url).as_dict()
+    return flociui.ensure(_floci_endpoint(request)).as_dict()
 
 
 @router.get("/api/docker/status")
