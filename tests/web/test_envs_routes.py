@@ -291,3 +291,27 @@ def test_aws_errors_maps_credentials_and_denials():
     with pytest.raises(ClientError):
         with envparam.aws_errors(env):
             raise other
+
+
+def test_a_broken_overlay_on_disk_still_starts_the_app(tmp_path, monkeypatch):
+    """Review focus: a typo in environments.local.toml is reported, never a startup failure."""
+    from archivenetwork.config import settings
+
+    overlay = tmp_path / "environments.local.toml"
+    overlay.write_text("[env.dev\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "environments_local_file", overlay)
+    c = TestClient(create_app())
+    body = c.get("/api/envs").json()
+    assert {e["name"] for e in body["envs"]} == {"local", "dev", "prod"}
+    assert len(body["errors"]) == 1 and "environments.local.toml" in body["errors"][0]
+
+
+def test_a_broken_committed_file_is_a_startup_failure(tmp_path, monkeypatch):
+    from archivenetwork.config import settings
+    from archivenetwork.loader.envs import EnvConfigError
+
+    broken = tmp_path / "environments.toml"
+    broken.write_text('default = "nope"\n', encoding="utf-8")
+    monkeypatch.setattr(settings, "environments_file", broken)
+    with pytest.raises(EnvConfigError):
+        create_app()
