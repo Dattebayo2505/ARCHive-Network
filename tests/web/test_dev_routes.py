@@ -208,7 +208,7 @@ def test_rows_and_validate_502_when_a_scan_fails(dev_table, built_client, monkey
     for path in ("/api/dev/rows", "/api/dev/validate"):
         resp = built_client.get(path, params=L)
         assert resp.status_code == 502, (path, resp.text)
-        assert "DynamoDB request failed" in resp.json()["detail"]
+        assert resp.json()["detail"].startswith("floci request failed — "), path
 
 
 def test_status_survives_a_failing_count(client, monkeypatch):
@@ -448,3 +448,30 @@ def test_a_bodiless_create_tables_is_exactly_415(client):
     resp = client.post("/api/dev/tables", params=L)
     assert resp.status_code == 415
     assert resp.json()["error"] == "json_required"
+
+
+# --- review round 2 ----------------------------------------------------------------------
+
+
+def test_an_s3_failure_in_rows_is_not_labelled_dynamodb(dev_table, built_client, monkeypatch):
+    # Round 2: presign / HEADs / the SSO refresh fail inside rows and validate too.
+    from botocore.exceptions import ClientError
+
+    item = {"id": "a01", "storage_path": "fb-exports/x/y/a01.jpg"}
+    monkeypatch.setattr(dynamo, "scan_items", lambda t, kind: [dict(item)])
+
+    def refuses(key, expires=900):
+        raise ClientError({"Error": {"Code": "InternalError", "Message": "S3 is sad"}},
+                          "GeneratePresignedUrl")
+
+    monkeypatch.setattr(S3Storage, "presign", lambda self, key, expires=900: refuses(key))
+    resp = built_client.get("/api/dev/rows", params=L)
+    assert resp.status_code == 502, resp.text
+    detail = resp.json()["detail"]
+    assert detail.startswith("floci request failed — ") and "S3 is sad" in detail
+    assert "DynamoDB" not in detail
+
+    monkeypatch.setattr(S3Storage, "exists", lambda self, key: refuses(key))
+    resp = built_client.get("/api/dev/validate", params=L)
+    assert resp.status_code == 502, resp.text
+    assert resp.json()["detail"].startswith("floci request failed — ")

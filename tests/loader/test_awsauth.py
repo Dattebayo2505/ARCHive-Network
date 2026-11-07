@@ -220,13 +220,17 @@ def test_session_without_login_is_signed_out(auth):
 def test_unauthorized_role_credentials_are_signed_out(auth, fakes):
     env = _env()
     _sign_in(auth, fakes, env)
+    calls = []
 
     def refuse(**kw):
+        calls.append(kw["accessToken"])
         raise _err("UnauthorizedException")
 
     fakes["sso"].get_role_credentials = refuse
+    fakes["sso-oidc"].refresh_result = {"accessToken": "atok2", "expiresIn": 3600}
     with pytest.raises(SignedOut):
         auth.session(env)
+    assert calls == ["atok", "atok2"]  # one in-call retry on the refreshed token, no more
 
 
 def test_logout_removes_cache_file(auth, fakes, tmp_path):
@@ -419,3 +423,47 @@ def test_role_keys_outlive_a_preview_url(auth, fakes, clock):
     clock.t = NOW + 3600 - PREVIEW_SECONDS + 5
     auth.session(env)
     assert len(fakes["sso"].calls) == 2
+
+
+# --- review round 2 ----------------------------------------------------------------------
+
+
+def test_a_revoked_access_token_is_refreshed_in_the_same_call(auth, fakes, tmp_path):
+    # Round 2: raising SignedOut first made the panel flash "expired" until the next re-list.
+    env = _env()
+    _sign_in(auth, fakes, env)
+    real = fakes["sso"].get_role_credentials
+    calls = []
+
+    def first_refuses(**kw):
+        calls.append(kw["accessToken"])
+        if len(calls) == 1:
+            raise _err("UnauthorizedException")
+        return real(**kw)
+
+    fakes["sso"].get_role_credentials = first_refuses
+    fakes["sso-oidc"].refresh_result = {"accessToken": "atok2", "expiresIn": 3600}
+    session = auth.session(env)
+    assert session.get_credentials().access_key == "ASIAFAKE"
+    assert calls == ["atok", "atok2"]
+    (cache,) = (tmp_path / "sso").glob("*.json")
+    assert json.loads(cache.read_text(encoding="utf-8"))["accessToken"] == "atok2"
+
+
+def test_the_cache_file_is_created_owner_only(auth, fakes, monkeypatch):
+    # Round 2: created 0600 from the start, never briefly world-readable before a chmod.
+    import os
+
+    from archivenetwork.loader import awsauth
+
+    opened = []
+    real_open = os.open
+
+    def spy(path, flags, mode=0o777, *a, **kw):
+        opened.append((str(path), mode))
+        return real_open(path, flags, mode, *a, **kw)
+
+    monkeypatch.setattr(awsauth.os, "open", spy)
+    _sign_in(auth, fakes, _env())
+    assert opened and all(mode == 0o600 for _, mode in opened)
+    assert all(p.endswith(".tmp") for p, _ in opened)

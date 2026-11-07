@@ -304,3 +304,39 @@ def test_floci_envs_on_different_ports_may_share_a_bucket(tmp_path):
     extra = FLOCI.replace("[env.local]", "[env.other]").replace(
         "127.0.0.1:4566", "127.0.0.1:4567").replace("an-local", "an-other")
     assert set(load_registry(_committed(tmp_path, extra)).envs) == {"local", "other"}
+
+
+# --- review round 2 ----------------------------------------------------------------------
+
+PROD_TWIN = """
+[env.mine]
+kind = "aws"
+label = "Mine"
+region = "ap-southeast-1"
+s3_bucket = "{bucket}"
+table_prefix = "{prefix}"
+profile = "my-profile"
+{confirm}
+"""
+
+
+@pytest.mark.parametrize("bucket, prefix, key", [
+    ("archers-network-media-prod", "an-mine", "s3_bucket"),
+    ("mine-bucket", "archers-network-prod", "table_prefix"),
+])
+def test_an_overlay_env_aimed_at_prods_resources_needs_the_confirm(tmp_path, bucket, prefix, key):
+    # A profile env has no account to collide on, so it could reach prod with no typed confirm.
+    overlay = _overlay(tmp_path, PROD_TWIN.format(bucket=bucket, prefix=prefix, confirm=""))
+    reg = load_registry(COMMITTED, overlay)
+    assert "mine" not in reg.envs
+    assert len(reg.errors) == 1
+    assert f"env.mine.{key}" in reg.errors[0] and "env.prod" in reg.errors[0]
+    assert "environments.local.toml was ignored" in reg.errors[0]
+
+
+def test_an_overlay_env_aimed_at_prods_resources_with_the_confirm_is_fine(tmp_path):
+    overlay = _overlay(tmp_path, PROD_TWIN.format(
+        bucket="archers-network-media-prod", prefix="archers-network-prod", confirm="confirm = true"))
+    reg = load_registry(COMMITTED, overlay)
+    assert reg.errors == []
+    assert reg.envs["mine"].confirm is True

@@ -194,7 +194,7 @@ def rows(
                     if item.get("storage_path"):
                         item["preview_url"] = store.presign(item["storage_path"], PREVIEW_SECONDS)
     except _BOTO_ERRORS as exc:
-        raise _boto_failed(exc) from exc
+        raise aws_failed(target, exc) from exc
     return {"type": kind, "total": len(items), "limit": limit, "offset": offset, "rows": page}
 
 
@@ -207,7 +207,7 @@ def run_validate(request: Request, env: str = Query(...)) -> dict:
         with aws_errors(target):
             checks = validate(root, _storage(target, request.app.state.auth), t)
     except _BOTO_ERRORS as exc:
-        raise _boto_failed(exc) from exc
+        raise aws_failed(target, exc) from exc
     return {
         "ok": all(c.ok for c in checks),
         "checks": [{"name": c.name, "ok": c.ok, "detail": c.detail} for c in checks],

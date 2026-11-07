@@ -239,6 +239,23 @@ def _keep_confirms(committed: dict[str, Env], merged: dict[str, Env], label: str
             )
 
 
+def _guard_confirm_targets(committed: dict[str, Env], merged: dict[str, Env], label: str) -> None:
+    """An env reaching a confirm env's bucket or tables must confirm too. A profile env has no
+    account for the collision check to compare, so this is what keeps it from aiming at prod."""
+    for name, guarded in committed.items():
+        if not guarded.confirm:
+            continue
+        for env in merged.values():
+            if env.name == name or env.confirm:
+                continue
+            for key in ("s3_bucket", "table_prefix"):
+                if getattr(env, key) == getattr(guarded, key):
+                    raise EnvConfigError(
+                        f"{label}: env.{env.name}.{key} = {getattr(env, key)!r} is env.{name}'s, "
+                        f"which requires a typed confirm; set confirm = true on env.{env.name}"
+                    )
+
+
 def load_registry(committed: Path, local: Path | None = None) -> Registry:
     raw = _read(committed)
     default = raw.get("default")
@@ -254,6 +271,7 @@ def load_registry(committed: Path, local: Path | None = None) -> Registry:
             over = _env_tables(_read(local), local.name)
             merged = _validate(_merge(base, over), default, local.name)
             _keep_confirms(envs, merged, local.name)
+            _guard_confirm_targets(envs, merged, local.name)
             envs = merged
         except EnvConfigError as exc:
             errors.append(f"{exc}; {local.name} was ignored")

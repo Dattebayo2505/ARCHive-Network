@@ -134,9 +134,12 @@ class AuthManager:
         path = self._path(env)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data), encoding="utf-8")
-        if os.name == "posix":
-            os.chmod(tmp, 0o600)  # it can mint role keys; Windows profiles are per-user already
+        tmp.unlink(missing_ok=True)  # O_CREAT's mode applies only to a file it creates
+        # Owner-only from creation on POSIX. Windows ignores the mode: the file inherits the
+        # workspace folder's ACL, so keep the repo somewhere only you can read.
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(data))
         os.replace(tmp, path)  # atomic, so a crash never leaves half a token file
 
     def _oidc(self, env: Env):
@@ -313,6 +316,32 @@ class AuthManager:
         self._save(env, data)
         self._forget_keys(env)
 
+    def _role_credentials(self, env: Env) -> dict:
+        """`GetRoleCredentials`, retried once on a refreshed token if the access token was revoked,
+        so a still-good refresh token never shows as a signed-out blip."""
+        sso = env.sso
+        for attempt in (1, 2):
+            token = self._access_token(env)
+            if token is None:
+                raise SignedOut(env.name)
+            try:
+                return self._client(
+                    "sso", region_name=sso.region, config=AUTH_CONFIG
+                ).get_role_credentials(
+                    roleName=sso.role_name, accountId=sso.account_id, accessToken=token
+                )
+            except ClientError as exc:
+                code = _code(exc)
+                if code == "UnauthorizedException":
+                    self._drop_access_token(env)  # the next _access_token() refreshes
+                    if attempt == 1:
+                        continue
+                    raise SignedOut(env.name, code) from exc
+                if code == "ForbiddenException":
+                    raise NotAssigned(env.name, sso.role_name, sso.account_id) from exc
+                raise
+        raise AssertionError("unreachable")  # pragma: no cover
+
     def session(self, env: Env) -> boto3.Session:
         """The one session both of this env's clients come from: one identity per env."""
         if env.kind != "aws":
@@ -326,23 +355,7 @@ class AuthManager:
         with self._lock(env):
             keys = self._keys.get(slot)
             if keys is None or keys.expires_at - CREDENTIAL_MARGIN <= self._clock():
-                token = self._access_token(env)
-                if token is None:
-                    raise SignedOut(env.name)
-                try:
-                    resp = self._client(
-                        "sso", region_name=sso.region, config=AUTH_CONFIG
-                    ).get_role_credentials(
-                        roleName=sso.role_name, accountId=sso.account_id, accessToken=token
-                    )
-                except ClientError as exc:
-                    code = _code(exc)
-                    if code == "UnauthorizedException":
-                        self._drop_access_token(env)
-                        raise SignedOut(env.name, code) from exc
-                    if code == "ForbiddenException":
-                        raise NotAssigned(env.name, sso.role_name, sso.account_id) from exc
-                    raise
+                resp = self._role_credentials(env)
                 rc = resp["roleCredentials"]
                 keys = _RoleKeys(rc["accessKeyId"], rc["secretAccessKey"], rc["sessionToken"],
                                  rc["expiration"] / 1000)
