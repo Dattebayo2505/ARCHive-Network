@@ -14,7 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings, stale_settings
 from .loader import flociversion
 from .loader.dockerctl import COMPOSE_FILE
+from .loader.awsauth import AuthManager
 from .loader.envs import load_registry
+from .web import envparam
 from .web.registry import WorkspaceRegistry
 
 # uvicorn's own logger, so the line prints in the server console with uvicorn's formatting.
@@ -80,6 +82,7 @@ def create_app() -> FastAPI:
     app.state.envs = load_registry(settings.environments_file, settings.environments_local_file)
     for problem in app.state.envs.errors:
         _log.warning("environments: %s", problem)
+    app.state.auth = AuthManager(settings.workspace_dir / "aws" / "sso")
     app.state.stale_settings = stale_settings(_env_file(), os.environ)
     if app.state.stale_settings:
         _log.warning(
@@ -102,6 +105,7 @@ def create_app() -> FastAPI:
 
     from .web.routes_build import router as build_router
     from .web.routes_dev import router as dev_router
+    from .web.routes_envs import router as envs_router
     from .web.routes_docker import router as docker_router
     from .web.routes_gallery import router as gallery_router
     from .web.routes_ingest import router as ingest_router
@@ -119,6 +123,8 @@ def create_app() -> FastAPI:
     app.include_router(s3_router)
     app.include_router(docker_router)
     app.include_router(dev_router)
+    app.include_router(envs_router)
+    envparam.install(app)
 
     # Dev-mode object store, served so the Dev panel can render each row straight from its
     # `storage_path`. In production that same key is fetched from a CDN domain instead — the
