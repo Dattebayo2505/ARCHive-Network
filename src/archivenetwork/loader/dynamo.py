@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import boto3
@@ -23,9 +23,6 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from .items import Update
 from .storage import ENDPOINT_CONNECT_TIMEOUT, ENDPOINT_READ_TIMEOUT, probe_endpoint
-
-if TYPE_CHECKING:
-    from ..config import Settings
 
 DEFAULT_REGION = "ap-southeast-1"
 BATCH_GET_LIMIT = 100  # DynamoDB's cap on keys per BatchGetItem
@@ -150,13 +147,6 @@ def from_session(session: boto3.Session, prefix: str, region: str) -> Tables:
         session.client("dynamodb", region_name=region, config=AWS_CONFIG), prefix,
         on_emulator=False,
     )
-
-
-def from_settings(s: Settings) -> Tables:
-    if not s.dynamodb_table_prefix:
-        raise ValueError("ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX is not set")
-    # `.env.example` ships ARCHIVENETWORK_S3_REGION= empty, hence the fallback.
-    return connect(s.dynamodb_table_prefix, s.dynamodb_endpoint_url, s.s3_region or DEFAULT_REGION)
 
 
 # --- probe -----------------------------------------------------------------------------------

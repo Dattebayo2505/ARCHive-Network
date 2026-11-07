@@ -12,10 +12,7 @@ the floci DynamoDB tier. Read the skip count: a skipped test is not a passing on
 import pytest
 from conftest import floci_image
 
-from archivenetwork.inventory.parser import build_inventory
 from archivenetwork.loader.storage import S3Storage, probe_endpoint
-from archivenetwork.loader.upload import upload_ready
-from archivenetwork.transform.builder import build_ready_folder
 
 floci = pytest.importorskip("floci", reason="testcontainers-floci is not installed")
 
@@ -76,17 +73,3 @@ def test_put_survives_the_real_wire_with_its_content_type(floci_endpoint, tmp_pa
     assert store.put(src, key) is False
 
 
-def test_upload_ready_is_idempotent_across_two_live_runs(floci_endpoint, export_root, tmp_path):
-    ready = tmp_path / "ready"
-    inv = build_inventory(export_root)
-    keep = {p.fbid for p in inv.all_photos() if not p.is_video}
-    build_ready_folder(export_root, ready, keep)
-
-    store = _store(floci_endpoint, bucket="archivenetwork-upload")
-    first = upload_ready(ready, store)
-    assert first.uploaded > 0
-    assert first.errors == []
-
-    second = upload_ready(ready, store)
-    assert second.uploaded == 0
-    assert second.skipped == first.uploaded

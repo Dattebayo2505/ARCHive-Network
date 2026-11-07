@@ -63,20 +63,9 @@ def test_connect_without_an_endpoint_is_real_aws(monkeypatch):
     assert t.client.meta.config.retries["mode"] == "standard"
 
 
-def test_from_settings_falls_back_to_the_default_region():
-    from archivenetwork.config import Settings
-
-    s = Settings(_env_file=None, dynamodb_table_prefix="tbl", s3_region="")
-    t = dynamo.from_settings(s)
-    assert t.prefix == "tbl" and t.client.meta.region_name == "ap-southeast-1"
-
-
-def test_from_settings_requires_the_prefix():
-    from archivenetwork.config import Settings
-
-    s = Settings(_env_file=None, dynamodb_table_prefix=None, dynamodb_table="legacy")
-    with pytest.raises(ValueError, match="ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX"):
-        dynamo.from_settings(s)
+def test_from_settings_is_gone():
+    # Tables come from an environment now (envclients.tables_for), never from Settings.
+    assert not hasattr(dynamo, "from_settings")
 
 
 def test_table_names_follow_the_prefix():

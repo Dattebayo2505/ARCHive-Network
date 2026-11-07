@@ -9,7 +9,6 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from .config import settings, stale_settings
 from .loader import flociversion
@@ -111,7 +110,6 @@ def create_app() -> FastAPI:
     from .web.routes_ingest import router as ingest_router
     from .web.routes_publish import router as publish_router
     from .web.routes_ready import router as ready_router
-    from .web.routes_s3 import router as s3_router
     from .web.routes_video import router as video_router
     from .web.routes_workspaces import router as workspaces_router
 
@@ -121,20 +119,10 @@ def create_app() -> FastAPI:
     app.include_router(video_router)
     app.include_router(build_router)
     app.include_router(ready_router)
-    app.include_router(s3_router)
     app.include_router(docker_router)
     app.include_router(dev_router)
     app.include_router(envs_router)
     app.include_router(publish_router)
     envparam.install(app)
 
-    # Dev-mode object store, served so the Dev panel can render each row straight from its
-    # `storage_path`. In production that same key is fetched from a CDN domain instead — the
-    # DB stores the key, never the base URL.
-    settings.media_root.mkdir(parents=True, exist_ok=True)
-    app.mount(
-        settings.media_base_url,
-        StaticFiles(directory=settings.media_root),
-        name="media",
-    )
     return app

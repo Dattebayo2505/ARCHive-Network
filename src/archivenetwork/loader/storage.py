@@ -57,7 +57,7 @@ class Storage(Protocol):
 
 
 class LocalStorage:
-    """Dev backend: mirror the object store on disk under `root`, served over HTTP at /store."""
+    """An on-disk object store under `root`; the tests' fake for `S3Storage`."""
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)

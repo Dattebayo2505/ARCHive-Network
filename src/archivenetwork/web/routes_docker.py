@@ -1,6 +1,6 @@
 """Start / restart / stop / rebuild the local floci container from the Dev panel.
 
-A sibling of `routes_s3` with the same shape and the same independence: no database, no
+Independent of any environment's tables or bucket: no database, no
 session, no export required — the container is a machine-level thing, and asking a volunteer
 to have a workspace open before they may restart Docker would be theatre.
 
@@ -54,8 +54,8 @@ def status() -> dict:
 
 @router.post("/api/docker/floci")
 def act(action: Action) -> dict:
-    """`action` is REQUIRED — a bare Literal with no default, exactly like `/api/s3/upload`'s
-    `target`. A typo is a 422, never a silently-chosen lifecycle command."""
+    """`action` is REQUIRED — a bare Literal with no default, exactly like `/api/publish`'s
+    `env`. A typo is a 422, never a silently-chosen lifecycle command."""
     state = dockerctl.probe()
     if not state.available:
         raise HTTPException(

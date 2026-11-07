@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from archivenetwork.config import Settings, settings
 
 
@@ -13,31 +11,17 @@ def test_env_override(monkeypatch):
     assert Settings().max_per_album == 5
 
 
-def test_devmode_settings_default_off(monkeypatch):
-    # `.env` at the repo root would otherwise leak real values into these assertions.
-    s = Settings(_env_file=None)
-    # The store root must not be named "media" — keys already start with "media/", so a
-    # "media" root would double-nest every object (workspace/media/media/2026/...).
-    assert s.media_root == Path("workspace/store")
-    assert s.media_base_url == "/store"
-
-
-def test_dynamodb_defaults(monkeypatch):
-    monkeypatch.delenv("ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX", raising=False)
-    monkeypatch.delenv("ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL", raising=False)
-    s = Settings(_env_file=None)
-    assert s.dynamodb_table_prefix is None  # dev-mode stays opt-in
-    assert s.dynamodb_endpoint_url == "http://127.0.0.1:4566"  # floci
-    monkeypatch.setenv("ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX", "archers-network-dev")
-    assert Settings(_env_file=None).dynamodb_table_prefix == "archers-network-dev"
-
-
-def test_empty_endpoint_means_real_aws(monkeypatch):
-    monkeypatch.setenv("ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL", "")
-    assert Settings(_env_file=None).dynamodb_endpoint_url is None
-
-
 # --- the environment registry + stale .env report ---
+
+
+def test_settings_no_longer_declare_aws_fields():
+    from archivenetwork.config import STALE_KEYS
+
+    s = Settings(_env_file=None)
+    for key in STALE_KEYS:
+        name = key.removeprefix("ARCHIVENETWORK_").lower()
+        assert not hasattr(s, name), name
+        assert name not in Settings.model_fields, name
 
 
 def test_settings_point_at_the_environment_files():
