@@ -5,7 +5,7 @@ import {
 	flociUiUrl,
 	s3Target,
 	shouldOpenFlociUi
-} from './s3target.svelte.js';
+} from './floci.svelte.js';
 
 beforeEach(() => {
 	localStorage.clear();
@@ -69,23 +69,33 @@ test('the link is never undefined/_floci/ui before /api/s3/status answers', () =
 	expect(flociUiUrl('')).toBe('http://127.0.0.1:4566/_floci/ui');
 });
 
-test('a first upload opens the UI, an all-skipped re-run does not', () => {
-	expect(shouldOpenFlociUi('floci', { uploaded: 137, skipped: 0 })).toBe(true);
-	expect(shouldOpenFlociUi('floci', { uploaded: 0, skipped: 137 })).toBe(false);
+const LOCAL = { name: 'local', kind: 'floci' };
+const DEV = { name: 'dev', kind: 'aws' };
+const published = (stored, skipped = 0) => ({
+	ok: true,
+	steps: { publish: { files_stored: stored, files_skipped: skipped } }
 });
 
-test('a re-autocurated build uploads new keys, so it opens the UI', () => {
+test('a first publish opens the UI, an all-skipped re-run does not', () => {
+	expect(shouldOpenFlociUi(LOCAL, published(137))).toBe(true);
+	expect(shouldOpenFlociUi(LOCAL, published(0, 137))).toBe(false);
+});
+
+test('a re-autocurated build stores new keys, so it opens the UI', () => {
 	// The new selection ships photos the bucket has never seen; the ones it has are skipped.
-	expect(shouldOpenFlociUi('floci', { uploaded: 6, skipped: 131 })).toBe(true);
+	expect(shouldOpenFlociUi(LOCAL, published(6, 131))).toBe(true);
 });
 
-test('AWS never auto-opens — there is no local UI to open', () => {
-	expect(shouldOpenFlociUi('aws', { uploaded: 137, skipped: 0 })).toBe(false);
+test('an AWS env never auto-opens — there is no local UI to open', () => {
+	expect(shouldOpenFlociUi(DEV, published(137))).toBe(false);
 });
 
 test('a missing or malformed result never opens a tab', () => {
-	expect(shouldOpenFlociUi('floci', null)).toBe(false);
-	expect(shouldOpenFlociUi('floci', {})).toBe(false);
+	expect(shouldOpenFlociUi(LOCAL, null)).toBe(false);
+	expect(shouldOpenFlociUi(LOCAL, {})).toBe(false);
+	// A failed preflight leaves the publish step null.
+	expect(shouldOpenFlociUi(LOCAL, { ok: false, steps: { publish: null } })).toBe(false);
+	expect(shouldOpenFlociUi(null, published(137))).toBe(false);
 });
 
 test('auto-open defaults on and persists an opt-out', () => {

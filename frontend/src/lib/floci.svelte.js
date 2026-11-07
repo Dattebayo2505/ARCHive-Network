@@ -52,15 +52,15 @@ export function flociUiUrl(endpointUrl) {
 	return `${base}/_floci/ui`;
 }
 
-/** Whether an upload is worth opening the Floci UI for.
+/** Whether a Publish result is worth opening the Floci UI for.
  *
- *  "There is already a build uploaded" is exactly `uploaded === 0`: every object was skipped
- *  because it was already in the bucket, so a new tab would show the volunteer nothing they
- *  did not already have. A first upload writes new keys, and so does the first upload after a
- *  re-autocurate — a different selection builds a different ready folder, whose photos are
- *  keys the bucket has never seen. AWS never auto-opens: it has no local UI to open. */
-export function shouldOpenFlociUi(target, result) {
-	return target === 'floci' && (result?.uploaded ?? 0) > 0;
+ *  "Already published" is exactly `files_stored === 0`: every object was skipped because it was
+ *  already in the bucket, so a new tab would show the volunteer nothing they did not already
+ *  have. A first publish stores new keys, and so does the first one after a re-autocurate — a
+ *  different selection builds a different ready folder, whose photos are keys the bucket has
+ *  never seen. AWS envs never auto-open: they have no local UI. */
+export function shouldOpenFlociUi(env, result) {
+	return env?.kind === 'floci' && (result?.steps?.publish?.files_stored ?? 0) > 0;
 }
 
 const AUTO_KEY = 'archive-floci-autoopen';

@@ -21,7 +21,7 @@
 		flociUiUrl,
 		s3Target,
 		shouldOpenFlociUi
-	} from '$lib/s3target.svelte.js';
+	} from '$lib/floci.svelte.js';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 
 	// The dev pane runs the real downstream ETL locally: it reads the built ready/ folder,
@@ -170,7 +170,9 @@
 			// nothing new to show, and stealing a tab for it would be noise. `window.open` after
 			// an await is outside the click's task, so a strict popup blocker may refuse it;
 			// `uiBlocked` turns that into a visible link rather than a silent nothing.
-			if (flociAutoOpen.enabled && shouldOpenFlociUi(target, res.body)) openFlociUi();
+			// Temporary adapter onto the Publish-shaped signature; B6 replaces Upload with Publish.
+			const asPublish = { steps: { publish: { files_stored: res.body?.uploaded } } };
+			if (flociAutoOpen.enabled && shouldOpenFlociUi({ kind: target }, asPublish)) openFlociUi();
 		}
 	}
 

@@ -29,7 +29,7 @@ const api = vi.hoisted(() => ({
 vi.mock('$lib/api.js', () => api);
 
 import DevPanel from './DevPanel.svelte';
-import { flociAutoOpen, s3Target } from '$lib/s3target.svelte.js';
+import { flociAutoOpen, s3Target } from '$lib/floci.svelte.js';
 
 const EXPLORER = 'http://127.0.0.1:4500/cloud-explorer/aws/storage';
 const POLLER = 'http://127.0.0.1:4566/_floci/ui';
