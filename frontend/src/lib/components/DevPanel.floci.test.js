@@ -1,97 +1,54 @@
 /**
- * The floci half of the Dev panel: the upload-target switch, the container lifecycle
- * controls, and the post-upload tab.
+ * The floci half of the Dev panel on the `local` env: the container lifecycle controls, the
+ * Floci UI link, and the post-Publish tab.
  *
- * `$lib/api.js` is mocked wholesale — every one of the panel's mount-time effects calls it,
- * and none of them is the subject here. The DynamoDB half is stubbed as "not configured", so
- * the table-gated block collapses and the assertions below only ever see the floci section.
+ * `$lib/api.js` is mocked wholesale with the shapes in contract.md. floci's S3 and DynamoDB share
+ * one endpoint, so `devStatus().endpoint_reachable` is what says whether floci is up.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const api = vi.hoisted(() => ({
-	devStatus: vi.fn(),
-	devRows: vi.fn(),
-	s3Status: vi.fn(),
-	uploadToS3: vi.fn(),
-	dockerStatus: vi.fn(),
-	dockerFloci: vi.fn(),
-	flociUiTarget: vi.fn(),
-	autoCurate: vi.fn(),
-	devLoad: vi.fn(),
-	devValidate: vi.fn(),
-	devTables: vi.fn(),
-	devTablesCreate: vi.fn(),
-	devTablesDelete: vi.fn(),
-	storeUrl: (key) => `/store/${key}`
-}));
+vi.mock('$lib/api.js', async () => {
+	const { vi: v } = await import('vitest');
+	return (await import('./DevPanel.fixtures.js')).apiMocks(v);
+});
 
-vi.mock('$lib/api.js', () => api);
-
+import * as api from '$lib/api.js';
+import { envChoice } from '$lib/env.svelte.js';
+import { flociAutoOpen } from '$lib/floci.svelte.js';
 import DevPanel from './DevPanel.svelte';
-import { flociAutoOpen, s3Target } from '$lib/floci.svelte.js';
+import {
+	BUILD,
+	DEV,
+	EXPLORER,
+	POLLER,
+	dockerState,
+	envList,
+	publishResult,
+	status
+} from './DevPanel.fixtures.js';
 
-const EXPLORER = 'http://127.0.0.1:4500/cloud-explorer/aws/storage';
-const POLLER = 'http://127.0.0.1:4566/_floci/ui';
+const FLOCI_DOWN = status({ endpoint_reachable: false, table_exists: false, counts: {} });
 
-const FLOCI_UP = {
-	aws: { enabled: true, bucket: 'prod-bucket', region: 'ap-southeast-1' },
-	floci: {
-		enabled: true,
-		bucket: 'archivenetwork-dev',
-		region: 'ap-southeast-1',
-		endpoint_url: 'http://127.0.0.1:4566',
-		reachable: true
-	}
-};
-
-const dockerState = (over = {}) => ({
-	installed: true,
-	engine_up: true,
-	compose_available: true,
-	compose_file: true,
-	available: true,
-	container: 'running',
-	running: true,
-	exists: true,
-	service: 'floci',
-	container_name: 'archivenetwork-floci',
-	reason: null,
-	...over
-});
-
-const result = (over = {}) => ({
-	uploaded: 137,
-	skipped: 0,
-	orphans: [],
-	errors: [],
-	target: 'floci',
-	bucket: 'archivenetwork-dev',
-	region: 'ap-southeast-1',
-	endpoint_url: 'http://127.0.0.1:4566',
-	...over
-});
-
-/** Click Upload and step through the second-step ConfirmDialog. */
-async function upload() {
-	await fireEvent.click(screen.getByRole('button', { name: /^Upload to/ }));
-	const dialog = await screen.findByRole('dialog');
-	const [confirm] = [...dialog.querySelectorAll('button')].filter((b) =>
-		/^Upload to/.test(b.textContent.trim())
-	);
-	await fireEvent.click(confirm);
+/** Click Publish on local, which has no confirm dialog. */
+async function publishLocal() {
+	const btn = await screen.findByRole('button', { name: 'Publish to Local (floci)' });
+	await waitFor(() => expect(btn.disabled).toBe(false));
+	await fireEvent.click(btn);
 }
 
 beforeEach(() => {
 	localStorage.clear();
-	s3Target.set('floci');
+	envChoice.set('local');
+	localStorage.clear();
 	flociAutoOpen.set(true);
 	vi.clearAllMocks();
-	api.devStatus.mockResolvedValue({ enabled: false });
-	api.devRows.mockResolvedValue({ ok: false, body: null });
-	api.s3Status.mockResolvedValue(FLOCI_UP);
+	api.listEnvs.mockResolvedValue(envList());
+	api.devStatus.mockResolvedValue(status());
+	api.devRows.mockResolvedValue({ ok: false, status: 500, body: {} });
+	api.getCurrentReadyBuild.mockResolvedValue(BUILD);
 	api.dockerStatus.mockResolvedValue(dockerState());
-	api.uploadToS3.mockResolvedValue({ ok: true, status: 200, body: result() });
+	api.publish.mockResolvedValue({ ok: true, status: 200, body: publishResult() });
 	api.flociUiTarget.mockResolvedValue({
 		ready: true,
 		url: EXPLORER,
@@ -104,42 +61,6 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('the upload-target switch', () => {
-	it('keeps each target its own result, so flipping never destroys the summary', async () => {
-		render(DevPanel);
-		await upload();
-		await screen.findByText('Uploaded');
-		expect(screen.getByText('137')).toBeTruthy();
-
-		// The regression: this used to blank the stats grid permanently.
-		await fireEvent.click(screen.getByRole('switch'));
-		expect(screen.queryByText('137')).toBeNull();
-		expect(screen.getByText(/flip the switch back to read it/i)).toBeTruthy();
-
-		await fireEvent.click(screen.getByRole('switch'));
-		expect(await screen.findByText('137')).toBeTruthy();
-	});
-
-	it('names the target the visible summary came from', async () => {
-		render(DevPanel);
-		await upload();
-		// The footer's own link and bucket exist nowhere else on the page.
-		expect(await screen.findByRole('link', { name: /View in Floci UI/ })).toBeTruthy();
-		expect(screen.getByText('archivenetwork-dev')).toBeTruthy();
-	});
-
-	it('re-probes floci when the switch is flipped back to it', async () => {
-		render(DevPanel);
-		await waitFor(() => expect(api.s3Status).toHaveBeenCalled());
-		api.s3Status.mockClear();
-
-		await fireEvent.click(screen.getByRole('switch')); // → aws
-		expect(api.s3Status).not.toHaveBeenCalled();
-		await fireEvent.click(screen.getByRole('switch')); // → floci
-		await waitFor(() => expect(api.s3Status).toHaveBeenCalled());
-	});
-});
-
 describe('the container controls', () => {
 	it('offers restart and stop while the container is running', async () => {
 		render(DevPanel);
@@ -151,9 +72,7 @@ describe('the container controls', () => {
 	});
 
 	it('offers start — not stop — while the container is down', async () => {
-		api.dockerStatus.mockResolvedValue(
-			dockerState({ container: 'exited', running: false })
-		);
+		api.dockerStatus.mockResolvedValue(dockerState({ container: 'exited', running: false }));
 		render(DevPanel);
 		expect(await screen.findByText('Container exited')).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Start' })).toBeTruthy();
@@ -161,16 +80,13 @@ describe('the container controls', () => {
 	});
 
 	it('says so when the container has never been created', async () => {
-		api.dockerStatus.mockResolvedValue(
-			dockerState({ container: null, running: false, exists: false })
-		);
+		api.dockerStatus.mockResolvedValue(dockerState({ container: null, running: false, exists: false }));
 		render(DevPanel);
 		expect(await screen.findByText('Container not created yet')).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Create and start' })).toBeTruthy();
 	});
 
 	it('sends the verb and re-renders from the reply, not from optimism', async () => {
-		api.dockerStatus.mockResolvedValue(dockerState());
 		api.dockerFloci.mockResolvedValue({
 			ok: true,
 			status: 200,
@@ -218,26 +134,30 @@ describe('the container controls', () => {
 				reason: "Docker isn't installed"
 			})
 		);
-		api.s3Status.mockResolvedValue({
-			...FLOCI_UP,
-			floci: { ...FLOCI_UP.floci, reachable: false }
-		});
+		api.devStatus.mockResolvedValue(FLOCI_DOWN);
 		render(DevPanel);
 		// The terminal instruction is still the honest fallback when there is no button to press.
-		expect(await screen.findByText(/docker compose up -d/)).toBeTruthy();
+		expect((await screen.findAllByText(/docker compose up -d/)).length).toBeGreaterThan(0);
 		expect(screen.queryByText(/^Container/)).toBeNull();
 		expect(screen.queryByRole('button', { name: 'Rebuild image' })).toBeNull();
 	});
 
 	it('replaces the terminal instruction with a Start button when Docker is usable', async () => {
 		api.dockerStatus.mockResolvedValue(dockerState({ container: 'exited', running: false }));
-		api.s3Status.mockResolvedValue({
-			...FLOCI_UP,
-			floci: { ...FLOCI_UP.floci, reachable: false }
-		});
+		api.devStatus.mockResolvedValue(FLOCI_DOWN);
 		render(DevPanel);
 		expect(await screen.findByRole('button', { name: 'Start floci' })).toBeTruthy();
 		expect(screen.queryByText(/docker compose up -d/)).toBeNull();
+	});
+
+	it('only appears on a floci env', async () => {
+		localStorage.setItem('archive-env', 'dev');
+		api.devStatus.mockResolvedValue(status({ env: 'dev', kind: 'aws', on_emulator: false }));
+		render(DevPanel);
+		await waitFor(() => expect(api.devStatus).toHaveBeenCalledWith('dev'));
+		await screen.findByText('Connected');
+		expect(screen.queryByText('Container running')).toBeNull();
+		expect(screen.queryByRole('link', { name: /Floci UI/ })).toBeNull();
 	});
 });
 
@@ -251,9 +171,8 @@ describe('the Floci UI', () => {
 	});
 
 	it('falls back to the poller rather than a dead deep link when the UI is cold', async () => {
-		// :4500 refuses the connection until the sibling container exists, and the poller page
-		// is the only thing that creates it — so a bare deep link would be worse than the
-		// interstitial it replaces.
+		// :4500 refuses the connection until the sibling container exists, and only the poller
+		// page creates it.
 		api.flociUiTarget.mockResolvedValue({
 			ready: false,
 			url: POLLER,
@@ -266,7 +185,7 @@ describe('the Floci UI', () => {
 		await waitFor(() => expect(link.getAttribute('href')).toBe(POLLER));
 	});
 
-	it('uses the poller while the warm-up has not answered yet', async () => {
+	it('builds the poller link from the env’s endpoint_url while the warm-up is pending', async () => {
 		api.flociUiTarget.mockReturnValue(new Promise(() => {})); // never resolves
 		render(DevPanel);
 		const link = await screen.findByRole('link', { name: /Floci UI/ });
@@ -274,75 +193,66 @@ describe('the Floci UI', () => {
 	});
 
 	it('does not try to warm a UI whose emulator is down', async () => {
-		api.s3Status.mockResolvedValue({
-			...FLOCI_UP,
-			floci: { ...FLOCI_UP.floci, reachable: false }
-		});
+		api.devStatus.mockResolvedValue(FLOCI_DOWN);
 		render(DevPanel);
 		await screen.findByRole('link', { name: /Floci UI/ });
-		await waitFor(() => expect(api.s3Status).toHaveBeenCalled());
+		await waitFor(() => expect(api.devStatus).toHaveBeenCalled());
 		expect(api.flociUiTarget).not.toHaveBeenCalled();
 	});
 
-	it('opens a tab when the upload actually adds objects', async () => {
+	it('opens a tab when the publish actually stores objects', async () => {
 		render(DevPanel);
-		await upload();
-		// No 'noopener' feature: it makes window.open return null on SUCCESS, which is the same
-		// signal a popup blocker gives — the panel then claimed a tab it had just opened was
-		// blocked. Observed live before this was pinned.
+		await publishLocal();
+		// No 'noopener' feature: it makes window.open return null on SUCCESS, the same signal a
+		// popup blocker gives.
 		await waitFor(() => expect(window.open).toHaveBeenCalledWith(EXPLORER, '_blank'));
 		expect(window.open.mock.calls[0]).toHaveLength(2);
 		expect(screen.queryByText(/blocked the new tab/i)).toBeNull();
 	});
 
-	it('does not steal a tab when the build was already uploaded', async () => {
-		api.uploadToS3.mockResolvedValue({
-			ok: true,
-			status: 200,
-			body: result({ uploaded: 0, skipped: 137 })
-		});
+	it('does not steal a tab when everything was already published', async () => {
+		api.publish.mockResolvedValue({ ok: true, status: 200, body: publishResult({}, 0) });
 		render(DevPanel);
-		await upload();
-		await screen.findByText('Uploaded');
+		await publishLocal();
+		await screen.findByTestId('publish-summary');
 		expect(window.open).not.toHaveBeenCalled();
 	});
 
-	it('opens a tab again once a re-autocurated build uploads new keys', async () => {
-		api.uploadToS3.mockResolvedValue({
-			ok: true,
-			status: 200,
-			body: result({ uploaded: 6, skipped: 131 })
-		});
+	it('opens a tab again once a re-autocurated build stores new keys', async () => {
+		api.publish.mockResolvedValue({ ok: true, status: 200, body: publishResult({}, 6) });
 		render(DevPanel);
-		await upload();
+		await publishLocal();
 		await waitFor(() => expect(window.open).toHaveBeenCalled());
 	});
 
 	it('respects the opt-out', async () => {
 		flociAutoOpen.set(false);
 		render(DevPanel);
-		await upload();
-		await screen.findByText('Uploaded');
+		await publishLocal();
+		await screen.findByTestId('publish-summary');
 		expect(window.open).not.toHaveBeenCalled();
 	});
 
 	it('turns a blocked popup into a visible instruction, not silence', async () => {
 		vi.stubGlobal('open', vi.fn().mockReturnValue(null));
 		render(DevPanel);
-		await upload();
+		await publishLocal();
 		expect(await screen.findByText(/blocked the new tab/i)).toBeTruthy();
 	});
 
-	it('never auto-opens for an AWS upload', async () => {
-		s3Target.set('aws');
-		api.uploadToS3.mockResolvedValue({
+	it('never auto-opens for an AWS env', async () => {
+		localStorage.setItem('archive-env', 'dev');
+		api.devStatus.mockResolvedValue(status({ env: 'dev', kind: 'aws', on_emulator: false }));
+		api.publish.mockResolvedValue({
 			ok: true,
 			status: 200,
-			body: result({ target: 'aws', endpoint_url: null, bucket: 'prod-bucket' })
+			body: publishResult({ env: 'dev', kind: 'aws', bucket: DEV.s3_bucket })
 		});
 		render(DevPanel);
-		await upload();
-		await screen.findByText('Uploaded');
+		const btn = await screen.findByRole('button', { name: 'Publish to Dev (AWS)' });
+		await waitFor(() => expect(btn.disabled).toBe(false));
+		await fireEvent.click(btn);
+		await screen.findByTestId('publish-summary');
 		expect(window.open).not.toHaveBeenCalled();
 	});
 });
@@ -350,10 +260,7 @@ describe('the Floci UI', () => {
 describe('who owns the Start button', () => {
 	it('shows exactly one Start while the emulator is down and the container is stopped', async () => {
 		api.dockerStatus.mockResolvedValue(dockerState({ container: 'exited', running: false }));
-		api.s3Status.mockResolvedValue({
-			...FLOCI_UP,
-			floci: { ...FLOCI_UP.floci, reachable: false }
-		});
+		api.devStatus.mockResolvedValue(FLOCI_DOWN);
 		render(DevPanel);
 		await screen.findByRole('button', { name: 'Start floci' });
 		expect(screen.queryByRole('button', { name: 'Start' })).toBeNull();
@@ -361,75 +268,38 @@ describe('who owns the Start button', () => {
 	});
 
 	it('offers Restart, not Start, when the container runs but the endpoint is unreachable', async () => {
-		// A port conflict or an overridden endpoint — starting an already-running container
-		// would fix nothing, so the warning must not pretend otherwise.
-		api.dockerStatus.mockResolvedValue(dockerState());
-		api.s3Status.mockResolvedValue({
-			...FLOCI_UP,
-			floci: { ...FLOCI_UP.floci, reachable: false }
-		});
+		api.devStatus.mockResolvedValue(FLOCI_DOWN);
 		render(DevPanel);
 		expect(await screen.findByRole('button', { name: 'Restart' })).toBeTruthy();
 		expect(screen.queryByRole('button', { name: /^Start/ })).toBeNull();
 		expect(screen.getByRole('button', { name: 'Re-check' })).toBeTruthy();
-		// And the copy must not tell them to start something that is already started.
 		expect(screen.getByText(/nothing is answering at/)).toBeTruthy();
+	});
+
+	it('re-probes the env when Re-check is pressed', async () => {
+		api.devStatus.mockResolvedValue(FLOCI_DOWN);
+		render(DevPanel);
+		await fireEvent.click(await screen.findByRole('button', { name: 'Re-check' }));
+		await waitFor(() => expect(api.devStatus.mock.calls.length).toBeGreaterThan(1));
+		expect(api.devStatus.mock.calls.every(([name]) => name === 'local')).toBe(true);
 	});
 });
 
-describe('what the switch disables, and what the banner blames', () => {
-	const FLOCI_DOWN = {
-		...FLOCI_UP,
-		aws: { enabled: false },
-		floci: { ...FLOCI_UP.floci, reachable: false }
-	};
-
-	it('disables only the AWS position, so aws is never a one-way door', async () => {
-		// Sitting on floci with no bucket configured: the aws position is unavailable.
-		api.s3Status.mockResolvedValue({ ...FLOCI_UP, aws: { enabled: false } });
-		render(DevPanel);
-		await waitFor(() => expect(screen.getByRole('switch').disabled).toBe(true));
-	});
-
-	it('leaves the switch live while it points AT aws, even with AWS unconfigured', async () => {
-		// A stored 'aws' preference plus a bucket unset after the fact used to strand the
-		// panel: switch dead, Upload dead, no route back to the always-offered target.
-		s3Target.set('aws');
-		api.s3Status.mockResolvedValue({ ...FLOCI_UP, aws: { enabled: false } });
-		render(DevPanel);
-		const toggle = await screen.findByRole('switch');
-		await waitFor(() => expect(toggle.disabled).toBe(false));
-		await fireEvent.click(toggle);
-		expect(s3Target.target).toBe('floci');
-	});
-
-	it('tints the whole card on the AWS position and leaves it neutral on floci', async () => {
-		const { unmount } = render(DevPanel);
-		await waitFor(() => expect(document.querySelector('section.bg-surface-50')).toBeTruthy());
-		expect(document.querySelector('section.bg-warning-50')).toBeNull();
-		unmount();
-
-		s3Target.set('aws');
-		render(DevPanel);
-		await waitFor(() => expect(document.querySelector('section.bg-warning-50')).toBeTruthy());
-	});
-
+describe('what the banner blames', () => {
 	it.each([
 		['Docker unusable', { available: false, running: false, exists: false }],
 		['container down', { running: false, exists: true }],
 		['container up but silent', { running: true, exists: true }]
 	])('names Docker in the %s message, matching the 502', async (_label, over) => {
-		api.s3Status.mockResolvedValue(FLOCI_DOWN);
+		api.devStatus.mockResolvedValue(FLOCI_DOWN);
 		api.dockerStatus.mockResolvedValue(dockerState(over));
 		const { unmount } = render(DevPanel);
 		await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Docker/));
 		unmount();
 	});
 
-	it('blames the API, not Docker, when the fallback reading fires', async () => {
-		// `api_reachable: false` is only ever set by api.js's offline fallback: the backend
-		// never answered, so floci's state is unknown and Docker is not the subject.
-		api.s3Status.mockResolvedValue({ ...FLOCI_DOWN, api_reachable: false });
+	it('blames the API, not Docker, when the backend never answered', async () => {
+		api.devStatus.mockRejectedValue(new TypeError('Failed to fetch'));
 		api.dockerStatus.mockResolvedValue(dockerState({ available: false, running: false }));
 		render(DevPanel);
 		const banner = await screen.findByRole('status');

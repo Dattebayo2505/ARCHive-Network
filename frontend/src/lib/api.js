@@ -547,51 +547,6 @@ export async function devTablesDelete(env, fetchFn = fetch) {
 	return { ok: res.ok, status: res.status, body: await bodyOf(res) };
 }
 
-// RETIRED-IN-B6: storeUrl, devLoad — the backend drops /store and /api/dev/load; DevPanel still
-// imports them until its Publish rewrite.
-
-/** Build the URL an object is served from: <base>/<storage_path>. */
-export function storeUrl(storagePath, baseUrl = '/store') {
-	return url(`${baseUrl}/${storagePath}`);
-}
-
-export async function devLoad(fetchFn = fetch) {
-	const res = await fetchFn(url('/api/dev/load'), { method: 'POST' });
-	return { ok: res.ok, status: res.status, body: await res.json() };
-}
-
-// --- On-demand S3 upload. TWO targets: the local floci emulator (testing) and real AWS S3.
-// The target is named on every upload request rather than remembered server-side, so it is
-// never ambiguous which bucket is about to be written to. ---
-
-/** Both upload targets: whether each is configured, and for floci whether it is reachable
- *  right now. Never throws. */
-export async function s3Status(fetchFn = fetch) {
-	// `api_reachable: false` is the tell that this is the FALLBACK, not a reading. Without it
-	// a dead backend is indistinguishable from a dead emulator, and the panel renders the
-	// "Docker isn't running" banner for a problem Docker has nothing to do with. The real
-	// response never carries the key, so anything from the API reads as reachable.
-	const offline = {
-		api_reachable: false,
-		aws: { enabled: false },
-		floci: { enabled: false, reachable: false }
-	};
-	try {
-		const res = await fetchFn(url('/api/s3/status'));
-		if (!res.ok) return offline;
-		return res.json();
-	} catch {
-		return offline;
-	}
-}
-
-/** Push the current built workspace's ready folder to `target` ('aws' | 'floci').
- *  404=not configured, 409=not built, 422=no target, 502=unreachable. */
-export async function uploadToS3(target, fetchFn = fetch) {
-	const res = await fetchFn(url(`/api/s3/upload?target=${target}`), { method: 'POST' });
-	return { ok: res.ok, status: res.status, body: await res.json() };
-}
-
 // --- The floci container's lifecycle. Independent of everything else: no session, no
 // database, no built folder — the container is a machine-level thing, and the panel's whole
 // point is that a volunteer never has to open a terminal to fix it. ---
