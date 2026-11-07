@@ -233,3 +233,74 @@ def test_get_unknown_raises():
     assert reg.floci().name == "local"
     with pytest.raises(UnknownEnv):
         reg.get("nope")
+
+
+# --- review round 1 ----------------------------------------------------------------------
+
+
+def test_utf16_overlay_is_ignored_and_reported(tmp_path):
+    # I2: Windows PowerShell 5's `>` writes UTF-16; startup must survive it.
+    overlay = tmp_path / "environments.local.toml"
+    overlay.write_bytes('[env.dev]\nlabel = "Dev"\n'.encode("utf-16"))
+    reg = load_registry(COMMITTED, overlay)
+    assert set(reg.envs) == {"local", "dev", "prod"}
+    assert len(reg.errors) == 1
+    assert "environments.local.toml" in reg.errors[0]
+    assert "UTF-8" in reg.errors[0]
+
+
+def test_cp1252_overlay_is_ignored_and_reported(tmp_path):
+    overlay = tmp_path / "environments.local.toml"
+    overlay.write_bytes('[env.dev]\nlabel = "Café"\n'.encode("cp1252"))
+    reg = load_registry(COMMITTED, overlay)
+    assert reg.envs["dev"].label == "Dev (AWS)"
+    assert "UTF-8" in reg.errors[0]
+
+
+def test_utf8_bom_overlay_parses(tmp_path):
+    overlay = tmp_path / "environments.local.toml"
+    overlay.write_bytes('[env.dev]\nlabel = "Dev ✓"\n'.encode("utf-8-sig"))
+    reg = load_registry(COMMITTED, overlay)
+    assert reg.errors == []
+    assert reg.envs["dev"].label == "Dev ✓"
+
+
+def test_non_utf8_committed_file_raises(tmp_path):
+    path = tmp_path / "environments.toml"
+    path.write_bytes(('default = "local"\n' + FLOCI).encode("utf-16"))
+    with pytest.raises(EnvConfigError, match="UTF-8"):
+        load_registry(path)
+
+
+def test_overlay_cannot_turn_off_a_committed_confirm(tmp_path):
+    # I4: the typed confirm is prod's only write guard.
+    overlay = _overlay(tmp_path, "[env.prod]\nconfirm = false\n")
+    reg = load_registry(COMMITTED, overlay)
+    assert reg.envs["prod"].confirm is True
+    assert len(reg.errors) == 1
+    assert "env.prod.confirm" in reg.errors[0]
+    assert "environments.local.toml was ignored" in reg.errors[0]
+
+
+def test_overlay_may_turn_a_confirm_on(tmp_path):
+    overlay = _overlay(tmp_path, "[env.dev]\nconfirm = true\n")
+    reg = load_registry(COMMITTED, overlay)
+    assert reg.errors == []
+    assert reg.envs["dev"].confirm is True
+
+
+@pytest.mark.parametrize("other", [
+    "http://localhost:4566", "http://127.0.0.1:4566/", "HTTP://LOCALHOST:4566/",
+])
+def test_floci_collision_normalizes_the_endpoint(tmp_path, other):
+    # M13: the same emulator spelled two ways still shares one bucket namespace.
+    extra = FLOCI.replace("[env.local]", "[env.other]").replace(
+        "http://127.0.0.1:4566", other).replace("an-local", "an-other")
+    with pytest.raises(EnvConfigError, match="s3_bucket"):
+        load_registry(_committed(tmp_path, extra))
+
+
+def test_floci_envs_on_different_ports_may_share_a_bucket(tmp_path):
+    extra = FLOCI.replace("[env.local]", "[env.other]").replace(
+        "127.0.0.1:4566", "127.0.0.1:4567").replace("an-local", "an-other")
+    assert set(load_registry(_committed(tmp_path, extra)).envs) == {"local", "other"}

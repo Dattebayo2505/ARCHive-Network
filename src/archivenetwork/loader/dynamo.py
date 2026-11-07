@@ -19,10 +19,23 @@ from urllib.parse import urlsplit
 import boto3
 from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 from botocore.config import Config as BotoConfig
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+    NoCredentialsError,
+    SSOTokenLoadError,
+    TokenRetrievalError,
+    UnauthorizedSSOTokenError,
+)
 
 from .items import Update
 from .storage import ENDPOINT_CONNECT_TIMEOUT, ENDPOINT_READ_TIMEOUT, probe_endpoint
+
+# A profile env's login failing inside botocore's own credential chain, before any request is
+# sent. A login problem, never an outage: the routes map it to 401.
+CREDENTIAL_CHAIN_ERRORS: tuple[type[BotoCoreError], ...] = (
+    NoCredentialsError, SSOTokenLoadError, TokenRetrievalError, UnauthorizedSSOTokenError,
+)
 
 DEFAULT_REGION = "ap-southeast-1"
 BATCH_GET_LIMIT = 100  # DynamoDB's cap on keys per BatchGetItem
@@ -175,7 +188,11 @@ def _endpoint_label(t: Tables) -> str:
 
 
 def probe(t: Tables) -> Probe:
-    """Is the endpoint up, and which of the probed tables exist? Never raises."""
+    """Is the endpoint up, and which of the probed tables exist?
+
+    Never raises, except `CREDENTIAL_CHAIN_ERRORS`: an expired profile login is not "can't reach
+    DynamoDB", and callers run the probe under `aws_errors` to turn it into the 401.
+    """
     label = _endpoint_label(t)
     url = t.client.meta.endpoint_url
     tables = {kind: t.name(kind) for kind in t.probed()}
@@ -201,6 +218,8 @@ def probe(t: Tables) -> Probe:
                 continue
             return Probe(label, True, t.prefix, tables, [], False, refused=True,
                          reason=f"{code}: {err.get('Message', '')}".strip())
+        except CREDENTIAL_CHAIN_ERRORS:
+            raise
         except BotoCoreError as exc:
             return down(str(exc))
     return Probe(label, True, t.prefix, tables, missing, not missing)

@@ -17,6 +17,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 EnvKind = Literal["floci", "aws"]
 KINDS: tuple[str, ...] = ("floci", "aws")
@@ -101,10 +102,17 @@ class Registry:
 
 def _read(path: Path) -> dict:
     try:
-        with path.open("rb") as fh:
-            return tomllib.load(fh)
+        data = path.read_bytes()
     except OSError as exc:
         raise EnvConfigError(f"{path.name}: cannot read ({exc})") from exc
+    # utf-8-sig accepts a BOM (Notepad); UTF-16 (PowerShell 5's `>`) and ANSI files are refused
+    # by name rather than raising out of create_app().
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise EnvConfigError(f"{path.name}: not UTF-8 text ({exc}); save it as UTF-8") from exc
+    try:
+        return tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise EnvConfigError(f"{path.name}: invalid TOML ({exc})") from exc
 
@@ -178,12 +186,25 @@ def _build(name: str, table: dict, label: str) -> Env:
     return Env(name, "aws", confirm=confirm, sso=sso, profile=profile or None, **common)
 
 
+def _endpoint_scope(url: str | None) -> tuple:
+    """One emulator however it is spelled: `localhost` is 127.0.0.1, case and a trailing `/` drop."""
+    parts = urlsplit(url or "")
+    host = (parts.hostname or "").lower()
+    if host in ("localhost", "::1"):
+        host = "127.0.0.1"
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    return (parts.scheme.lower(), host, port, parts.path.rstrip("/"))
+
+
 def _check_collisions(envs: dict[str, Env], label: str) -> None:
     """No two envs that reach the same tables/bucket: the guard behind same-account dev/prod."""
     seen: dict[tuple, str] = {}
     for env in envs.values():
         if env.kind == "floci":
-            scope: tuple = ("floci", env.endpoint_url)
+            scope: tuple = ("floci", *_endpoint_scope(env.endpoint_url))
         elif env.sso and env.sso.account_id:
             scope = ("aws", env.sso.account_id, env.region)
         else:
@@ -208,6 +229,16 @@ def _validate(tables: dict[str, dict], default: str, label: str) -> dict[str, En
     return envs
 
 
+def _keep_confirms(committed: dict[str, Env], merged: dict[str, Env], label: str) -> None:
+    """The typed confirm is a prod write's only guard, so a personal file may add one, never drop it."""
+    for name, env in committed.items():
+        if env.confirm and not merged[name].confirm:
+            raise EnvConfigError(
+                f"{label}: env.{name}.confirm = false would remove the typed confirm that "
+                f"{name} requires"
+            )
+
+
 def load_registry(committed: Path, local: Path | None = None) -> Registry:
     raw = _read(committed)
     default = raw.get("default")
@@ -221,7 +252,9 @@ def load_registry(committed: Path, local: Path | None = None) -> Registry:
         # The overlay's own `default` is ignored: a personal file must never re-arm the app.
         try:
             over = _env_tables(_read(local), local.name)
-            envs = _validate(_merge(base, over), default, local.name)
+            merged = _validate(_merge(base, over), default, local.name)
+            _keep_confirms(envs, merged, local.name)
+            envs = merged
         except EnvConfigError as exc:
             errors.append(f"{exc}; {local.name} was ignored")
     return Registry(default=default, envs=envs, errors=errors)

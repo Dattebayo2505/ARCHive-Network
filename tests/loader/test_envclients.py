@@ -115,3 +115,22 @@ def test_aws_storage_presigns_with_sigv4_for_fifteen_minutes():
     url = envclients.storage_for(AWS, FakeAuth()).presign("fb-exports/a/b/1.jpg")
     assert "dev-bucket" in url and "fb-exports/a/b/1.jpg" in url
     assert "X-Amz-Expires=900" in url
+
+
+def test_clients_for_builds_one_session_per_call():
+    # M11 / spec §5.5: bucket, tables and identity are the same session, asked for once.
+    with mock_aws():
+        auth = FakeAuth()
+        storage, tables, identity = envclients.clients_for(AWS, auth)
+        assert auth.asked == ["dev"]
+        made = {c.meta.service_model.service_name for c in auth._session.made}
+        assert made == {"s3", "dynamodb", "sts"}
+        assert identity[1] == "123456789012"
+        assert tables.prefix == "an-dev" and storage.bucket == "dev-bucket"
+
+
+def test_clients_for_floci_never_asks_auth():
+    auth = FakeAuth()
+    _, tables, identity = envclients.clients_for(FLOCI, auth)
+    assert auth.asked == []
+    assert identity == ("floci", "") and tables.on_emulator

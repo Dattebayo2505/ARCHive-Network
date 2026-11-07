@@ -21,7 +21,7 @@ from ..config import settings
 from ..loader import dynamo, envclients, publish
 from ..loader.envs import Env
 from ..loader.storage import S3Storage
-from .envparam import ApiError, aws_errors, resolve_env
+from .envparam import ApiError, aws_errors, aws_failed, require_json, resolve_env
 
 router = APIRouter()
 
@@ -40,11 +40,7 @@ def _lock_for(name: str) -> threading.Lock:
 
 
 def _clients(env: Env, auth) -> tuple[S3Storage, dynamo.Tables, tuple[str, str]]:
-    return (
-        envclients.storage_for(env, auth),
-        envclients.tables_for(env, auth),
-        envclients.identity_for(env, auth),
-    )
+    return envclients.clients_for(env, auth)
 
 
 def ready_root(request: Request) -> tuple[Path, str]:
@@ -64,6 +60,7 @@ def ready_root(request: Request) -> tuple[Path, str]:
 def run_publish(
     request: Request, env: str = Query(...), body: PublishRequest | None = None
 ) -> dict:
+    require_json(request)
     target = resolve_env(request, env)
     root, workspace_id = ready_root(request)
     if target.confirm and (body is None or body.confirm != target.name):
@@ -73,17 +70,15 @@ def run_publish(
     if not lock.acquire(blocking=False):
         raise ApiError(409, {"error": "publish_running", "env": target.name})
     try:
-        with aws_errors(target):
-            storage, tables, identity = _clients(target, request.app.state.auth)
+        # Building the clients calls SSO / STS, so a bad network fails here as well as mid-run.
+        # Each item is atomic and bytes go first, so either way a re-run converges.
         try:
+            with aws_errors(target):
+                storage, tables, identity = _clients(target, request.app.state.auth)
             with aws_errors(target, during_publish=True):
                 result = publish.publish(root, workspace_id, target, storage, tables, identity)
         except (BotoCoreError, ClientError) as exc:
-            # Storage failures are contained per file inside load(), so this is DynamoDB.
-            raise HTTPException(
-                status_code=502,
-                detail=f"DynamoDB request failed — {exc}. Re-running Publish is safe.",
-            ) from exc
+            raise aws_failed(target, exc, "Re-running Publish is safe.") from exc
     finally:
         lock.release()
     return result.as_dict()

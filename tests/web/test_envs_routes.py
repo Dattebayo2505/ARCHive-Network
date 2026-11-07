@@ -315,3 +315,57 @@ def test_a_broken_committed_file_is_a_startup_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "environments_file", broken)
     with pytest.raises(EnvConfigError):
         create_app()
+
+
+# --- review round 1 ----------------------------------------------------------------------
+
+
+def test_an_unassigned_role_stays_signed_in_with_no_identity(client, auth, identities):
+    # I1: the volunteer is signed in; the role is what's missing. Flipping to signed out looped.
+    from archivenetwork.loader.awsauth import NotAssigned
+
+    auth.states["dev"] = "signed_in"
+    identities["dev"] = NotAssigned("dev", "Curators", ACCOUNT)
+    dev = _by_name(client.get("/api/envs").json())["dev"]
+    assert dev["signed_in"] is True and dev["login"] == "signed_in"
+    assert dev["identity"] is None
+
+
+def test_an_unassigned_role_is_403_naming_role_and_account(tmp_path, monkeypatch):
+    from archivenetwork.loader.awsauth import NotAssigned
+
+    env = registry(tmp_path).get("dev")
+    with pytest.raises(envparam.ApiError) as info, envparam.aws_errors(env):
+        raise NotAssigned("dev", "Curators", ACCOUNT)
+    assert info.value.status == 403
+    assert info.value.body["error"] == "access_denied"
+    assert "Curators" in info.value.body["detail"] and ACCOUNT in info.value.body["detail"]
+
+
+def test_a_missing_profile_is_listed_as_not_configured(client, auth, identities):
+    # M6: it 409s not_configured on every action, so the list must agree.
+    from botocore.exceptions import ProfileNotFound
+
+    def state(env):
+        if env.profile:
+            raise ProfileNotFound(profile=env.profile)
+        return "signed_out"
+
+    auth.state = state
+    prof = _by_name(client.get("/api/envs").json())["prof"]
+    assert prof["configured"] is False
+    assert prof["signed_in"] is False and prof["login"] == "signed_out"
+
+
+@pytest.mark.parametrize("err", ["UnauthorizedSSOTokenError", "TokenRetrievalError"])
+def test_an_expired_profile_login_is_signed_out(client, auth, identities, err):
+    # M6: botocore hands back deferred SSO credentials, so state() says signed_in until a call.
+    import botocore.exceptions as be
+
+    auth.states["prof"] = "signed_in"
+    exc = getattr(be, err)
+    identities["prof"] = exc() if err.startswith("Unauthorized") else exc(
+        provider="sso", error_msg="expired")
+    prof = _by_name(client.get("/api/envs").json())["prof"]
+    assert prof["signed_in"] is False and prof["login"] == "signed_out"
+    assert prof["configured"] is True

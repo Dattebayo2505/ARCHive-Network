@@ -66,8 +66,9 @@ def preflight(
 ) -> list[Check]:
     arn, account = identity
     checks = [Check("signed in", bool(arn), arn)]
-    if env.kind == "aws" and env.sso is not None:
-        # Catches a profile or role pointing at another account than the env names.
+    if env.kind == "aws" and env.sso is not None and env.sso.account_id:
+        # Catches a profile or role pointing at another account than the env names. A profile
+        # env that kept the committed `[sso]` (account_id "") has no account to compare with.
         expected = env.sso.account_id
         checks.append(Check(
             "account matches environment",
@@ -128,11 +129,17 @@ def verify(
 
     missing: list[str] = []
     differs: list[str] = []
+    unchecked = ""
     for m in published:
         prior = found.get(("media", m.fbid))
         if not (prior and prior.storage_path):
             continue  # already counted by the table check
-        size = storage.size(prior.storage_path)
+        try:
+            size = storage.size(prior.storage_path)
+        except (ClientError, BotoCoreError) as exc:
+            # A failed check, not a lost Publish; the rest would fail (and time out) alike.
+            unchecked = f"{m.fbid}: {exc}"
+            break
         if size is None:
             missing.append(m.fbid)
         elif size != (ready_root / m.uri).stat().st_size:
@@ -143,7 +150,11 @@ def verify(
         detail += f"; missing: {_sample(missing)}"
     if differs:
         detail += f"; size differs: {_sample(differs)}"
-    checks.append(Check("every published media object is in the bucket", not missing, detail))
+    if unchecked:
+        detail += f"; couldn't check the rest — {unchecked}"
+    checks.append(Check(
+        "every published media object is in the bucket", not missing and not unchecked, detail
+    ))
 
     no_album = [a.fb_album_id for a in albums if ("album", a.fb_album_id) not in found]
     checks.append(Check(

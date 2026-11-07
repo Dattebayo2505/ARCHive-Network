@@ -199,3 +199,44 @@ def test_as_dict_shape(ready_root, ddb, env, storage):
     assert bad["steps"]["publish"] is None
     assert bad["steps"]["verify"] is None
     assert bad["steps"]["preflight"]["ok"] is False
+
+
+# --- review round 1 ----------------------------------------------------------------------
+
+
+def test_a_profile_env_with_the_committed_empty_sso_skips_the_account_check(
+    ready_root, ddb, storage
+):
+    # I3: an overlay can add `profile` but can't remove the committed [sso] with account_id "".
+    prof = Env("dev", "aws", "Dev", REGION, BUCKET, ddb.prefix, profile="mine",
+               sso=Sso("", REGION, "", "Curators"))
+    r = publish(ready_root, "ws-1", prof, storage, ddb, IDENTITY)
+    assert "account matches environment" not in _checks(r.preflight)
+    assert r.ok is True
+
+
+def test_a_profile_env_with_a_known_account_still_checks_it(ready_root, ddb, storage):
+    # Spec §6: the check exists to catch a profile pointing at the wrong account.
+    prof = Env("dev", "aws", "Dev", REGION, BUCKET, ddb.prefix, profile="mine",
+               sso=Sso("", REGION, "999999999999", "Curators"))
+    r = publish(ready_root, "ws-1", prof, storage, ddb, IDENTITY)
+    assert not _checks(r.preflight)["account matches environment"].ok
+    assert r.publish is None
+
+
+def test_a_size_check_error_fails_verify_and_keeps_the_load_result(ready_root, ddb, env, storage):
+    # M4: a non-404 HEAD error during verify was a 502 "DynamoDB request failed".
+    calls = []
+
+    def size(key):
+        calls.append(key)
+        raise ClientError({"Error": {"Code": "InternalError", "Message": "boom"}}, "HeadObject")
+
+    storage.size = size
+    r = publish(ready_root, "ws-1", env, storage, ddb, IDENTITY)
+    assert r.publish is not None and r.publish.media_inserted >= 2
+    check = _checks(r.verify)["every published media object is in the bucket"]
+    assert check.ok is False
+    assert "boom" in check.detail and "couldn't check" in check.detail
+    assert len(calls) == 1  # stops at the first error: the rest would fail (and wait) alike
+    assert r.ok is False

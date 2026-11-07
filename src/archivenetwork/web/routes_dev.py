@@ -23,7 +23,7 @@ from ..loader.envs import Env
 from ..loader.load import CREDENTIAL_ERRORS
 from ..loader.storage import S3Storage
 from ..loader.validate import validate
-from .envparam import DENIED, ApiError, aws_errors, resolve_env
+from .envparam import DENIED, ApiError, aws_errors, aws_failed, require_json, resolve_env
 from .routes_publish import ready_root
 
 router = APIRouter()
@@ -60,13 +60,32 @@ def _boto_failed(exc: Exception) -> HTTPException:
 
 def _env_tables(request: Request, name: str) -> tuple[Env, dynamo.Tables]:
     env = resolve_env(request, name)
+    try:
+        with aws_errors(env):
+            return env, _tables(env, request.app.state.auth)
+    except _BOTO_ERRORS as exc:  # SSO / STS run here: offline must be a 502, never a 500
+        raise aws_failed(env, exc) from exc
+
+
+def _probe(env: Env, t: dynamo.Tables) -> dynamo.Probe:
+    """The probe, with an expired profile login (which it raises) mapped to the 401."""
     with aws_errors(env):
-        return env, _tables(env, request.app.state.auth)
+        return dynamo.probe(t)
+
+
+def _refusal(env: Env, p: dynamo.Probe) -> None:
+    """CA5: a refused probe whose code is a login or grant problem is the panel's 401 / 403."""
+    # The probe flattens the error to "<Code>: <message>".
+    code, _, message = (p.reason or "").partition(":")
+    if code in DENIED:
+        raise ApiError(403, {"error": "access_denied", "detail": message.strip()})
+    if code in CREDENTIAL_ERRORS:
+        raise ApiError(401, {"error": "signed_out", "env": env.name})
 
 
 def _reachable_tables(request: Request, name: str) -> tuple[Env, dynamo.Tables, dynamo.Probe]:
     env, t = _env_tables(request, name)
-    p = dynamo.probe(t)
+    p = _probe(env, t)
     if not p.endpoint_reachable:
         raise _unreachable(p)
     return env, t, p
@@ -76,13 +95,7 @@ def _ready_tables(request: Request, name: str) -> tuple[Env, dynamo.Tables]:
     """The one guard rows and validate share: reachable, not refused, no table missing."""
     env, t, p = _reachable_tables(request, name)
     if p.refused:
-        # The probe flattens the error to "<Code>: <message>"; a login or grant problem is
-        # the panel's 401 / 403, not an outage.
-        code, _, message = (p.reason or "").partition(":")
-        if code in DENIED:
-            raise ApiError(403, {"error": "access_denied", "detail": message.strip()})
-        if code in CREDENTIAL_ERRORS:
-            raise ApiError(401, {"error": "signed_out", "env": env.name})
+        _refusal(env, p)
         raise HTTPException(status_code=502, detail=f"DynamoDB refused the request — {p.reason}")
     if not p.table_exists:
         names = ", ".join(p.tables[k] for k in p.missing)
@@ -93,7 +106,9 @@ def _ready_tables(request: Request, name: str) -> tuple[Env, dynamo.Tables]:
 @router.get("/api/dev/status")
 def status(request: Request, env: str = Query(...)) -> dict:
     target, t = _env_tables(request, env)
-    p = dynamo.probe(t)
+    p = _probe(target, t)
+    if p.refused:
+        _refusal(target, p)  # any other refusal is a reading the card renders, so still a 200
     reason = p.reason
     row_counts: dict[str, int] = {}
     if p.table_exists:
@@ -118,8 +133,8 @@ def status(request: Request, env: str = Query(...)) -> dict:
 @router.get("/api/dev/tables")
 def tables_status(request: Request, env: str = Query(...)) -> dict:
     """Is the endpoint up, and which tables exist? Never 500s on a stopped emulator."""
-    _, t = _env_tables(request, env)
-    return asdict(dynamo.probe(t))
+    target, t = _env_tables(request, env)
+    return asdict(_probe(target, t))
 
 
 @router.post("/api/dev/tables")
@@ -127,6 +142,7 @@ def tables_create(
     request: Request, env: str = Query(...), body: TableRequest | None = None
 ) -> dict:
     """Create the missing tables (only those), or with `reset` drop and recreate all 11."""
+    require_json(request)
     target, t, _ = _reachable_tables(request, env)
     reset = bool(body and body.reset)
     try:

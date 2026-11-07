@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import BotoCoreError, ClientError, ProfileNotFound
 from fastapi import APIRouter, HTTPException, Request
 
 from ..loader import envclients
 from ..loader.awsauth import SignedOut
+from ..loader.dynamo import CREDENTIAL_CHAIN_ERRORS
 from ..loader.envs import Env
 from .envparam import ApiError, aws_errors, lookup_env, resolve_env
 
@@ -27,14 +28,18 @@ def _entry(env: Env, auth) -> dict:
     if env.configured:
         try:
             login = auth.state(env)
+        except ProfileNotFound:
+            # Every action 409s not_configured for it (CA7), so the list says the same.
+            out["configured"] = False
         except Exception:  # a sign-in problem must not take the env list down with it
             login = "signed_out"
         if login == "signed_in":
             try:
                 identity = envclients.identity_for(env, auth)[0]
-            except SignedOut:
+            except (SignedOut, *CREDENTIAL_CHAIN_ERRORS):
+                # A profile's SSO credentials are deferred: only a real call shows they expired.
                 login = "signed_out"
-            except Exception:
+            except Exception:  # e.g. NotAssigned: signed in, but no role; Publish names it (403)
                 identity = None
     return {**out, "signed_in": login == "signed_in", "login": login, "identity": identity}
 

@@ -412,3 +412,18 @@ def test_prefetch_follows_unprocessed_keys(monkeypatch):
                           [("media", "a"), ("media", "b")])
     assert set(got) == {("media", "a"), ("media", "b")} and len(fake.calls) == 2
     assert got[("media", "b")].storage_path == "k" and got[("media", "a")].storage_path is None
+
+
+def test_probe_raises_an_expired_profile_login_instead_of_calling_it_unreachable(ddb):
+    # M6: an expired `aws sso login` read as "Can't reach DynamoDB".
+    from botocore.exceptions import UnauthorizedSSOTokenError
+
+    class Expired:
+        meta = ddb.client.meta
+
+        def describe_table(self, **kw):
+            raise UnauthorizedSSOTokenError()
+
+    t = dynamo.Tables(Expired(), ddb.prefix, on_emulator=False)
+    with pytest.raises(UnauthorizedSSOTokenError):
+        dynamo.probe(t)

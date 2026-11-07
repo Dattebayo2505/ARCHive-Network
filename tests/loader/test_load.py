@@ -2,7 +2,14 @@ import json
 from pathlib import Path
 
 import pytest
-from botocore.exceptions import EndpointConnectionError
+from botocore.exceptions import (
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    NoCredentialsError,
+    ReadTimeoutError,
+    TokenRetrievalError,
+    UnauthorizedSSOTokenError,
+)
 
 from archivenetwork.inventory.hashtags import canonical_tag
 from archivenetwork.loader import dynamo
@@ -340,8 +347,9 @@ def test_one_failed_put_skips_only_that_item(ready_root: Path, tmp_path: Path, d
 
 
 def test_a_botocore_error_on_one_put_is_also_contained(ready_root: Path, tmp_path: Path, ddb):
+    # A read timeout is about that one file's transfer; a connection error is not (see below).
     store = _FailingStore(
-        tmp_path / "store", EndpointConnectionError(endpoint_url="http://x"), fbid="g03"
+        tmp_path / "store", ReadTimeoutError(endpoint_url="http://x"), fbid="g03"
     )
     r = load(ready_root, "ws-1", store, ddb)
     assert r.failed == ["g03"]
@@ -369,3 +377,21 @@ def test_a_bare_403_from_the_head_check_aborts_too(ready_root: Path, tmp_path: P
     store = _FailingStore(tmp_path / "store", _client_error("403"), nth=1)
     with pytest.raises(ClientError):
         load(ready_root, "ws-1", store, ddb)
+
+
+@pytest.mark.parametrize("make", [
+    lambda: EndpointConnectionError(endpoint_url="http://x"),
+    lambda: ConnectTimeoutError(endpoint_url="http://x"),
+    lambda: UnauthorizedSSOTokenError(),
+    lambda: TokenRetrievalError(provider="sso", error_msg="expired"),
+    lambda: NoCredentialsError(),
+])
+def test_a_lost_connection_or_profile_login_aborts_the_run(ready_root: Path, tmp_path: Path, ddb,
+                                                           make):
+    # M3: every later file would fail the same way (and wait out a connect timeout each).
+    exc = make()
+    store = _FailingStore(tmp_path / "store", exc, nth=1)
+    with pytest.raises(type(exc)):
+        load(ready_root, "ws-1", store, ddb)
+    assert len(store.puts) == 1
+    assert _items(ddb, "media") == {}

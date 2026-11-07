@@ -12,8 +12,9 @@ the item is skipped, its bytes are not re-uploaded, and it is reported in `skipp
 first photo's fbid, so an id alone is ambiguous across the album and media tables.
 A per-file storage failure (`ClientError`, `BotoCoreError`, `OSError`) is recorded in `errors` and
 `failed`, and that media item is **not** written, so no item names an object that is not there. A
-credential error (`CREDENTIAL_ERRORS`) is a whole-run blocker and re-raises: every later file would
-fail the same way. DynamoDB errors propagate; the route maps them.
+credential error (`CREDENTIAL_ERRORS`), an expired profile login or a lost connection
+(`RUN_BLOCKERS`) is a whole-run blocker and re-raises: every later file would fail the same way.
+DynamoDB errors propagate; the route maps them.
 """
 
 from __future__ import annotations
@@ -22,7 +23,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+)
 
 from . import dynamo
 from .items import album_update, media_update
@@ -46,9 +52,21 @@ CREDENTIAL_ERRORS: frozenset[str] = frozenset({
 HEAD_CREDENTIAL_STATUSES: frozenset[str] = frozenset({"400", "403"})
 
 
+# Failures that say nothing about one file: a profile login gone inside botocore's credential
+# chain, or no connection at all. Containing them per file would cost a timeout per file.
+RUN_BLOCKERS: tuple[type[BaseException], ...] = (
+    *dynamo.CREDENTIAL_CHAIN_ERRORS, EndpointConnectionError, ConnectTimeoutError,
+)
+
+
 def is_credential_error(exc: BaseException) -> bool:
     code = error_code(exc)
     return code in CREDENTIAL_ERRORS or code in HEAD_CREDENTIAL_STATUSES
+
+
+def is_run_blocker(exc: BaseException) -> bool:
+    """Stop the whole run: every later file would fail the same way."""
+    return is_credential_error(exc) or isinstance(exc, RUN_BLOCKERS)
 
 
 def error_code(exc: BaseException) -> str:
@@ -118,7 +136,7 @@ def load(
             else:
                 result.files_skipped += 1
         except (ClientError, BotoCoreError, OSError) as exc:
-            if is_credential_error(exc):
+            if is_run_blocker(exc):
                 raise
             # One bad file must not sink the run, and its item must not name a missing object.
             result.errors.append(f"{row.fbid}: {exc}")

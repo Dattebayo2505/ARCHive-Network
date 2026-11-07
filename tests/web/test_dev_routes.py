@@ -59,6 +59,11 @@ ROUTES = [
 ]
 
 
+def _body(method: str) -> dict:
+    """POSTs carry the JSON body the panel always sends (a bodiless one is a 415)."""
+    return {"json": {}} if method == "POST" else {}
+
+
 def _app(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     # Without this every build opens a file-manager window.
@@ -101,7 +106,7 @@ def built_client(export_root: Path, tmp_path: Path, monkeypatch) -> TestClient:
 
 
 def _publish(c: TestClient) -> dict:
-    resp = c.post("/api/publish", params=L)
+    resp = c.post("/api/publish", params=L, json={})
     assert resp.status_code == 200, resp.text
     assert resp.json()["ok"] is True, resp.json()
     return resp.json()
@@ -109,13 +114,13 @@ def _publish(c: TestClient) -> dict:
 
 def test_every_route_requires_an_env(client):
     for method, path in ROUTES:
-        resp = client.request(method, path)
+        resp = client.request(method, path, **_body(method))
         assert resp.status_code == 422, (method, path)
 
 
 def test_an_unknown_env_is_422(client):
     for method, path in ROUTES:
-        resp = client.request(method, path, params={"env": "nope"})
+        resp = client.request(method, path, params={"env": "nope"}, **_body(method))
         assert resp.status_code == 422, (method, path)
         assert resp.json() == {"error": "unknown_env", "env": "nope"}
 
@@ -138,7 +143,7 @@ def test_signed_out_aws_env_is_401(tmp_path, monkeypatch):
 
     c.app.state.auth = Out()
     for method, path in ROUTES:
-        resp = c.request(method, path, params={"env": "dev"})
+        resp = c.request(method, path, params={"env": "dev"}, **_body(method))
         if path == "/api/dev/validate":
             assert resp.status_code == 404  # no session: checked before any AWS call
             continue
@@ -188,7 +193,7 @@ def test_status_reports_an_unreachable_endpoint_fast(tmp_path, monkeypatch):
 
 def test_every_table_route_502s_when_the_endpoint_is_unreachable(built_client):
     for method, path in ROUTES[2:]:
-        resp = built_client.request(method, path, params=L)
+        resp = built_client.request(method, path, params=L, **_body(method))
         assert resp.status_code == 502, (method, path, resp.text)
         assert "127.0.0.1:1" in resp.json()["detail"], (method, path)
 
@@ -371,3 +376,75 @@ def test_validate_404s_without_a_session(client):
 
 def test_rows_rejects_an_unknown_type(client):
     assert client.get("/api/dev/rows", params={**L, "type": "photo_album"}).status_code == 422
+
+
+# --- review round 1 ----------------------------------------------------------------------
+
+
+def test_a_transport_failure_building_tables_is_502_not_500(tmp_path, monkeypatch):
+    # I5: STS / SSO run while `_tables` builds the client; an offline laptop gave a 500.
+    def offline(env, auth):
+        raise EndpointConnectionError(endpoint_url="https://portal.sso.ap-southeast-1.amazonaws.com")
+
+    monkeypatch.setattr(routes_dev, "_tables", offline)
+    c = TestClient(_app(tmp_path, monkeypatch))
+    for method, path in ROUTES:
+        if path == "/api/dev/validate":
+            continue  # no session: a 404 before any AWS call
+        resp = c.request(method, path, params={"env": "dev"}, **_body(method))
+        assert resp.status_code == 502, (method, path, resp.text)
+        assert resp.json()["detail"].startswith("AWS request failed — "), (method, path)
+        assert resp.json()["detail"].endswith("Re-running is safe."), (method, path)
+
+
+def test_status_maps_a_refused_probe_like_rows_does(dev_table, client, monkeypatch):
+    # B7 / CA5: an expired login read as "check your role's permissions" on the status card.
+    monkeypatch.setattr(dynamo, "probe", lambda t: _refused(dev_table, "ExpiredTokenException: old"))
+    resp = client.get("/api/dev/status", params=L)
+    assert resp.status_code == 401
+    assert resp.json() == {"error": "signed_out", "env": "local"}
+
+    monkeypatch.setattr(dynamo, "probe",
+                        lambda t: _refused(dev_table, "AccessDeniedException: no Describe"))
+    resp = client.get("/api/dev/status", params=L)
+    assert resp.status_code == 403
+    assert resp.json() == {"error": "access_denied", "detail": "no Describe"}
+
+    # Anything else is still a refusal the card renders, not an error.
+    monkeypatch.setattr(dynamo, "probe", lambda t: _refused(dev_table, "InternalFailure: no"))
+    resp = client.get("/api/dev/status", params=L)
+    assert resp.status_code == 200
+    assert resp.json()["refused"] is True
+
+
+def test_an_expired_profile_login_is_401_not_unreachable(dev_table, built_client, monkeypatch):
+    # M6: the probe raised it as "Can't reach DynamoDB" (502) for a profile env.
+    from botocore.exceptions import UnauthorizedSSOTokenError
+
+    def expired(t):
+        raise UnauthorizedSSOTokenError()
+
+    monkeypatch.setattr(dynamo, "probe", expired)
+    for method, path in ROUTES:
+        resp = built_client.request(method, path, params=L, **_body(method))
+        assert resp.status_code == 401, (method, path, resp.text)
+        assert resp.json() == {"error": "signed_out", "env": "local"}
+
+
+@pytest.mark.parametrize("kw", [
+    {},
+    {"content": b'{"reset": true}', "headers": {"Content-Type": "text/plain"}},
+])
+def test_create_tables_without_a_json_body_is_rejected(dev_table, client, kw):
+    # M9: a cross-origin page could otherwise reset floci's tables with a simple request.
+    dev_table.client.delete_table(TableName=dev_table.name("media"))
+    resp = client.post("/api/dev/tables", params=L, **kw)
+    assert resp.status_code in (415, 422), resp.text
+    assert dev_table.name("media") in dynamo.probe(dev_table).tables.values()
+    assert "media" in dynamo.probe(dev_table).missing  # nothing was created or reset
+
+
+def test_a_bodiless_create_tables_is_exactly_415(client):
+    resp = client.post("/api/dev/tables", params=L)
+    assert resp.status_code == 415
+    assert resp.json()["error"] == "json_required"

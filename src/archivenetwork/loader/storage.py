@@ -125,6 +125,10 @@ class S3Storage:
     def key_for(self, fbid: str, hashtag: str | None, group: str, suffix: str) -> str:
         return media_key(fbid, hashtag, group, suffix)
 
+    def _named(self, exc: ClientError, key: str | None = None) -> None:
+        """Tag a refusal with what it was for: a HEAD's bare 403 says nothing else (spec §5)."""
+        exc.resource = f"s3://{self.bucket}" + (f"/{key}" if key else "")
+
     def ensure_ready(self) -> None:
         """Preflight: fail fast on a whole-run blocker (bad creds, missing bucket,
         no network) before we touch a single file.
@@ -136,6 +140,7 @@ class S3Storage:
         try:
             self.client.head_bucket(Bucket=self.bucket)
         except ClientError as exc:
+            self._named(exc)
             if not self.create_if_missing:
                 raise
             code = str(exc.response.get("Error", {}).get("Code"))
@@ -161,6 +166,7 @@ class S3Storage:
             code = exc.response.get("Error", {}).get("Code")
             if code in ("404", "NoSuchKey", "NotFound"):
                 return False
+            self._named(exc, key)
             raise
 
     def size(self, key: str) -> int | None:
@@ -170,6 +176,7 @@ class S3Storage:
         except ClientError as exc:
             if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
                 return None
+            self._named(exc, key)
             raise
 
     def presign(self, key: str, expires: int = 900) -> str:
@@ -186,7 +193,11 @@ class S3Storage:
         # put_object, not upload_file: the transfer manager wraps a ClientError in
         # S3UploadFailedError, which would hide an ExpiredToken code from load()'s triage.
         with src.open("rb") as body:
-            self.client.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType=ctype)
+            try:
+                self.client.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType=ctype)
+            except ClientError as exc:
+                self._named(exc, key)
+                raise
         return True
 
 
