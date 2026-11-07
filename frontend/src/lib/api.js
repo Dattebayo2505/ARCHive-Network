@@ -429,50 +429,102 @@ export async function autoCurate(perAlbum = null, fetchFn = fetch) {
 	return { ok: res.ok, status: res.status, body: await res.json() };
 }
 
-// --- Dev-mode: the per-type DynamoDB tables (floci locally) + object store. Every route 404s unless
-// the backend has ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX set, so the panel must handle `enabled: false`. ---
+// --- Named environments. Every env-scoped call names its env, so which bucket and which tables a
+// request touches is never ambiguous, and two tabs can never disagree about it. ---
 
-/** Build the URL an object is served from: <base>/<storage_path>. In prod the base is a CDN. */
-export function storeUrl(storagePath, baseUrl = '/store') {
-	return url(`${baseUrl}/${storagePath}`);
+/** `?env=<name>` plus any extra params, URL-encoded. */
+const envQs = (env, extra = {}) => new URLSearchParams({ env, ...extra }).toString();
+
+/** Read a JSON body without letting a non-JSON error page throw. */
+const bodyOf = (res) => res.json().catch(() => ({}));
+
+/** Every environment the backend knows, with sign-in state. Never throws: the fallback carries
+ *  `api_reachable: false` so the panel can blame the API rather than an empty env list. */
+export async function listEnvs(fetchFn = fetch) {
+	const offline = {
+		api_reachable: false,
+		default: 'local',
+		envs: [],
+		stale_settings: [],
+		errors: []
+	};
+	try {
+		const res = await fetchFn(url('/api/envs'));
+		if (!res.ok) return offline;
+		return res.json();
+	} catch {
+		return offline;
+	}
 }
 
-/** Endpoint + per-table status. Never throws on a missing table — it reports it. */
-export async function devStatus(fetchFn = fetch) {
-	return (await fetchFn(url('/api/dev/status'))).json();
+const envPath = (name, verb) => url(`/api/envs/${encodeURIComponent(name)}/${verb}`);
+
+/** Start the SSO device flow. 200 = `{verification_uri_complete, user_code, expires_in, interval}`;
+ *  409 `profile_login` carries the CLI command in `detail`. */
+export async function envLogin(name, fetchFn = fetch) {
+	const res = await fetchFn(envPath(name, 'login'), { method: 'POST' });
+	return { ok: res.ok, status: res.status, body: await bodyOf(res) };
 }
 
-/** Run the ETL over the current workspace's ready folder. 409 = not built yet. */
-export async function devLoad(fetchFn = fetch) {
-	const res = await fetchFn(url('/api/dev/load'), { method: 'POST' });
-	return { ok: res.ok, status: res.status, body: await res.json() };
+/** Poll the device flow: `{state: signed_out | pending | signed_in | denied | expired}`. */
+export async function envLoginState(name, fetchFn = fetch) {
+	const res = await fetchFn(envPath(name, 'login'));
+	return { ok: res.ok, status: res.status, body: await bodyOf(res) };
+}
+
+export async function envLogout(name, fetchFn = fetch) {
+	const res = await fetchFn(envPath(name, 'logout'), { method: 'POST' });
+	return { ok: res.ok, status: res.status, body: await bodyOf(res) };
+}
+
+/** Upload + load + verify in one step. `confirm` is the word typed in the prod dialog; the server
+ *  re-checks it, so a stale tab or a hand-made request cannot skip the dialog. */
+export async function publish(env, confirm = null, fetchFn = fetch) {
+	const res = await fetchFn(url(`/api/publish?${envQs(env)}`), {
+		method: 'POST',
+		headers: jsonHeaders,
+		body: JSON.stringify({ confirm: confirm ?? null })
+	});
+	return { ok: res.ok, status: res.status, body: await bodyOf(res) };
+}
+
+// --- Dev-mode: the env's per-type DynamoDB tables. A 401 body (`{error: 'signed_out'}`) is passed
+// through as-is so the panel can flip its sign-in row. ---
+
+/** Endpoint + per-table status for `env`. Never throws on a missing table — it reports it. */
+export async function devStatus(env, fetchFn = fetch) {
+	return bodyOf(await fetchFn(url(`/api/dev/status?${envQs(env)}`)));
 }
 
 /** Paginated items of one type: `media` or `album`. */
-export async function devRows(type = 'media', limit = 50, offset = 0, fetchFn = fetch) {
-	const qs = new URLSearchParams({ type, limit: String(limit), offset: String(offset) });
+export async function devRows(env, type = 'media', limit = 50, offset = 0, fetchFn = fetch) {
+	const qs = envQs(env, { type, limit: String(limit), offset: String(offset) });
 	const res = await fetchFn(url(`/api/dev/rows?${qs}`));
-	return { ok: res.ok, status: res.status, body: await res.json() };
+	return { ok: res.ok, status: res.status, body: await bodyOf(res) };
 }
 
 /** The validation report. */
-export async function devValidate(fetchFn = fetch) {
-	const res = await fetchFn(url('/api/dev/validate'));
-	return { ok: res.ok, status: res.status, body: await res.json() };
+export async function devValidate(env, fetchFn = fetch) {
+	const res = await fetchFn(url(`/api/dev/validate?${envQs(env)}`));
+	return { ok: res.ok, status: res.status, body: await bodyOf(res) };
 }
 
 /** Is the endpoint up, and which of the tables exist? Never throws. */
-export async function devTables(fetchFn = fetch) {
-	const off = (reason) => ({
+export async function devTables(env, fetchFn = fetch) {
+	const off = (reason, error) => ({
 		endpoint_reachable: false,
 		table_exists: false,
 		missing: [],
 		tables: {},
-		reason
+		reason,
+		...(error ? { error } : {})
 	});
 	try {
-		const res = await fetchFn(url('/api/dev/tables'));
-		if (!res.ok) return off('dev mode is off');
+		const res = await fetchFn(url(`/api/dev/tables?${envQs(env)}`));
+		if (!res.ok) {
+			const body = await bodyOf(res);
+			return off(body.detail ?? 'The table probe failed.', body.error);
+		}
 		return res.json();
 	} catch {
 		return off(UNREACHABLE);
@@ -480,18 +532,31 @@ export async function devTables(fetchFn = fetch) {
 }
 
 /** Create the missing tables (emulator only); `reset` drops and recreates all 11 empty. */
-export async function devTablesCreate(reset = false, fetchFn = fetch) {
-	const res = await fetchFn(url('/api/dev/tables'), {
+export async function devTablesCreate(env, reset = false, fetchFn = fetch) {
+	const res = await fetchFn(url(`/api/dev/tables?${envQs(env)}`), {
 		method: 'POST',
 		headers: jsonHeaders,
 		body: JSON.stringify({ reset })
 	});
-	return { ok: res.ok, status: res.status, body: await res.json() };
+	return { ok: res.ok, status: res.status, body: await bodyOf(res) };
 }
 
 /** Delete all 11 tables (emulator only) — destructive, takes every item with them. */
-export async function devTablesDelete(fetchFn = fetch) {
-	const res = await fetchFn(url('/api/dev/tables'), { method: 'DELETE' });
+export async function devTablesDelete(env, fetchFn = fetch) {
+	const res = await fetchFn(url(`/api/dev/tables?${envQs(env)}`), { method: 'DELETE' });
+	return { ok: res.ok, status: res.status, body: await bodyOf(res) };
+}
+
+// RETIRED-IN-B6: storeUrl, devLoad — the backend drops /store and /api/dev/load; DevPanel still
+// imports them until its Publish rewrite.
+
+/** Build the URL an object is served from: <base>/<storage_path>. */
+export function storeUrl(storagePath, baseUrl = '/store') {
+	return url(`${baseUrl}/${storagePath}`);
+}
+
+export async function devLoad(fetchFn = fetch) {
+	const res = await fetchFn(url('/api/dev/load'), { method: 'POST' });
 	return { ok: res.ok, status: res.status, body: await res.json() };
 }
 

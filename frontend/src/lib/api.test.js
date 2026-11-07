@@ -2,14 +2,25 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	browse,
+	devRows,
+	devStatus,
+	devTables,
+	devTablesCreate,
+	devTablesDelete,
+	devValidate,
 	dockerFloci,
 	dockerStatus,
+	envLogin,
+	envLoginState,
+	envLogout,
 	flociUiTarget,
 	getInventory,
 	ingestFolder,
 	ingestUpload,
 	ingestZip,
+	listEnvs,
 	previewUrl,
+	publish,
 	reveal,
 	s3Status,
 	saveVideoThumbnail,
@@ -263,5 +274,96 @@ describe('floci ui target', () => {
 	it('returns null rather than throwing when the API is unreachable', async () => {
 		expect(await flociUiTarget(vi.fn().mockRejectedValue(new Error('offline')))).toBeNull();
 		expect(await flociUiTarget(vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }))).toBeNull();
+	});
+});
+
+describe('environment api', () => {
+	const ok = (body = {}, status = 200) =>
+		vi.fn().mockResolvedValue({ ok: status < 400, status, json: async () => body });
+
+	it('lists the envs and returns the body as-is', async () => {
+		const body = { default: 'local', envs: [{ name: 'local' }], stale_settings: [], errors: [] };
+		const fetchFn = ok(body);
+		expect(await listEnvs(fetchFn)).toEqual(body);
+		expect(fetchFn.mock.calls[0][0]).toMatch(/\/api\/envs$/);
+	});
+
+	it('falls back to an offline list rather than throwing', async () => {
+		const fallback = {
+			api_reachable: false,
+			default: 'local',
+			envs: [],
+			stale_settings: [],
+			errors: []
+		};
+		expect(await listEnvs(vi.fn().mockRejectedValue(new Error('offline')))).toEqual(fallback);
+		expect(await listEnvs(ok({}, 500))).toEqual(fallback);
+	});
+
+	it('starts, polls and ends a sign-in on the env-scoped routes', async () => {
+		const fetchFn = ok({ state: 'pending' });
+		expect(await envLogin('dev', fetchFn)).toEqual({
+			ok: true,
+			status: 200,
+			body: { state: 'pending' }
+		});
+		await envLoginState('dev', fetchFn);
+		await envLogout('dev', fetchFn);
+		const calls = fetchFn.mock.calls.map(([u, o]) => [u.replace(/^.*\/api/, '/api'), o?.method ?? 'GET']);
+		expect(calls).toEqual([
+			['/api/envs/dev/login', 'POST'],
+			['/api/envs/dev/login', 'GET'],
+			['/api/envs/dev/logout', 'POST']
+		]);
+	});
+
+	it('URL-encodes env names in paths and query strings', async () => {
+		const fetchFn = ok({});
+		await envLogin('a b/c', fetchFn);
+		await devStatus('a b/c', fetchFn);
+		expect(fetchFn.mock.calls[0][0]).toMatch(/\/api\/envs\/a%20b%2Fc\/login$/);
+		expect(fetchFn.mock.calls[1][0]).toMatch(/\/api\/dev\/status\?env=a(\+|%20)b%2Fc$/);
+	});
+
+	it('publishes with the typed confirm word in the body', async () => {
+		const fetchFn = ok({ ok: true });
+		const res = await publish('prod', 'prod', fetchFn);
+		expect(res).toEqual({ ok: true, status: 200, body: { ok: true } });
+		const [requested, opts] = fetchFn.mock.calls[0];
+		expect(requested).toMatch(/\/api\/publish\?env=prod$/);
+		expect(opts.method).toBe('POST');
+		expect(opts.body).toBe('{"confirm":"prod"}');
+	});
+
+	it('publishes with a null confirm by default', async () => {
+		const fetchFn = ok({ ok: true });
+		await publish('local', undefined, fetchFn);
+		expect(JSON.parse(fetchFn.mock.calls[0][1].body)).toEqual({ confirm: null });
+	});
+
+	it('names the env on every dev route', async () => {
+		const fetchFn = ok({});
+		await devStatus('local', fetchFn);
+		await devRows('local', 'album', 10, 20, fetchFn);
+		await devValidate('local', fetchFn);
+		await devTables('local', fetchFn);
+		await devTablesCreate('local', true, fetchFn);
+		await devTablesDelete('local', fetchFn);
+		const seen = fetchFn.mock.calls.map(([u, o]) => [u.replace(/^.*\/api/, '/api'), o?.method ?? 'GET']);
+		expect(seen).toEqual([
+			['/api/dev/status?env=local', 'GET'],
+			['/api/dev/rows?env=local&type=album&limit=10&offset=20', 'GET'],
+			['/api/dev/validate?env=local', 'GET'],
+			['/api/dev/tables?env=local', 'GET'],
+			['/api/dev/tables?env=local', 'POST'],
+			['/api/dev/tables?env=local', 'DELETE']
+		]);
+		expect(JSON.parse(fetchFn.mock.calls[4][1].body)).toEqual({ reset: true });
+	});
+
+	it('passes a signed_out code through the never-throwing table probe', async () => {
+		const res = await devTables('dev', ok({ error: 'signed_out', env: 'dev' }, 401));
+		expect(res.error).toBe('signed_out');
+		expect(res.endpoint_reachable).toBe(false);
 	});
 });
