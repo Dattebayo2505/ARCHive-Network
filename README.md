@@ -7,19 +7,20 @@ frame for each video in a browser UI, and click **Build** — the tool writes a
 trimmed mirror of the export to `workspace/ready/`. **The original export is
 read-only and never modified.**
 
-Curation is the tool's job. Uploading to S3 is still a downstream phase — but an
-optional **Dev Mode** lets you rehearse the rest locally: it runs the real
-downstream ETL against a DynamoDB table on the local floci emulator, reading nothing but
-the built `ready/` folder. It is off unless you name a table. See **Dev Mode** below.
+Curation is the tool's job. An optional **Dev Mode** then **publishes** the built
+`ready/` folder to a named *environment*: its S3 bucket plus its DynamoDB tables. The
+environment is `local` (the floci emulator in Docker) by default, or the official AWS `dev` / `prod`
+after you sign in from the app. The publish reads nothing but the built folder. See **Dev Mode** below.
 
 > **Database:** production uses **Amazon DynamoDB** (decided 2026-10-30). The loader was
-> ported from PostgreSQL in November 2026; Dev Mode now loads into a DynamoDB table on floci.
+> ported from PostgreSQL in November 2026.
 
 **Tech stack:** Python 3.12 · FastAPI · Uvicorn · Pydantic · Pillow · boto3
 (backend JSON API) — and SvelteKit (Svelte 5) · Skeleton v3 · Tailwind v4 ·
 Vite · `adapter-node` (frontend UI). Packaged with **uv**; zip extraction shells out
-to a vendored 7-Zip binary. DynamoDB (via boto3, on the floci emulator in Docker locally) is
-**optional** and only needed for Dev Mode.
+to a vendored 7-Zip binary. S3 + DynamoDB (via boto3: the floci emulator in Docker locally, or
+AWS) are **optional** and only needed for Dev Mode. **No AWS CLI is needed**; the app signs in to
+AWS itself.
 
 ## Prerequisites
 
@@ -35,7 +36,8 @@ to a vendored 7-Zip binary. DynamoDB (via boto3, on the floci emulator in Docker
 ## Setup
 
 Pick one of the three Python paths below. Whichever you pick, no database, external services, or accounts are
-required — the tool runs entirely against your local export.
+required to curate — the tool runs entirely against your local export. AWS setup (for Dev Mode
+only) is the optional last step.
 
 **With uv (recommended):**
 
@@ -65,15 +67,27 @@ pip install -e .            # add ".[dev]" for pytest / ruff
 cd frontend && npm install
 ```
 
+**Optional — publish to AWS from Dev Mode:** copy the committed example to the gitignored
+personal file, then fill in the sign-in values from the *Archers Network AWS Guide* (Google
+Drive; ask a maintainer for access):
+
+```bash
+cp environments.local.toml.example environments.local.toml   # Windows: copy ...
+```
+
+Skip this and the app still runs: the AWS environments just show as "not configured", and
+`local` (floci) works with no setup at all.
+
 ## Configuration
 
-Nothing is required to run with defaults. Everything is tunable via environment
-variables. Backend settings use the `ARCHIVENETWORK_` prefix (see
-`src/archivenetwork/config.py`); the frontend reads `VITE_API_BASE`.
+Nothing is required to run with defaults. **`.env` is optional**: machine settings only, each
+with a default (see `.env.example`). Backend settings use the `ARCHIVENETWORK_` prefix (see
+`src/archivenetwork/config.py`); real environment variables win over `.env`. The frontend reads
+`VITE_API_BASE`.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ARCHIVENETWORK_WORKSPACE_DIR` | `workspace` | Root for all generated state, imports, and the `ready/` output. |
+| `ARCHIVENETWORK_WORKSPACE_DIR` | `workspace` | Root for all generated state, imports, the AWS sign-in cache (`aws/sso/`) and the `ready/` output. |
 | `ARCHIVENETWORK_SEVEN_ZIP_EXE` | `vendor/<platform-binary>` | Path to a zip-capable 7-Zip binary (defaults to vendored `7za.exe` on Win, `7zz_mac` on macOS, `7zzs_x64`/`7zzs_x32` on Linux). Override to point to a custom binary if desired. |
 | `ARCHIVENETWORK_MAX_PER_ALBUM` | `10` | Per-album selection cap enforced server-side. |
 | `ARCHIVENETWORK_THUMB_SIZE` | `512` | Gallery thumbnail size (px, longest edge). |
@@ -81,20 +95,25 @@ variables. Backend settings use the `ARCHIVENETWORK_` prefix (see
 | `ARCHIVENETWORK_HOST` | `127.0.0.1` | API bind host. |
 | `ARCHIVENETWORK_PORT` | `8000` | API bind port. |
 | `ARCHIVENETWORK_CORS_ORIGINS` / `ARCHIVENETWORK_CORS_ORIGIN_REGEX` | localhost:5173/3000 | Origins allowed to call the API. |
-| `ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX` | — (unset) | **Enables Dev Mode.** The prefix of the 11 per-type DynamoDB tables, e.g. `archers-network-dev` → `archers-network-dev-album`, `-media`, `-credit`, `-featuring`, `-staffer`, `-staff-term`, `-department`, `-category`, `-channel`, `-service`, `-users`. The loader writes only album and media. Every `/api/dev/*` route 404s while unset. It replaces `ARCHIVENETWORK_DYNAMODB_TABLE`: an old `.env` line with only that name is reported as renamed in the Dev panel instead of silently turning Dev Mode off. |
-| `ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL` | `http://127.0.0.1:4566` | Where those tables live: the local floci emulator by default (dummy `test`/`test` credentials). Set it **empty** to mean real AWS (default credential chain); the panel then refuses to create, reset or delete tables, since production tables come from Terraform. |
-| `ARCHIVENETWORK_MEDIA_ROOT` | `workspace/store` | Dev-mode local object store (stands in for the S3 bucket). Keys are written below it as `fb-exports/<hashtag>/<album-slug>/<fbid>.jpg`. |
 | `ARCHIVENETWORK_FLOCI_VERSION_CHECK` | `true` | Log at startup whether the local floci emulator is the latest release (one GitHub call; `false` turns it off). |
-| `ARCHIVENETWORK_MEDIA_BASE_URL` | `/store` | Where the object store is served. In production this is a CDN domain instead. |
 | `VITE_API_BASE` | `http://127.0.0.1:8000` | Base URL the frontend uses to reach the API. |
 | `UV_LINK_MODE` | — | Set to `copy` on Windows to dodge a Defender file-lock (`os error 32`) during `uv sync`/`uv run`. |
 
-Settings are also read from a **gitignored `.env`** at the repo root, so nothing
-has to be exported into your shell or committed:
+**Environments are not `.env` settings.** Where Dev Mode publishes is defined in two TOML files
+at the repo root:
 
-```ini
-ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX=archers-network-dev
-```
+- **`environments.toml`** (committed) defines `local` (floci, the default), `dev` and `prod`.
+  Their bucket names and table prefixes are committed, but their sign-in identifiers are left
+  empty on purpose, because the repo is public.
+- **`environments.local.toml`** (gitignored, from `environments.local.toml.example`) is merged
+  over it key by key. It fills in the `dev` / `prod` sign-in values and can add a personal
+  environment of your own. A mistake in this file never stops the app: it is ignored and the Dev
+  panel names the problem. It can also never remove `prod`'s typed confirm.
+
+The old AWS keys (`ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX`, `ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL`,
+`ARCHIVENETWORK_S3_*`, `ARCHIVENETWORK_FLOCI_*`, `ARCHIVENETWORK_MEDIA_*`) are no longer read.
+If your `.env` still has them, the backend logs a warning at startup and the Dev panel lists
+them, so you can delete them.
 
 ## Usage
 
@@ -151,32 +170,77 @@ cd frontend && npm run build && node build
    `workspace/ready/<workspace-id>/` (the friendly `facebook-<page>-<date>` name,
    matching `workspace/state/<id>/`) and the OS file manager pops open on it.
 
-### Dev Mode — run the downstream ETL locally (optional)
+### Dev Mode — publish to an environment (optional)
 
-Curation is the tool's job, but you can rehearse the **downstream** phase locally:
-load the built `ready/` folder into real DynamoDB tables and inspect what lands.
+Curation is the tool's job, but Dev Mode runs the **downstream** phase too: it publishes the
+built `ready/` folder to an environment's S3 bucket and DynamoDB tables, then checks what landed.
 
-1. Start floci with `docker compose up -d` (Docker required; port 4566), and set a table
-   prefix in `.env` (see **Configuration** above). Nothing else in the tool changes; without
-   `ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX`, Dev Mode stays off and every `/api/dev/*` route
-   404s. The tables don't have to exist yet: the panel creates all 11.
-2. In the UI, open the **settings gear** (header) and switch on **Dev Mode**. A
+1. In the UI, open the **settings gear** (header) and switch on **Dev Mode**. A
    **Dev Mode** entry appears in the album rail.
-3. The panel gives you: **Auto-curate** (pick ≤10 photos per album at random plus
-   every video — real, editable picks, not auto-kept), **Create / Reset / Delete tables**
-   (emulator only), **Run load**, a **validation report**, and a paginated **item browser**
-   (album and media items) that renders each image straight from its `storage_path`.
+2. **Pick an environment** at the top of the panel. A fresh browser always starts on `local`.
+   Any AWS environment shows a coloured banner, and `prod` shows it in red.
+   - **`local`:** start floci with `docker compose up -d` (Docker required; port 4566). The
+     panel can also start, restart or stop the container for you. Click **Create tables** once.
+   - **`dev` / `prod`:** click **Sign in**. A browser tab opens on the AWS sign-in page; check
+     that it shows the code from the panel, then approve it. One sign-in covers both. No AWS CLI
+     is involved, and nothing in `~/.aws` changes.
+3. Click **Publish**. It runs three steps, each reported with a pass/fail per check:
+   - **Preflight:** you are signed in to the right account, and the bucket and tables are
+     reachable. Nothing is written unless every check passes.
+   - **Publish:** the photos are uploaded, then the album and media items are written.
+   - **Verify:** every item and object from *this* run is really there.
 
-The loader reads **only** the ready folder's four JSON manifests — never the raw
-export, never the tool's in-memory objects — because that is all the real
-downstream ETL will have. Photos are copied into a local object store
-(`workspace/store/`) under the same key an S3 bucket would use
-(`fb-exports/<hashtag>/<album-slug>/<fbid>.jpg`), so `LocalStorage` and
-`S3Storage` are interchangeable. The loader writes **album and media items** into their own
-DynamoDB tables (`<prefix>-album`, `<prefix>-media`) with `UpdateItem` only, so a load
-never overwrites what the CMS edited, and
-an item the CMS deleted stays deleted (it is skipped and reported, its bytes not re-uploaded). Taxonomy, credits, staff and users are CMS-written, with no source in the
-export.
+   **Re-running Publish is always safe.** Files already in the bucket are skipped, and items are
+   updated in place.
+
+**Publishing to `prod` asks you to type `prod`** (exactly; pasting is blocked), every time. In
+AWS, the same people can write to dev and prod, so this typed confirm is the guard against
+publishing to the live site by mistake.
+
+The panel also offers **Auto-curate** (≤10 random photos per album plus every video, as real
+picks you can untick), a **validation report**, and a paginated **item browser** with image
+previews. **Create / Reset / Delete tables** is offered on `local` only, because AWS tables are
+created by hand.
+
+The loader reads **only** the ready folder's JSON manifests — never the raw export, never the
+tool's in-memory objects — because that is all the real downstream ETL will have. Photos go to
+the bucket under `fb-exports/<hashtag>/<album-slug>/<fbid>.jpg`. Album and media items are written
+with DynamoDB `UpdateItem` only, so a re-publish never overwrites what the CMS edited, and an item
+the CMS deleted stays deleted (it is skipped and reported, and its bytes are not re-uploaded).
+Taxonomy, credits, staff and users are CMS-written, with no source in the export.
+
+> **Upgrading from an older `.env` setup:** `local` now uses the table prefix
+> `archers-network-local`. Old floci tables named `archers-network-dev-*` are just test data:
+> click **Create tables**, publish again, and delete the old tables in the Floci UI if you like.
+
+### What the AWS account must contain
+
+The AWS side is built **by hand** in the console, not by Terraform. The click-by-click steps,
+with the real identifiers, live in the *Archers Network AWS Guide* (Google Drive). This is only
+the short contract the app relies on:
+
+- **AWS Organizations + IAM Identity Center** in the official account.
+  - An **`Admins`** group for 1–2 officers (MFA, AdministratorAccess).
+  - A **`Curators`** group for everyone who publishes from this app *and* everyone who works in
+    the CMS. Its `Curators` permission set covers both environments and nothing else in the
+    account.
+- **What the `Curators` permission set allows:**
+  - DynamoDB on all 11 tables of each prefix (`archers-network-dev-*`, `archers-network-prod-*`,
+    plus `/index/*`): the app needs `GetItem`, `BatchGetItem`, `UpdateItem`, `Scan` and
+    `DescribeTable`, and the CMS needs its own writes.
+  - S3 on both media buckets: `ListBucket`, plus `GetObject`, `PutObject` and
+    `AbortMultipartUpload` on `<bucket>/*`.
+- **Buckets** `archers-network-media-dev` and `archers-network-media-prod`: Block Public Access on,
+  versioning on, and default encryption. On **dev only**, a lifecycle rule expires noncurrent
+  versions after 7 days.
+- **Tables:** all 11 per prefix, exactly as `infra/schema/dynamodb-tables.json` defines them
+  (keys and GSIs), on-demand, with point-in-time recovery on.
+- **A budget alarm** (about USD 5).
+- A **personal** account for alpha testing has the same shape with one user; add it to
+  `environments.local.toml` as its own environment.
+
+IAM cannot stop a curator writing to prod, because the same group must reach both environments.
+That is why `prod` has the typed confirm, enforced in the app and again by the server.
 
 ### Headless / utility scripts
 
@@ -209,17 +273,17 @@ uv run ruff check .                             # or, with pip:  ruff check .
 cd frontend && npm run test
 ```
 
-The DynamoDB tests run in two tiers. The unit tier uses **moto** in memory and always
-runs. The integration tier (`tests/loader/test_dynamo_floci.py`,
-`tests/loader/test_storage_s3_floci.py`) starts its own throwaway floci container at the
-pinned version, and **skips** cleanly when Docker is unreachable, so watch the skip count:
-a skipped test is not a passing one. Neither tier ever touches your configured table; the
-fixtures derive a separate `-test` table name.
+The DynamoDB / S3 tests run in two tiers. The unit tier uses **moto** in memory and always
+runs; sign-in is tested against stub Identity Center clients. The integration tier
+(`tests/loader/test_dynamo_floci.py`, `test_storage_s3_floci.py`, `test_publish_floci.py`)
+starts its own throwaway floci container at the pinned version, and **skips** cleanly when
+Docker is unreachable, so watch the skip count: a skipped test is not a passing one. No tier ever
+touches a configured environment's tables; the fixtures use a separate `-test` prefix.
 
-> **Known-red on `main` (4):** `tests/test_naming.py` (2),
-> `test_registry.py::test_register_is_idempotent_on_id_and_sets_last_active`, and
-> `test_video_routes.py::test_thumbnail_missing_then_saved`. A clean backend run is
-> "4 failed", not a regression. See `CLAUDE.md`.
+> **Known-red on `main` (1, frontend):** `WorkspaceList.test.js > requires two steps before
+> calling onRemove`. On Node 25+ run the frontend tests as
+> `NODE_OPTIONS=--no-experimental-webstorage npm run test`, or every test that touches
+> `localStorage` fails too.
 
 ## Where things live
 
@@ -230,7 +294,10 @@ fixtures derive a separate `-test` table name.
 - `workspace/` — all generated output (imports, per-workspace state, the built
   `ready/` folder); gitignored.
 - `vendor/` — the committed cross-platform zip extractors (`7za.exe`, `7zz_mac`, `7zzs_x64`, `7zzs_x32`).
+- `environments.toml` / `environments.local.toml.example` — the named environments Dev Mode
+  publishes to (see **Configuration**).
 - `infra/` — a git submodule, [arch-config-shared](https://github.com/archers-network/arch-config-shared):
-  the AWS Terraform and the shared DynamoDB table contract (`infra/schema/`). The app runs
-  without it; fetch it with `git submodule update --init` (or clone with `--recurse-submodules`)
-  when you work on infrastructure or the table schema. Its root README covers how to change it.
+  the shared DynamoDB table contract (`infra/schema/dynamodb-tables.json`). Its Terraform is
+  retired, since AWS is now set up by hand per the AWS guide. The app runs without the submodule;
+  fetch it with `git submodule update --init` (or clone with `--recurse-submodules`) when you
+  work on the table schema. Its root README covers how to change it.

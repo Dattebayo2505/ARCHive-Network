@@ -1,11 +1,12 @@
-# The local floci emulator — the Dev panel's "testing" upload target, and the home of the
-# Dev-mode DynamoDB table (ARCHIVENETWORK_DYNAMODB_ENDPOINT_URL, same port).
+# The local floci emulator: the S3 bucket AND the DynamoDB tables of the `local` environment
+# (environments.toml), both on one port. It is the Dev panel's default Publish target.
 #
 # floci is LocalStack-compatible, so at the boto3 level the only difference from real AWS is
-# an `endpoint_url` override (see `loader/storage.py` and `web/routes_s3.py`). Bring it up
-# with `docker compose up -d`; the Dev panel's Upload switch then has somewhere to write.
+# an `endpoint_url` override (see `loader/envclients.py` and `loader/storage.py`). Bring it up
+# with `docker compose up -d`; the Dev panel can also start / restart / stop it.
 #
-# The port MUST match ARCHIVENETWORK_FLOCI_ENDPOINT_URL (default http://127.0.0.1:4566).
+# The port MUST match `endpoint_url` of the floci env in environments.toml
+# (default http://127.0.0.1:4566).
 services:
   floci:
     # Pinned: compose never re-pulls `latest`, so a floating tag silently goes stale. Bump it on
@@ -29,7 +30,7 @@ services:
       # The Floci UI (http://127.0.0.1:4566/_floci/ui) is NOT served by this container — floci
       # starts it as a *sibling* container, so it needs to reach the host container runtime.
       # Without this mount the UI page renders "Floci UI unavailable ... java.net.SocketException:
-      # No such file or directory"; the S3 API is unaffected, which is why uploads still succeed.
+      # No such file or directory"; the S3 API is unaffected, which is why Publish still succeeds.
       # Docker Desktop (Windows/macOS) special-cases this path even though the host endpoint is a
       # named pipe, so the literal unix path is correct on every platform. On SELinux hosts append
       # ':z' (or run with '--security-opt label=disable').
