@@ -115,6 +115,7 @@ class S3Storage:
                 kwargs["endpoint_url"] = endpoint_url
                 kwargs["config"] = BotoConfig(
                     s3={"addressing_style": "path"},
+                    signature_version="s3v4",
                     connect_timeout=ENDPOINT_CONNECT_TIMEOUT,
                     read_timeout=ENDPOINT_READ_TIMEOUT,
                     retries={"max_attempts": 1},
@@ -161,6 +162,21 @@ class S3Storage:
             if code in ("404", "NoSuchKey", "NotFound"):
                 return False
             raise
+
+    def size(self, key: str) -> int | None:
+        """The object's `ContentLength`, or None when there is no such object."""
+        try:
+            return int(self.client.head_object(Bucket=self.bucket, Key=key)["ContentLength"])
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+                return None
+            raise
+
+    def presign(self, key: str, expires: int = 900) -> str:
+        """A time-limited GET URL, so a private bucket's object can render in the browser."""
+        return self.client.generate_presigned_url(
+            "get_object", Params={"Bucket": self.bucket, "Key": key}, ExpiresIn=expires
+        )
 
     def put(self, src: Path, key: str) -> bool:
         """Upload `src` to `key`. Returns False if the object already exists (idempotent)."""

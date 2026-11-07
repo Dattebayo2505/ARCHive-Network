@@ -34,8 +34,8 @@ RENAMED = (
     "(e.g. archers-network-dev)"
 )
 REFUSE_AWS = (
-    "Refusing to create or delete tables on real AWS; production tables come from "
-    "Terraform (infra/)."
+    "Refusing to create or delete tables on real AWS; AWS tables are created by hand per the "
+    "AWS guide."
 )
 
 

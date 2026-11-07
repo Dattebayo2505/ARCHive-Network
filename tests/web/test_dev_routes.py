@@ -190,7 +190,7 @@ def test_table_admin_409s_on_real_aws(dev_table, client, monkeypatch):
         client.delete("/api/dev/tables"),
     ):
         assert resp.status_code == 409, resp.text
-        assert "Terraform" in resp.json()["detail"]
+        assert "by hand" in resp.json()["detail"]
     assert dynamo.probe(dev_table).table_exists  # nothing was dropped
 
 

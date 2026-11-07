@@ -111,7 +111,14 @@ class Tables:
 
 
 class NotOnEmulator(Exception):
-    """Table admin was asked of real AWS. Production tables come from Terraform."""
+    """Table admin was asked of real AWS. AWS tables are created by hand per the AWS guide."""
+
+
+AWS_CONFIG = BotoConfig(
+    connect_timeout=ENDPOINT_CONNECT_TIMEOUT,
+    read_timeout=ENDPOINT_READ_TIMEOUT,
+    retries={"mode": "standard", "max_attempts": 2},
+)
 
 
 def connect(prefix: str, endpoint_url: str | None, region: str) -> Tables:
@@ -133,16 +140,16 @@ def connect(prefix: str, endpoint_url: str | None, region: str) -> Tables:
             ),
         )
         return Tables(client, prefix, on_emulator=True)
-    client = boto3.client(
-        "dynamodb",
-        region_name=region,
-        config=BotoConfig(
-            connect_timeout=ENDPOINT_CONNECT_TIMEOUT,
-            read_timeout=ENDPOINT_READ_TIMEOUT,
-            retries={"mode": "standard", "max_attempts": 2},
-        ),
-    )
+    client = boto3.client("dynamodb", region_name=region, config=AWS_CONFIG)
     return Tables(client, prefix, on_emulator=False)
+
+
+def from_session(session: boto3.Session, prefix: str, region: str) -> Tables:
+    """Real-AWS tables from an env's session, so they share one identity with its S3 client."""
+    return Tables(
+        session.client("dynamodb", region_name=region, config=AWS_CONFIG), prefix,
+        on_emulator=False,
+    )
 
 
 def from_settings(s: Settings) -> Tables:
@@ -215,8 +222,8 @@ def probe(t: Tables) -> Probe:
 def _require_emulator(t: Tables) -> None:
     if not t.on_emulator:
         raise NotOnEmulator(
-            f"refusing to create or delete the {t.prefix!r} tables on real AWS; production "
-            "tables come from Terraform"
+            f"refusing to create or delete the {t.prefix!r} tables on real AWS; AWS tables "
+            "are created by hand per the AWS guide"
         )
 
 
