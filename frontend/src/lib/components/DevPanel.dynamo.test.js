@@ -510,7 +510,27 @@ describe('review round 1', () => {
 		await fireEvent.click(publishBtn('Prod (AWS)'));
 		await waitFor(() => expect(api.getCurrentReadyBuild).toHaveBeenCalledTimes(2));
 		expect(screen.queryByRole('dialog')).toBeNull();
-		expect(screen.getByText('Build the ready folder from the gallery first.')).toBeTruthy();
+		expect(await screen.findByText(/Couldn't confirm the ready folder/)).toBeTruthy();
+	});
+
+	it('N1 a failed build refetch never leaves Publish stuck disabled', async () => {
+		// getCurrentReadyBuild answers null on any error, so a blip must not erase the known build.
+		const view = render(DevPanel, { readyBuild: BUILD });
+		await screen.findByText('Connected');
+		await fireEvent.click(screen.getByRole('radio', { name: /Prod \(AWS\)/ }));
+		await waitFor(() => expect(api.devStatus).toHaveBeenCalledWith('prod'));
+		api.getCurrentReadyBuild.mockResolvedValue(null);
+		await fireEvent.click(publishBtn('Prod (AWS)'));
+		expect(await screen.findByText(/Couldn't confirm the ready folder/)).toBeTruthy();
+		expect(screen.queryByRole('dialog')).toBeNull();
+		expect(publishBtn('Prod (AWS)').disabled).toBe(false);
+		expect(screen.queryByText('Build the ready folder from the gallery first.')).toBeNull();
+		// The next try, with the API answering again, opens the dialog with real counts.
+		api.getCurrentReadyBuild.mockResolvedValue(BUILD);
+		await fireEvent.click(publishBtn('Prod (AWS)'));
+		const dialog = await screen.findByRole('dialog');
+		expect(within(dialog).getByText(String(BUILD.albums))).toBeTruthy();
+		view.unmount();
 	});
 
 	it('#6 does not open a dialog for an env switched to during the build refresh', async () => {
@@ -535,7 +555,8 @@ describe('review round 1', () => {
 		expect(screen.getByText('Sign in to Dev (AWS) to see its tables.')).toBeTruthy();
 	});
 
-	it('#9 shows a backend-pending sign-in as pending and locks the picker meanwhile', async () => {
+	it('#9 / N2 shows a backend-pending sign-in as pending without locking the picker', async () => {
+		// A resumed flow may be one the volunteer cancelled; it must not hold the picker hostage.
 		api.listEnvs.mockResolvedValue(
 			envList([LOCAL, { ...DEV, signed_in: false, login: 'pending', identity: null }, PROD])
 		);
@@ -543,8 +564,29 @@ describe('review round 1', () => {
 		localStorage.setItem('archive-env', 'dev');
 		render(DevPanel);
 		expect(await screen.findByTestId('signin-waiting')).toBeTruthy();
+		await new Promise((r) => setTimeout(r, 20));
+		expect(screen.getByRole('radio', { name: /Local \(floci\)/ }).disabled).toBe(false);
+	});
+
+	it('#9 a sign-in started here does lock the picker until it ends', async () => {
+		api.listEnvs.mockResolvedValue(
+			envList([LOCAL, { ...DEV, signed_in: false, login: 'signed_out', identity: null }, PROD])
+		);
+		api.envLogin.mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { verification_uri_complete: 'https://x/?c=1', user_code: 'AAAA-1111', expires_in: 60, interval: 30 }
+		});
+		localStorage.setItem('archive-env', 'dev');
+		render(DevPanel);
+		await fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+		await screen.findByText('AAAA-1111');
 		await waitFor(() =>
 			expect(screen.getByRole('radio', { name: /Local \(floci\)/ }).disabled).toBe(true)
+		);
+		await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+		await waitFor(() =>
+			expect(screen.getByRole('radio', { name: /Local \(floci\)/ }).disabled).toBe(false)
 		);
 	});
 

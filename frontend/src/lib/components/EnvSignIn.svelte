@@ -25,7 +25,7 @@
 
 	// `pending` holds the live device flow ({code: null} when resumed from the backend, which never
 	// re-sends the code); `message` explains the last flow or sign-out that ended badly.
-	let pending = $state(null); // { code, url } | null
+	let pending = $state(null); // { code, url, resumed? } | null
 	let message = $state('');
 	let command = $state(''); // a profile env's CLI sign-in, shown verbatim
 	let signedInHere = $state(false);
@@ -54,9 +54,10 @@
 		return () => stop();
 	});
 
-	// The panel locks the env picker while a flow is in flight, so an approval is never orphaned.
+	// The panel locks the env picker while a flow started HERE is in flight, so its approval is
+	// never orphaned. A resumed one may be a flow the volunteer cancelled, so it never locks.
 	$effect(() => {
-		const inFlight = !!pending;
+		const inFlight = !!pending && !pending.resumed;
 		onPendingChange(inFlight);
 		// Unmounting mid-flow (the row hidden by a re-list) must not leave the picker locked.
 		return () => {
@@ -73,7 +74,7 @@
 			if (s !== 'pending') resumed = false;
 			else if (!resumed && !pending) {
 				resumed = true;
-				poll(5, 600, { code: null, url: null });
+				poll(5, 600, { code: null, url: null, resumed: true });
 			}
 		});
 	});

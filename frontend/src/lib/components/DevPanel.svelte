@@ -141,11 +141,20 @@
 		if (!env) return;
 		if (env.confirm) {
 			const name = env.name;
+			publishError = '';
 			// Fresh counts: the dialog states what this Publish will write, not what it was at mount.
-			await refreshBuild();
-			// The picker stays live during the refetch; never open a dialog for an env not clicked,
-			// or one that would state zero albums because the build has gone.
-			if (envChoice.name !== name || !build) return;
+			// Fetched into a local: the call answers null on any error, so a blip must not erase the
+			// build the gallery reported and leave Publish stuck off.
+			const fresh = await getCurrentReadyBuild();
+			// The picker stays live during the refetch; never open a dialog for an env not clicked.
+			if (envChoice.name !== name) return;
+			if (!fresh) {
+				publishError =
+					"Couldn't confirm the ready folder is still built. Nothing was published; try again, " +
+					'or rebuild it from the gallery.';
+				return;
+			}
+			build = fresh;
 			confirmPublish = true;
 		} else runPublish(null);
 	}
@@ -310,7 +319,7 @@
 	/** @type {{type: string, total: number, limit: number, offset: number, rows: Record<string, any>[]} | null} */
 	let rows = $state(null);
 	let rowsError = $state(''); // why the last rows request failed, shown in place of the skeleton
-	// A device flow in flight locks the env picker, so its approval is never orphaned by a switch.
+	// A device flow started in this mount locks the env picker, so its approval is never orphaned.
 	let signInPending = $state(false);
 	// The table shows curated columns; JSON shows each item whole (index keys, overrides, loaded_at).
 	let view = $state('table');

@@ -158,6 +158,19 @@ describe('EnvSignIn review round 1', () => {
 		expect(api.envLogin).not.toHaveBeenCalled();
 	});
 
+	it('never reports a resumed flow as in flight (N2: it may be one the volunteer cancelled)', async () => {
+		const onPendingChange = vi.fn();
+		api.envLoginState.mockResolvedValue(state('pending'));
+		render(EnvSignIn, { env: dev, login: 'pending', identity: null, onPendingChange });
+		expect(screen.getByTestId('signin-waiting')).toBeTruthy();
+		await vi.advanceTimersByTimeAsync(6000);
+		expect(onPendingChange).not.toHaveBeenCalledWith(true);
+		// Start over begins a flow of this mount, which does lock.
+		await fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+		await screen.findByText('WXYZ-1234');
+		expect(onPendingChange).toHaveBeenLastCalledWith(true);
+	});
+
 	it('reports whether a device flow is in flight', async () => {
 		const onPendingChange = vi.fn();
 		api.envLoginState.mockResolvedValue(state('expired'));
