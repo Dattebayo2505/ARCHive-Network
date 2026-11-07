@@ -2,7 +2,14 @@ import json
 from pathlib import Path
 
 import pytest
-from botocore.exceptions import EndpointConnectionError
+from botocore.exceptions import (
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    NoCredentialsError,
+    ReadTimeoutError,
+    TokenRetrievalError,
+    UnauthorizedSSOTokenError,
+)
 
 from archivenetwork.inventory.hashtags import canonical_tag
 from archivenetwork.loader import dynamo
@@ -303,3 +310,88 @@ def test_a_load_that_dies_midway_converges_on_rerun(ready_root: Path, tmp_path: 
         assert items[row.fbid]["storage_path"] == expected
     for check in validate(ready_root, store, ddb):
         assert check.ok, f"{check.name}: {check.detail}"
+
+
+# --- a single failed upload ---
+
+
+def _client_error(code: str):
+    from botocore.exceptions import ClientError
+
+    return ClientError({"Error": {"Code": code, "Message": f"{code} happened"}}, "PutObject")
+
+
+class _FailingStore(LocalStorage):
+    """LocalStorage that raises on a chosen fbid, or on the Nth put."""
+
+    def __init__(self, root: Path, exc: Exception, fbid: str | None = None, nth: int | None = None):
+        super().__init__(root)
+        self.exc, self.fbid, self.nth = exc, fbid, nth
+        self.puts: list[str] = []
+
+    def put(self, src: Path, key: str) -> bool:
+        self.puts.append(key)
+        if (self.fbid and src.stem == self.fbid) or (self.nth and len(self.puts) == self.nth):
+            raise self.exc
+        return super().put(src, key)
+
+
+def test_one_failed_put_skips_only_that_item(ready_root: Path, tmp_path: Path, ddb):
+    store = _FailingStore(tmp_path / "store", _client_error("InternalError"), fbid="g02")
+    r = load(ready_root, "ws-1", store, ddb)
+    assert r.failed == ["g02"]
+    assert len(r.errors) == 1 and r.errors[0].startswith("g02: ")
+    media = _items(ddb, "media")
+    assert "g02" not in media
+    assert {"g01", "g03"} <= set(media)
+
+
+def test_a_botocore_error_on_one_put_is_also_contained(ready_root: Path, tmp_path: Path, ddb):
+    # A read timeout is about that one file's transfer; a connection error is not (see below).
+    store = _FailingStore(
+        tmp_path / "store", ReadTimeoutError(endpoint_url="http://x"), fbid="g03"
+    )
+    r = load(ready_root, "ws-1", store, ddb)
+    assert r.failed == ["g03"]
+    assert "g03" not in _items(ddb, "media")
+
+
+def test_credential_error_aborts_the_run(ready_root: Path, tmp_path: Path, ddb):
+    from botocore.exceptions import ClientError
+
+    from archivenetwork.loader.load import CREDENTIAL_ERRORS
+
+    assert "ExpiredToken" in CREDENTIAL_ERRORS and "AccessDenied" in CREDENTIAL_ERRORS
+    store = _FailingStore(tmp_path / "store", _client_error("ExpiredToken"), nth=2)
+    with pytest.raises(ClientError):
+        load(ready_root, "ws-1", store, ddb)
+    # Bytes go first, items after, so no media item was written at all.
+    assert _items(ddb, "media") == {}
+    assert len(store.puts) == 2
+
+
+def test_a_bare_403_from_the_head_check_aborts_too(ready_root: Path, tmp_path: Path, ddb):
+    """S3 HEAD errors carry no body: an expired token or a denial is just "400" / "403"."""
+    from botocore.exceptions import ClientError
+
+    store = _FailingStore(tmp_path / "store", _client_error("403"), nth=1)
+    with pytest.raises(ClientError):
+        load(ready_root, "ws-1", store, ddb)
+
+
+@pytest.mark.parametrize("make", [
+    lambda: EndpointConnectionError(endpoint_url="http://x"),
+    lambda: ConnectTimeoutError(endpoint_url="http://x"),
+    lambda: UnauthorizedSSOTokenError(),
+    lambda: TokenRetrievalError(provider="sso", error_msg="expired"),
+    lambda: NoCredentialsError(),
+])
+def test_a_lost_connection_or_profile_login_aborts_the_run(ready_root: Path, tmp_path: Path, ddb,
+                                                           make):
+    # M3: every later file would fail the same way (and wait out a connect timeout each).
+    exc = make()
+    store = _FailingStore(tmp_path / "store", exc, nth=1)
+    with pytest.raises(type(exc)):
+        load(ready_root, "ws-1", store, ddb)
+    assert len(store.puts) == 1
+    assert _items(ddb, "media") == {}

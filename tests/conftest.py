@@ -287,12 +287,16 @@ _DDB_REGION = "ap-southeast-1"
 
 
 def _scratch_prefix() -> str:
-    """A derived `-test` table prefix, never the configured one (the old Postgres fixture's lesson)."""
+    """The default floci env's prefix + `-test`, never any env's own (the old Postgres lesson)."""
     from archivenetwork.config import Settings
+    from archivenetwork.loader.envs import load_registry
 
-    configured = Settings().dynamodb_table_prefix
-    scratch = (configured or "archers-network-dev") + TEST_TABLE_SUFFIX
-    assert scratch != configured, "scratch prefix must differ from the configured one"
+    s = Settings()
+    scratch = load_registry(s.environments_file).floci().table_prefix + TEST_TABLE_SUFFIX
+    every = load_registry(s.environments_file, s.environments_local_file).envs.values()
+    assert scratch not in {env.table_prefix for env in every}, (
+        f"scratch prefix {scratch!r} must differ from every environment's table_prefix"
+    )
     return scratch
 
 

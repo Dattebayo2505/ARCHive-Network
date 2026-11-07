@@ -2,27 +2,35 @@
 
 The old Postgres fixture connected straight to the configured database, so a plain
 `pytest -q` wiped the dev database and left fixture rows behind that pointed at a `tmp_path`
-store pytest later deleted. The DynamoDB fixtures keep the lesson: a derived `-test` prefix only.
+store pytest later deleted. The DynamoDB fixtures keep the lesson: a derived `-test` prefix only,
+checked against every environment's prefix (committed and the local overlay).
 """
 
 import conftest
 
+from archivenetwork.config import Settings
 from archivenetwork.loader import dynamo
+from archivenetwork.loader.envs import load_registry
 
-# --- DynamoDB: the moto `ddb` fixture must never name a configured table. ---
+
+def _registry():
+    s = Settings()
+    return load_registry(s.environments_file, s.environments_local_file)
 
 
-def test_scratch_prefix_never_names_a_configured_table(monkeypatch):
+def test_scratch_prefix_differs_from_every_env_prefix():
+    scratch = conftest._scratch_prefix()
+    assert scratch == load_registry(Settings().environments_file).floci().table_prefix + "-test"
+    prefixes = {env.table_prefix for env in _registry().envs.values()}
+    assert scratch not in prefixes
+    real = {f"{p}-{s.suffix}" for p in prefixes for s in dynamo.TABLES.values()}
+    mine = {f"{scratch}-{s.suffix}" for s in dynamo.TABLES.values()}
+    assert not real & mine
+
+
+def test_scratch_prefix_ignores_the_retired_env_var(monkeypatch):
     monkeypatch.setenv("ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX", "archers-network-dev")
-    assert conftest._scratch_prefix() == "archers-network-dev-test"
-    real = {f"archers-network-dev-{s.suffix}" for s in dynamo.TABLES.values()}
-    scratch = {f"{conftest._scratch_prefix()}-{s.suffix}" for s in dynamo.TABLES.values()}
-    assert not real & scratch
-
-
-def test_scratch_prefix_has_a_default_when_unconfigured(monkeypatch):
-    monkeypatch.delenv("ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX", raising=False)
-    assert conftest._scratch_prefix().endswith(conftest.TEST_TABLE_SUFFIX)
+    assert conftest._scratch_prefix() == "archers-network-local-test"
 
 
 def test_ddb_targets_scratch_tables_inside_moto(ddb):

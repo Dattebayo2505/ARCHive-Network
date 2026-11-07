@@ -152,3 +152,61 @@ def test_without_create_if_missing_a_404_still_fails_fast():
     with pytest.raises(ClientError):
         s.ensure_ready()
     assert fake.created == []
+
+
+@mock_aws
+def test_size_returns_content_length_or_none(tmp_path):
+    _make_bucket()
+    src = tmp_path / "p.jpg"
+    src.write_bytes(b"12345")
+    s = S3Storage(BUCKET, REGION)
+    s.put(src, "k/p.jpg")
+    assert s.size("k/p.jpg") == 5
+    assert s.size("k/missing.jpg") is None
+
+
+@mock_aws
+def test_size_reraises_other_errors():
+    s = S3Storage("no-such-bucket-here", REGION)
+    # A missing bucket is a 404 too, so force a different failure on head_object.
+    def boom(**kw):
+        raise ClientError({"Error": {"Code": "403", "Message": "Forbidden"}}, "HeadObject")
+
+    s.client.head_object = boom
+    with pytest.raises(ClientError):
+        s.size("k")
+
+
+@mock_aws
+def test_presign_returns_url_for_key():
+    _make_bucket()
+    s = S3Storage(BUCKET, REGION)
+    url = s.presign("fb-exports/archevt/grp/123.jpg")
+    assert BUCKET in url
+    assert "fb-exports/archevt/grp/123.jpg" in url
+
+
+class _Refuses:
+    """A client whose every call is S3's body-less 403."""
+
+    def __getattr__(self, op):
+        names = {"head_object": "HeadObject", "head_bucket": "HeadBucket",
+                 "put_object": "PutObject"}
+
+        def call(**kw):
+            raise ClientError({"Error": {"Code": "403", "Message": "Forbidden"}}, names[op])
+
+        return call
+
+
+@pytest.mark.parametrize("call, resource", [
+    (lambda s, src: s.exists("fb-exports/a/b/1.jpg"), "s3://b/fb-exports/a/b/1.jpg"),
+    (lambda s, src: s.size("fb-exports/a/b/1.jpg"), "s3://b/fb-exports/a/b/1.jpg"),
+    (lambda s, src: s.ensure_ready(), "s3://b"),
+])
+def test_a_refusal_names_the_resource(tmp_path, call, resource):
+    # M5: a HEAD's bare 403 carries no message, so the panel's detail needs the resource.
+    s = S3Storage("b", REGION, client=_Refuses())
+    with pytest.raises(ClientError) as info:
+        call(s, tmp_path)
+    assert info.value.resource == resource

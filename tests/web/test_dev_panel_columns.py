@@ -31,7 +31,8 @@ PANEL = (
 )
 
 WRITTEN = {
-    "media": {"id"} | items.MEDIA_REFRESH | items.MEDIA_SET_ONCE,
+    # `preview_url` is not stored: GET /api/dev/rows adds it (a presigned GET) to each media row.
+    "media": {"id", "preview_url"} | items.MEDIA_REFRESH | items.MEDIA_SET_ONCE,
     "album": {"id"} | items.ALBUM_REFRESH | items.ALBUM_SET_ONCE,
 }
 

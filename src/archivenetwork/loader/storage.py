@@ -57,7 +57,7 @@ class Storage(Protocol):
 
 
 class LocalStorage:
-    """Dev backend: mirror the object store on disk under `root`, served over HTTP at /store."""
+    """An on-disk object store under `root`; the tests' fake for `S3Storage`."""
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
@@ -115,6 +115,7 @@ class S3Storage:
                 kwargs["endpoint_url"] = endpoint_url
                 kwargs["config"] = BotoConfig(
                     s3={"addressing_style": "path"},
+                    signature_version="s3v4",
                     connect_timeout=ENDPOINT_CONNECT_TIMEOUT,
                     read_timeout=ENDPOINT_READ_TIMEOUT,
                     retries={"max_attempts": 1},
@@ -123,6 +124,10 @@ class S3Storage:
 
     def key_for(self, fbid: str, hashtag: str | None, group: str, suffix: str) -> str:
         return media_key(fbid, hashtag, group, suffix)
+
+    def _named(self, exc: ClientError, key: str | None = None) -> None:
+        """Tag a refusal with what it was for: a HEAD's bare 403 says nothing else (spec §5)."""
+        exc.resource = f"s3://{self.bucket}" + (f"/{key}" if key else "")
 
     def ensure_ready(self) -> None:
         """Preflight: fail fast on a whole-run blocker (bad creds, missing bucket,
@@ -135,6 +140,7 @@ class S3Storage:
         try:
             self.client.head_bucket(Bucket=self.bucket)
         except ClientError as exc:
+            self._named(exc)
             if not self.create_if_missing:
                 raise
             code = str(exc.response.get("Error", {}).get("Code"))
@@ -160,14 +166,38 @@ class S3Storage:
             code = exc.response.get("Error", {}).get("Code")
             if code in ("404", "NoSuchKey", "NotFound"):
                 return False
+            self._named(exc, key)
             raise
+
+    def size(self, key: str) -> int | None:
+        """The object's `ContentLength`, or None when there is no such object."""
+        try:
+            return int(self.client.head_object(Bucket=self.bucket, Key=key)["ContentLength"])
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+                return None
+            self._named(exc, key)
+            raise
+
+    def presign(self, key: str, expires: int = 900) -> str:
+        """A time-limited GET URL, so a private bucket's object can render in the browser."""
+        return self.client.generate_presigned_url(
+            "get_object", Params={"Bucket": self.bucket, "Key": key}, ExpiresIn=expires
+        )
 
     def put(self, src: Path, key: str) -> bool:
         """Upload `src` to `key`. Returns False if the object already exists (idempotent)."""
         if self.exists(key):
             return False
         ctype = mimetypes.guess_type(key)[0] or "application/octet-stream"
-        self.client.upload_file(str(src), self.bucket, key, ExtraArgs={"ContentType": ctype})
+        # put_object, not upload_file: the transfer manager wraps a ClientError in
+        # S3UploadFailedError, which would hide an ExpiredToken code from load()'s triage.
+        with src.open("rb") as body:
+            try:
+                self.client.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType=ctype)
+            except ClientError as exc:
+                self._named(exc, key)
+                raise
         return True
 
 

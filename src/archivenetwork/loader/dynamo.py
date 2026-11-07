@@ -13,19 +13,29 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import boto3
 from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 from botocore.config import Config as BotoConfig
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+    NoCredentialsError,
+    SSOTokenLoadError,
+    TokenRetrievalError,
+    UnauthorizedSSOTokenError,
+)
 
 from .items import Update
 from .storage import ENDPOINT_CONNECT_TIMEOUT, ENDPOINT_READ_TIMEOUT, probe_endpoint
 
-if TYPE_CHECKING:
-    from ..config import Settings
+# A profile env's login failing inside botocore's own credential chain, before any request is
+# sent. A login problem, never an outage: the routes map it to 401.
+CREDENTIAL_CHAIN_ERRORS: tuple[type[BotoCoreError], ...] = (
+    NoCredentialsError, SSOTokenLoadError, TokenRetrievalError, UnauthorizedSSOTokenError,
+)
 
 DEFAULT_REGION = "ap-southeast-1"
 BATCH_GET_LIMIT = 100  # DynamoDB's cap on keys per BatchGetItem
@@ -111,7 +121,14 @@ class Tables:
 
 
 class NotOnEmulator(Exception):
-    """Table admin was asked of real AWS. Production tables come from Terraform."""
+    """Table admin was asked of real AWS. AWS tables are created by hand per the AWS guide."""
+
+
+AWS_CONFIG = BotoConfig(
+    connect_timeout=ENDPOINT_CONNECT_TIMEOUT,
+    read_timeout=ENDPOINT_READ_TIMEOUT,
+    retries={"mode": "standard", "max_attempts": 2},
+)
 
 
 def connect(prefix: str, endpoint_url: str | None, region: str) -> Tables:
@@ -133,23 +150,16 @@ def connect(prefix: str, endpoint_url: str | None, region: str) -> Tables:
             ),
         )
         return Tables(client, prefix, on_emulator=True)
-    client = boto3.client(
-        "dynamodb",
-        region_name=region,
-        config=BotoConfig(
-            connect_timeout=ENDPOINT_CONNECT_TIMEOUT,
-            read_timeout=ENDPOINT_READ_TIMEOUT,
-            retries={"mode": "standard", "max_attempts": 2},
-        ),
-    )
+    client = boto3.client("dynamodb", region_name=region, config=AWS_CONFIG)
     return Tables(client, prefix, on_emulator=False)
 
 
-def from_settings(s: Settings) -> Tables:
-    if not s.dynamodb_table_prefix:
-        raise ValueError("ARCHIVENETWORK_DYNAMODB_TABLE_PREFIX is not set")
-    # `.env.example` ships ARCHIVENETWORK_S3_REGION= empty, hence the fallback.
-    return connect(s.dynamodb_table_prefix, s.dynamodb_endpoint_url, s.s3_region or DEFAULT_REGION)
+def from_session(session: boto3.Session, prefix: str, region: str) -> Tables:
+    """Real-AWS tables from an env's session, so they share one identity with its S3 client."""
+    return Tables(
+        session.client("dynamodb", region_name=region, config=AWS_CONFIG), prefix,
+        on_emulator=False,
+    )
 
 
 # --- probe -----------------------------------------------------------------------------------
@@ -178,7 +188,11 @@ def _endpoint_label(t: Tables) -> str:
 
 
 def probe(t: Tables) -> Probe:
-    """Is the endpoint up, and which of the probed tables exist? Never raises."""
+    """Is the endpoint up, and which of the probed tables exist?
+
+    Never raises, except `CREDENTIAL_CHAIN_ERRORS`: an expired profile login is not "can't reach
+    DynamoDB", and callers run the probe under `aws_errors` to turn it into the 401.
+    """
     label = _endpoint_label(t)
     url = t.client.meta.endpoint_url
     tables = {kind: t.name(kind) for kind in t.probed()}
@@ -204,6 +218,8 @@ def probe(t: Tables) -> Probe:
                 continue
             return Probe(label, True, t.prefix, tables, [], False, refused=True,
                          reason=f"{code}: {err.get('Message', '')}".strip())
+        except CREDENTIAL_CHAIN_ERRORS:
+            raise
         except BotoCoreError as exc:
             return down(str(exc))
     return Probe(label, True, t.prefix, tables, missing, not missing)
@@ -215,8 +231,8 @@ def probe(t: Tables) -> Probe:
 def _require_emulator(t: Tables) -> None:
     if not t.on_emulator:
         raise NotOnEmulator(
-            f"refusing to create or delete the {t.prefix!r} tables on real AWS; production "
-            "tables come from Terraform"
+            f"refusing to create or delete the {t.prefix!r} tables on real AWS; AWS tables "
+            "are created by hand per the AWS guide"
         )
 
 

@@ -1,0 +1,36 @@
+# environments.toml — committed
+default = "local"
+
+[env.local]
+kind = "floci"
+label = "Local (floci)"
+endpoint_url = "http://127.0.0.1:4566"
+region = "ap-southeast-1"
+s3_bucket = "archivenetwork-dev"
+table_prefix = "archers-network-local"
+
+[env.dev]
+kind = "aws"
+label = "Dev (AWS)"
+region = "ap-southeast-1"
+s3_bucket = "archers-network-media-dev"
+table_prefix = "archers-network-dev"
+confirm = false
+[env.dev.sso]
+start_url = ""          # real value: environments.local.toml (from the AWS guide)
+region = "ap-southeast-1"
+account_id = ""         # real value: environments.local.toml
+role_name = "Curators"
+
+[env.prod]
+kind = "aws"
+label = "Prod (AWS)"
+region = "ap-southeast-1"
+s3_bucket = "archers-network-media-prod"
+table_prefix = "archers-network-prod"
+confirm = true          # Publish requires typing the env name
+[env.prod.sso]
+start_url = ""
+region = "ap-southeast-1"
+account_id = ""
+role_name = "Curators"  # same role as dev: one group covers both

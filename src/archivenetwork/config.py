@@ -1,8 +1,9 @@
 import platform
+import re
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Repo root: config.py -> archivenetwork -> src -> <root>. Used to locate vendored binaries
@@ -45,57 +46,21 @@ def _default_seven_zip() -> Path | None:
 
 
 class Settings(BaseSettings):
-    # `.env` (gitignored) is where local settings live (the Dev-mode table, S3 credentials), so
-    # nothing has to be exported into the shell or committed. Real env vars still win over the file.
+    # `.env` (gitignored, optional) holds machine settings only; every one has a default. AWS and
+    # floci targets live in environments.toml / environments.local.toml. Real env vars still win.
     model_config = SettingsConfigDict(
         env_prefix="ARCHIVENETWORK_", env_file=".env", extra="ignore"
     )
 
     workspace_dir: Path = Path("workspace")
+    # Named environments (loader/envs.py): the committed file plus a gitignored overlay.
+    environments_file: Path = PROJECT_ROOT / "environments.toml"
+    environments_local_file: Path = PROJECT_ROOT / "environments.local.toml"
     seven_zip_exe: Path | None = _default_seven_zip()
     max_per_album: int = 10
     thumb_size: int = 512
     preview_size: int = 1280
 
-    # --- Dev-mode: load the built ready/ folder into DynamoDB + a local object store. ---
-    # Off unless `dynamodb_table_prefix` is set; every /api/dev/* route 404s without it.
-    # Each item type has its own table, named `<prefix>-<suffix>` (loader.dynamo.TABLES).
-    #
-    # `media_root` / `media_base_url` are the *object-store root* — the part before the key.
-    # A key begins with "fb-exports/<hashtag>/<album-slug>/" (see loader.storage.media_key).
-    # Read URL = <media_base_url>/<storage_path>; in prod that base is a CDN domain instead.
-    media_root: Path = Path("workspace/store")
-    media_base_url: str = "/store"
-
-    # The DynamoDB endpoint is the same floci container as
-    # `floci_endpoint_url`; an empty value means real AWS, so it normalises to None. ---
-    dynamodb_table_prefix: str | None = None
-    # Legacy: only read to tell an old .env it was renamed.
-    dynamodb_table: str | None = None
-    dynamodb_endpoint_url: str | None = "http://127.0.0.1:4566"
-
-    @field_validator("dynamodb_endpoint_url", mode="before")
-    @classmethod
-    def _empty_endpoint_is_aws(cls, v):
-        return None if v == "" else v
-
-    # --- S3 upload (on-demand). Independent of dev-mode/DynamoDB. AWS S3 only. ---
-    # Credentials are optional: passed to boto3 only when both are set, else boto3's
-    # default credential chain (env / ~/.aws / SSO / instance role) resolves them.
-    s3_bucket: str | None = None
-    s3_region: str = "ap-southeast-1"
-    s3_access_key_id: str | None = None
-    s3_secret_access_key: str | None = None
-
-    # --- Floci: a local LocalStack-compatible AWS emulator, used as the "testing" upload
-    # target. Kept independent of the S3 block on purpose — the switch must work on a machine
-    # with no AWS bucket configured, and real credentials must never travel to the emulator.
-    # Both fields have defaults, so the testing target is ALWAYS offered; whether the
-    # container is actually up is a separate question, answered by storage.probe_endpoint().
-    # Region is deliberately NOT duplicated: reusing s3_region keeps the emulator's key
-    # layout byte-identical to production's.
-    floci_endpoint_url: str = "http://127.0.0.1:4566"
-    floci_bucket: str = "archivenetwork-dev"
     # Log at startup whether floci is the latest release (loader/flociversion.py). It makes
     # one GitHub call, so switch it off (ARCHIVENETWORK_FLOCI_VERSION_CHECK=false) when offline.
     floci_version_check: bool = True
@@ -111,6 +76,44 @@ class Settings(BaseSettings):
     # Both servers are local, but Vite falls back to :5174/:5175/… when :5173 is
     # taken. Allow any localhost / 127.0.0.1 port so a port bump never breaks CORS.
     cors_origin_regex: str = r"http://(localhost|127\.0\.0\.1)(:\d+)?"
+
+
+# Settings that moved to environments.toml / environments.local.toml. Still present in `.env` or
+# the environment, they are reported by name so nobody believes they are being read.
+STALE_KEYS: tuple[str, ...] = tuple(
+    "ARCHIVENETWORK_" + name.upper()
+    for name in (
+        "dynamodb_table_prefix",
+        "dynamodb_table",
+        "dynamodb_endpoint_url",
+        "s3_bucket",
+        "s3_region",
+        "s3_access_key_id",
+        "s3_secret_access_key",
+        "floci_endpoint_url",
+        "floci_bucket",
+        "media_root",
+        "media_base_url",
+    )
+)
+_ENV_LINE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
+
+
+def stale_settings(env_file: Path, environ: Mapping[str, str]) -> list[str]:
+    """Sorted names of retired settings set in `environ` or as `NAME=` lines in `env_file`.
+
+    Names only: the values may be credentials, so they never leave this function.
+    """
+    found = {k for k in STALE_KEYS if k in environ}
+    try:
+        lines = env_file.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        lines = []
+    for line in lines:
+        m = _ENV_LINE.match(line)
+        if m and m.group(1).upper() in STALE_KEYS:
+            found.add(m.group(1).upper())
+    return sorted(found)
 
 
 settings = Settings()

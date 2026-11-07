@@ -2,24 +2,28 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
-from .config import settings
+from .config import settings, stale_settings
 from .loader import flociversion
 from .loader.dockerctl import COMPOSE_FILE
+from .loader.awsauth import AuthManager
+from .loader.envs import load_registry
+from .web import envparam
 from .web.registry import WorkspaceRegistry
 
 # uvicorn's own logger, so the line prints in the server console with uvicorn's formatting.
 _log = logging.getLogger("uvicorn.error")
 
 
-def _log_floci_version() -> None:
-    report = flociversion.report(settings.floci_endpoint_url, COMPOSE_FILE)
+def _log_floci_version(endpoint_url: str) -> None:
+    report = flociversion.report(endpoint_url, COMPOSE_FILE)
     level = logging.INFO if report.status in ("up_to_date", "unknown") else logging.WARNING
     _log.log(level, "floci version check: %s", report.message)
 
@@ -28,7 +32,12 @@ def _start_floci_version_check(app: FastAPI) -> None:
     """Run the check off the event loop: it makes network calls, and startup must not wait."""
     app.state.floci_version_thread = None
     if settings.floci_version_check:
-        thread = threading.Thread(target=_log_floci_version, name="floci-version", daemon=True)
+        thread = threading.Thread(
+            target=_log_floci_version,
+            args=(app.state.envs.floci().endpoint_url,),
+            name="floci-version",
+            daemon=True,
+        )
         thread.start()
         app.state.floci_version_thread = thread
 
@@ -60,10 +69,26 @@ async def _lifespan(app: FastAPI):
         loop.set_exception_handler(previous)
 
 
+def _env_file() -> Path:
+    return Path(settings.model_config.get("env_file") or ".env")
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="ARCHive Network", lifespan=_lifespan)
     app.state.session = None
     app.state.registry = WorkspaceRegistry(settings.workspace_dir / "workspaces.json")
+    # A broken committed environments.toml raises here on purpose; a broken overlay is reported.
+    app.state.envs = load_registry(settings.environments_file, settings.environments_local_file)
+    for problem in app.state.envs.errors:
+        _log.warning("environments: %s", problem)
+    app.state.auth = AuthManager(settings.workspace_dir / "aws" / "sso")
+    app.state.stale_settings = stale_settings(_env_file(), os.environ)
+    if app.state.stale_settings:
+        _log.warning(
+            "these settings are no longer read; move them to environments.local.toml and "
+            "delete them: %s",
+            ", ".join(app.state.stale_settings),
+        )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -79,11 +104,12 @@ def create_app() -> FastAPI:
 
     from .web.routes_build import router as build_router
     from .web.routes_dev import router as dev_router
+    from .web.routes_envs import router as envs_router
     from .web.routes_docker import router as docker_router
     from .web.routes_gallery import router as gallery_router
     from .web.routes_ingest import router as ingest_router
+    from .web.routes_publish import router as publish_router
     from .web.routes_ready import router as ready_router
-    from .web.routes_s3 import router as s3_router
     from .web.routes_video import router as video_router
     from .web.routes_workspaces import router as workspaces_router
 
@@ -93,17 +119,10 @@ def create_app() -> FastAPI:
     app.include_router(video_router)
     app.include_router(build_router)
     app.include_router(ready_router)
-    app.include_router(s3_router)
     app.include_router(docker_router)
     app.include_router(dev_router)
+    app.include_router(envs_router)
+    app.include_router(publish_router)
+    envparam.install(app)
 
-    # Dev-mode object store, served so the Dev panel can render each row straight from its
-    # `storage_path`. In production that same key is fetched from a CDN domain instead — the
-    # DB stores the key, never the base URL.
-    settings.media_root.mkdir(parents=True, exist_ok=True)
-    app.mount(
-        settings.media_base_url,
-        StaticFiles(directory=settings.media_root),
-        name="media",
-    )
     return app
