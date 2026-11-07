@@ -306,6 +306,21 @@ describe('environment api', () => {
 		expect(opts.body).toBe('{"confirm":"prod"}');
 	});
 
+	it('always sends a JSON content type on publish and table create (the CSRF guard)', async () => {
+		// Round 1 #14 / backend M9: the server answers 415 to these POSTs without it.
+		const fetchFn = ok({});
+		await publish('local', undefined, fetchFn);
+		await publish('prod', 'prod', fetchFn);
+		await devTablesCreate('local', false, fetchFn);
+		await devTablesCreate('local', true, fetchFn);
+		for (const [, opts] of fetchFn.mock.calls) {
+			const headers = new Headers(opts.headers);
+			expect(headers.get('Content-Type')).toBe('application/json');
+			expect(() => JSON.parse(opts.body)).not.toThrow();
+		}
+		expect(JSON.parse(fetchFn.mock.calls[2][1].body)).toEqual({ reset: false });
+	});
+
 	it('publishes with a null confirm by default', async () => {
 		const fetchFn = ok({ ok: true });
 		await publish('local', undefined, fetchFn);

@@ -371,3 +371,187 @@ describe('the DynamoDB tables', () => {
 		});
 	});
 });
+
+describe('review round 1', () => {
+	it('#1 enables Publish once the gallery reports a build, without leaving the panel', async () => {
+		const view = render(DevPanel, { readyBuild: null });
+		await screen.findByText('Connected');
+		expect(publishBtn('Local (floci)').disabled).toBe(true);
+		await view.rerender({ readyBuild: BUILD });
+		await waitFor(() => expect(publishBtn('Local (floci)').disabled).toBe(false));
+		// And the reverse: deleting the ready folder from the rail turns it off again.
+		await view.rerender({ readyBuild: null });
+		await waitFor(() => expect(publishBtn('Local (floci)').disabled).toBe(true));
+	});
+
+	it('#1 trusts the gallery prop instead of fetching its own build on mount', async () => {
+		render(DevPanel, { readyBuild: BUILD });
+		await screen.findByText('Connected');
+		expect(api.getCurrentReadyBuild).not.toHaveBeenCalled();
+		expect(publishBtn('Local (floci)').disabled).toBe(false);
+	});
+
+	it('#2 keeps this tab on its own env when another tab stored a different one', async () => {
+		api.envLogout.mockResolvedValue({ ok: true, status: 200, body: { state: 'signed_out' } });
+		await renderOn('dev');
+		localStorage.setItem('archive-env', 'prod'); // another tab's pick
+		await fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+		await waitFor(() => expect(api.listEnvs).toHaveBeenCalledTimes(2));
+		expect(screen.getByRole('radio', { name: /Dev \(AWS\)/ }).checked).toBe(true);
+		expect(screen.getByTestId('env-banner').dataset.tone).toBe('aws');
+	});
+
+	it('#2 routes a re-list that drops this tab’s env through a full switch', async () => {
+		api.envLogout.mockResolvedValue({ ok: true, status: 200, body: { state: 'signed_out' } });
+		await renderOn('dev');
+		await fireEvent.click(publishBtn('Dev (AWS)'));
+		await screen.findByTestId('publish-summary');
+		api.listEnvs.mockResolvedValue(envList([LOCAL, { ...DEV, configured: false }, PROD]));
+		await fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+		await waitFor(() => expect(api.devStatus).toHaveBeenLastCalledWith('local'));
+		expect(screen.getByRole('radio', { name: /Local \(floci\)/ }).checked).toBe(true);
+		// dev's result must not sit under local's bar: the switch clears it like a click would.
+		expect(screen.queryByTestId('publish-summary')).toBeNull();
+	});
+
+	it('#2 keeps this tab’s env through an offline re-list', async () => {
+		api.envLogout.mockResolvedValue({ ok: true, status: 200, body: { state: 'signed_out' } });
+		await renderOn('dev');
+		api.listEnvs.mockResolvedValue({
+			api_reachable: false,
+			default: 'local',
+			envs: [],
+			stale_settings: [],
+			errors: []
+		});
+		await fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+		await waitFor(() => expect(api.listEnvs).toHaveBeenCalledTimes(2));
+		expect(envChoice.name).toBe('dev');
+		expect(localStorage.getItem('archive-env')).toBe('dev');
+	});
+
+	it('#3 one sign-in clears the expired mark on every env sharing the login', async () => {
+		api.publish.mockResolvedValue({ ok: false, status: 401, body: { error: 'signed_out', env: 'dev' } });
+		api.envLogin.mockResolvedValue({
+			ok: true,
+			status: 200,
+			body: { verification_uri_complete: 'https://x/?c=1', user_code: 'AAAA-1111', expires_in: 60, interval: 1 }
+		});
+		api.envLoginState.mockResolvedValue({ ok: true, status: 200, body: { state: 'signed_in' } });
+		await renderOn('dev');
+		await fireEvent.click(publishBtn('Dev (AWS)'));
+		await screen.findByText(EXPIRED);
+
+		await fireEvent.click(screen.getByRole('radio', { name: /Prod \(AWS\)/ }));
+		await waitFor(() => expect(api.devStatus).toHaveBeenCalledWith('prod'));
+		api.publish.mockResolvedValue({ ok: false, status: 401, body: { error: 'signed_out', env: 'prod' } });
+		await fireEvent.click(publishBtn('Prod (AWS)'));
+		const dialog = await screen.findByRole('dialog');
+		await fireEvent.input(within(dialog).getByRole('textbox'), { target: { value: 'prod' } });
+		await fireEvent.click(within(dialog).getByRole('button', { name: 'Publish to prod' }));
+		await screen.findByText(EXPIRED);
+
+		await fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+		await waitFor(() => expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy(), {
+			timeout: 3000
+		});
+		await fireEvent.click(screen.getByRole('radio', { name: /Dev \(AWS\)/ }));
+		await waitFor(() => expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy());
+		expect(screen.queryByText(EXPIRED)).toBeNull();
+	});
+
+	it('#4 shows why the rows failed instead of an endless skeleton', async () => {
+		api.devRows.mockResolvedValue({
+			ok: false,
+			status: 403,
+			body: { error: 'access_denied', detail: 'not authorized to perform: dynamodb:Scan' }
+		});
+		await renderOn('dev');
+		expect(await screen.findByText(/dynamodb:Scan/)).toBeTruthy();
+		expect(screen.getByTestId('rows-error')).toBeTruthy();
+		expect(screen.queryByTestId('rows-skeleton')).toBeNull();
+	});
+
+	it('#4 names a 502 from the rows route on floci too', async () => {
+		api.devRows.mockResolvedValue({
+			ok: false,
+			status: 502,
+			body: { detail: "Can't reach DynamoDB at http://127.0.0.1:4566." }
+		});
+		await renderOn('local');
+		expect(await screen.findByText(/Can't reach DynamoDB at/)).toBeTruthy();
+		expect(screen.queryByTestId('rows-skeleton')).toBeNull();
+	});
+
+	it('#4 still shows the skeleton while rows are genuinely loading', async () => {
+		api.devRows.mockReturnValue(new Promise(() => {}));
+		await renderOn('local');
+		expect(screen.getByTestId('rows-skeleton')).toBeTruthy();
+		expect(screen.queryByTestId('rows-error')).toBeNull();
+	});
+
+	it('#8 a 401 from the rows route also flips the panel to signed out', async () => {
+		api.devRows.mockResolvedValue({ ok: false, status: 401, body: { error: 'signed_out', env: 'dev' } });
+		localStorage.setItem('archive-env', 'dev');
+		render(DevPanel);
+		await waitFor(() => expect(api.devRows).toHaveBeenCalledWith('dev', 'media', 10, 0));
+		expect(await screen.findByText(EXPIRED)).toBeTruthy();
+		await waitFor(() => expect(screen.queryByText('Connected')).toBeNull());
+		expect(screen.queryByTestId('rows-skeleton')).toBeNull();
+	});
+
+	it('#11 the floci fixture is shaped like routes_envs.py’s floci entry', () => {
+		expect(LOCAL).toMatchObject({ signed_in: true, login: 'signed_in', identity: 'floci' });
+	});
+
+	it('#6 does not open the prod dialog when the refreshed build is gone', async () => {
+		await renderOn('prod');
+		api.getCurrentReadyBuild.mockResolvedValue(null);
+		await fireEvent.click(publishBtn('Prod (AWS)'));
+		await waitFor(() => expect(api.getCurrentReadyBuild).toHaveBeenCalledTimes(2));
+		expect(screen.queryByRole('dialog')).toBeNull();
+		expect(screen.getByText('Build the ready folder from the gallery first.')).toBeTruthy();
+	});
+
+	it('#6 does not open a dialog for an env switched to during the build refresh', async () => {
+		await renderOn('prod');
+		let release;
+		api.getCurrentReadyBuild.mockReturnValue(new Promise((r) => (release = r)));
+		await fireEvent.click(publishBtn('Prod (AWS)'));
+		await fireEvent.click(screen.getByRole('radio', { name: /Local \(floci\)/ }));
+		await waitFor(() => expect(api.devStatus).toHaveBeenLastCalledWith('local'));
+		release(BUILD);
+		await new Promise((r) => setTimeout(r, 50)); // let startPublish's await chain finish
+		expect(screen.queryByRole('dialog')).toBeNull();
+		expect(api.publish).not.toHaveBeenCalled();
+	});
+
+	it('#8 drops the Connected card for an env whose login just expired', async () => {
+		api.publish.mockResolvedValue({ ok: false, status: 401, body: { error: 'signed_out', env: 'dev' } });
+		await renderOn('dev');
+		await fireEvent.click(publishBtn('Dev (AWS)'));
+		await screen.findByText(EXPIRED);
+		expect(screen.queryByText('Connected')).toBeNull();
+		expect(screen.getByText('Sign in to Dev (AWS) to see its tables.')).toBeTruthy();
+	});
+
+	it('#9 shows a backend-pending sign-in as pending and locks the picker meanwhile', async () => {
+		api.listEnvs.mockResolvedValue(
+			envList([LOCAL, { ...DEV, signed_in: false, login: 'pending', identity: null }, PROD])
+		);
+		api.envLoginState.mockResolvedValue({ ok: true, status: 200, body: { state: 'pending' } });
+		localStorage.setItem('archive-env', 'dev');
+		render(DevPanel);
+		expect(await screen.findByTestId('signin-waiting')).toBeTruthy();
+		await waitFor(() =>
+			expect(screen.getByRole('radio', { name: /Local \(floci\)/ }).disabled).toBe(true)
+		);
+	});
+
+	it('#10 not_configured mentions a missing AWS profile too', async () => {
+		api.publish.mockResolvedValue({ ok: false, status: 409, body: { error: 'not_configured', env: 'dev' } });
+		await renderOn('dev');
+		await fireEvent.click(publishBtn('Dev (AWS)'));
+		expect(await screen.findByText(/AWS profile/)).toBeTruthy();
+	});
+});

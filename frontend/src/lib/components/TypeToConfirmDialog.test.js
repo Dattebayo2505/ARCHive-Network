@@ -98,3 +98,11 @@ describe('TypeToConfirmDialog', () => {
 		expect(screen.getByText('prod', { selector: 'code, kbd, strong, span' })).toBeTruthy();
 	});
 });
+
+describe('TypeToConfirmDialog with no word', () => {
+	it('never enables confirm on an empty field when the word is empty', () => {
+		// Review round 1 #7: '' === '' must not arm the button.
+		render(TypeToConfirmDialog, props({ word: '' }));
+		expect(confirmBtn().disabled).toBe(true);
+	});
+});

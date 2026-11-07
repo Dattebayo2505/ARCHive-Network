@@ -12,9 +12,9 @@ export const LOCAL = {
 	table_prefix: 'archers-network-local',
 	confirm: false,
 	configured: true,
-	signed_in: false,
-	login: 'signed_out',
-	identity: null,
+	signed_in: true, // what routes_envs.py sends for floci: no login, always usable
+	login: 'signed_in',
+	identity: 'floci',
 	endpoint_url: ENDPOINT
 };
 

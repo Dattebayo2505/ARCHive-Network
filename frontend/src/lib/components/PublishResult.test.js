@@ -107,3 +107,20 @@ describe('PublishResult', () => {
 		expect(container.textContent).toContain('g02');
 	});
 });
+
+describe('PublishResult failed files', () => {
+	it('lists a failed file once, though the backend names it in errors and failed', () => {
+		// Review round 1 #5: load.py appends the same item to both lists.
+		const r = result({ ok: false });
+		r.steps.publish = {
+			...r.steps.publish,
+			ok: false,
+			errors: ['g07: AccessDenied on PutObject'],
+			failed: ['g07']
+		};
+		const { container } = render(PublishResult, { result: r });
+		expect(container.textContent).toContain('Not written (1)');
+		const pre = [...container.querySelectorAll('pre')].map((p) => p.textContent).join('\n');
+		expect(pre.split('\n').filter((l) => l.includes('g07'))).toHaveLength(1);
+	});
+});

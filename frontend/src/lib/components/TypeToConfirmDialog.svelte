@@ -25,7 +25,8 @@
 	} = $props();
 
 	let typed = $state('');
-	const matches = $derived(typed === word);
+	// An empty word would make an empty field "match"; never arm the button on nothing.
+	const matches = $derived(!!word && typed === word);
 
 	// Nothing is remembered between publishes: a reopened dialog always starts empty.
 	$effect.pre(() => {

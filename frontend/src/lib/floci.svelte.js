@@ -27,10 +27,13 @@ export function shouldOpenFlociUi(env, result) {
 const AUTO_KEY = 'archive-floci-autoopen';
 
 function readAuto() {
-	if (typeof localStorage === 'undefined') return true;
-	// Default ON: the tab is the confirmation that the upload landed somewhere real, which is
+	// Default ON: the tab is the confirmation that the publish landed somewhere real, which is
 	// exactly the reassurance this tool trades on. Opt out, never opt in.
-	return localStorage.getItem(AUTO_KEY) !== 'off';
+	try {
+		return localStorage.getItem(AUTO_KEY) !== 'off';
+	} catch {
+		return true; // blocked storage throws on access; it runs at import, so it must not escape
+	}
 }
 
 let auto = $state(readAuto());
@@ -41,6 +44,10 @@ export const flociAutoOpen = {
 	},
 	set(value) {
 		auto = !!value;
-		if (typeof localStorage !== 'undefined') localStorage.setItem(AUTO_KEY, auto ? 'on' : 'off');
+		try {
+			localStorage.setItem(AUTO_KEY, auto ? 'on' : 'off');
+		} catch {
+			// The preference just doesn't survive a reload.
+		}
 	}
 };

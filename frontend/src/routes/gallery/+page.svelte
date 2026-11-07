@@ -974,6 +974,7 @@
 				selectedPhotos={totalSelected}
 				selectedVideos={totalSelectedVideos}
 				onCurated={reloadInventory}
+				readyBuild={existingBuild}
 			/>
 		{:else if showArchive}
 			<header class="mb-2 shrink-0 pt-1 pb-1">

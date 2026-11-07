@@ -36,7 +36,10 @@
 				]
 			: []
 	);
-	const loadErrors = $derived([...(load?.errors ?? []), ...(load?.failed ?? [])]);
+	// The backend names each failed file in both `errors` (with its reason) and `failed` (bare fbid), so
+	// list the reasons and count the fbids, never both.
+	const loadErrors = $derived(load?.errors ?? []);
+	const notWritten = $derived(load?.failed?.length || loadErrors.length);
 
 	const STEP_CHIP = {
 		pass: ['Passed', 'bg-success-100 text-success-800'],
@@ -187,7 +190,7 @@
 								</div>
 							{/each}
 						</div>
-						{#if loadErrors.length}{@render list(`Not written (${loadErrors.length})`, loadErrors)}{/if}
+						{#if loadErrors.length}{@render list(`Not written (${notWritten})`, loadErrors)}{/if}
 						{#if load.orphans?.length}{@render list('Orphans: uri with no file', load.orphans)}{/if}
 						{#if load.skipped_deleted?.length}
 							{@render list('Tombstoned in the CMS, left alone', load.skipped_deleted)}

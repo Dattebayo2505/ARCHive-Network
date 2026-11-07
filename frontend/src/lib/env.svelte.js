@@ -40,9 +40,14 @@ export const envChoice = {
 		name = value;
 		writeStored(value);
 	},
-	/** Settle the choice against a `/api/envs` body and return it. */
-	reconcile(list) {
-		const stored = readStored();
+	/** Settle the choice against a `/api/envs` body and return it. Only the first reconcile of a
+	 *  mount reads storage (`fromStorage`); later ones re-validate this tab's own choice, so another
+	 *  tab's pick can never take this one over mid-session. */
+	reconcile(list, { fromStorage = true } = {}) {
+		// An offline re-list names no envs, so nothing is usable anyway; keep this tab's pick for
+		// when the API comes back rather than switching (and storing) the default.
+		if (!fromStorage && list?.api_reachable === false) return name;
+		const stored = fromStorage ? readStored() : name;
 		name = pickEnv(stored, list);
 		// The offline fallback lists no envs; overwriting the stored choice then would forget a
 		// perfectly good preference just because the API was briefly down.

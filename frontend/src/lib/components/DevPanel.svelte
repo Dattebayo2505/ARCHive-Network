@@ -28,7 +28,14 @@
 	// this workspace's built ready/ folder to the env's bucket, upserts album + media items into
 	// its DynamoDB tables, and verifies both landed. Everything below the environment bar is
 	// scoped to the picked env; auto-curate is a *selection* action and is not.
-	let { selectedPhotos = 0, selectedVideos = 0, onCurated = () => {} } = $props();
+	// `readyBuild` is the gallery's own build summary (it re-fetches after every build and delete),
+	// so Publish enables the moment the rail's Build finishes. Left undefined, the panel fetches its own.
+	let {
+		selectedPhotos = 0,
+		selectedVideos = 0,
+		onCurated = () => {},
+		readyBuild = undefined
+	} = $props();
 
 	// ── Environments ──────────────────────────────────────────────────────────────────
 	let envList = $state(null); // null while the first /api/envs is in flight
@@ -42,6 +49,8 @@
 
 	function markExpired(name) {
 		expired = { ...expired, [name]: true };
+		// Drop the old env's "Connected" card now: refreshStatus short-circuits to signed out.
+		if (name === env?.name) refreshStatus();
 	}
 
 	/** True when a response is the structured "signed out" refusal; flips the sign-in row. */
@@ -71,7 +80,11 @@
 	let curateError = $state('');
 
 	// The build summary for this workspace: Publish needs one, and the prod dialog states its counts.
+	// The backend's 409 stays the backstop for a summary that has gone stale.
 	let build = $state(null);
+	$effect(() => {
+		if (readyBuild !== undefined) build = readyBuild;
+	});
 	async function refreshBuild() {
 		build = await getCurrentReadyBuild();
 		return build;
@@ -121,14 +134,18 @@
 		publish_running: (b) =>
 			`A Publish to ${b.env} is already running (another tab?). Wait for it to finish.`,
 		not_configured: (b) =>
-			`${b.env} has no sign-in values yet; add them to environments.local.toml.`
+			`${b.env} isn't set up yet: add its sign-in values to environments.local.toml, or, for a profile env, check that its AWS profile exists in your AWS config.`
 	};
 
 	async function startPublish() {
 		if (!env) return;
 		if (env.confirm) {
+			const name = env.name;
 			// Fresh counts: the dialog states what this Publish will write, not what it was at mount.
 			await refreshBuild();
+			// The picker stays live during the refetch; never open a dialog for an env not clicked,
+			// or one that would state zero albums because the build has gone.
+			if (envChoice.name !== name || !build) return;
 			confirmPublish = true;
 		} else runPublish(null);
 	}
@@ -148,7 +165,8 @@
 		busy = '';
 		if (envChoice.name !== target.name) return; // switched away mid-run; its result is stale
 		if (checkSignedOut(target.name, res)) {
-			publishError = res.body?.detail ?? EXPIRED;
+			// The sign-in row already says the login expired; only the server's own detail adds to it.
+			publishError = res.body?.detail ?? '';
 			return;
 		}
 		if (!res.ok) {
@@ -291,6 +309,9 @@
 	let offset = $state(0);
 	/** @type {{type: string, total: number, limit: number, offset: number, rows: Record<string, any>[]} | null} */
 	let rows = $state(null);
+	let rowsError = $state(''); // why the last rows request failed, shown in place of the skeleton
+	// A device flow in flight locks the env picker, so its approval is never orphaned by a switch.
+	let signInPending = $state(false);
 	// The table shows curated columns; JSON shows each item whole (index keys, overrides, loaded_at).
 	let view = $state('table');
 	const LIMIT = 10;
@@ -310,7 +331,8 @@
 			next = { api_reachable: false, enabled: true, endpoint_reachable: false };
 		}
 		if (envChoice.name !== target.name) return;
-		checkSignedOut(target.name, next);
+		// markExpired has already re-run this and set the signed-out status.
+		if (checkSignedOut(target.name, next)) return;
 		status = next;
 	}
 
@@ -382,11 +404,22 @@
 		const target = env;
 		if (!ready || !target) {
 			rows = null;
+			rowsError = '';
 			return;
 		}
-		const res = await devRows(target.name, table, LIMIT, offset);
+		let res;
+		try {
+			res = await devRows(target.name, table, LIMIT, offset);
+		} catch {
+			res = { ok: false, status: 0, body: { detail: "Couldn't reach the API." } };
+		}
 		if (envChoice.name !== target.name) return;
-		checkSignedOut(target.name, res);
+		// A failure is a message, never the loading skeleton: that would pulse forever.
+		rowsError = res.ok
+			? ''
+			: checkSignedOut(target.name, res)
+				? EXPIRED
+				: (res.body?.detail ?? `HTTP ${res.status}`);
 		rows = res.ok ? res.body : null;
 	}
 
@@ -412,23 +445,30 @@
 		tableError = '';
 		tableNotice = '';
 		rows = null;
+		rowsError = '';
 		offset = 0;
 		status = null;
 		uiTarget = null;
 		uiBlocked = false;
+		signInPending = false; // the old env's sign-in row unmounts with its poll
 		await refreshStatus();
 		await warmFlociUi();
 	}
 
-	async function refreshEnvs() {
+	/** Re-list the envs. Only the mount's first call reads the stored choice; later ones keep this
+	 *  tab's own pick, and a pick the list no longer allows goes through a full switch. */
+	async function refreshEnvs({ initial = false } = {}) {
+		const before = envChoice.name;
 		envList = await listEnvs();
-		envChoice.reconcile(envList);
+		// A fresh list is the authoritative login answer, and dev and prod can share one login,
+		// so the 401 overrides (which only patch a stale list) all go.
+		expired = {};
+		const next = envChoice.reconcile(envList, { fromStorage: initial });
+		if (!initial && next !== before) await selectEnv(next);
 	}
 
 	async function onSignedIn() {
 		await refreshEnvs();
-		const { [envChoice.name]: _gone, ...rest } = expired;
-		expired = rest;
 		await refreshStatus();
 	}
 
@@ -439,8 +479,8 @@
 
 	onMount(async () => {
 		refreshDocker();
-		refreshBuild();
-		await refreshEnvs();
+		if (readyBuild === undefined) refreshBuild(); // the gallery's prop already carries it
+		await refreshEnvs({ initial: true });
 		await refreshStatus();
 		await warmFlociUi();
 	});
@@ -677,7 +717,7 @@
 				<EnvPicker
 					envs={envList.envs}
 					selected={envChoice.name}
-					disabled={busy !== ''}
+					disabled={busy !== '' || signInPending}
 					onSelect={selectEnv}
 				/>
 				{#if env && env.kind !== 'floci'}
@@ -806,7 +846,8 @@
 						{#key env.name}
 							<EnvSignIn
 								{env}
-								login={signedIn ? 'signed_in' : 'signed_out'}
+								login={expired[env.name] ? 'signed_out' : (env.login ?? (signedIn ? 'signed_in' : 'signed_out'))}
+								onPendingChange={(p) => (signInPending = p)}
 								identity={env.identity}
 								notice={expired[env.name] ? EXPIRED : ''}
 								onSignIn={onSignedIn}
@@ -1259,9 +1300,23 @@
 						</div>
 					</div>
 
-					{#if rows === null}
+					{#if rowsError}
+						<div
+							class="mt-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3"
+							role="alert"
+							data-testid="rows-error"
+						>
+							<p class="text-sm font-medium text-error-800">
+								The <code class="font-mono text-xs">{table}</code> items couldn't be read.
+							</p>
+							<p class="mt-1 font-mono text-xs break-words text-error-800">{rowsError}</p>
+						</div>
+					{:else if rows === null}
 						<!-- Skeleton, not a spinner: the shape of what's coming. -->
-						<div class="mt-4 space-y-px overflow-hidden rounded-lg bg-surface-200">
+						<div
+							class="mt-4 space-y-px overflow-hidden rounded-lg bg-surface-200"
+							data-testid="rows-skeleton"
+						>
 							{#each Array(5) as _, i (i)}
 								<div class="h-11 animate-pulse bg-surface-100"></div>
 							{/each}

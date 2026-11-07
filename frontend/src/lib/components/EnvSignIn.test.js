@@ -144,3 +144,58 @@ describe('EnvSignIn', () => {
 		);
 	});
 });
+
+describe('EnvSignIn review round 1', () => {
+	it('resumes a sign-in the backend already has pending and collects the approval', async () => {
+		// #9: a flow started before a reload or in another tab arrives as login: 'pending'.
+		const onSignIn = vi.fn();
+		api.envLoginState.mockResolvedValueOnce(state('pending')).mockResolvedValue(state('signed_in'));
+		render(EnvSignIn, { env: dev, login: 'pending', identity: null, onSignIn });
+		expect(screen.getByTestId('signin-waiting')).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+		await vi.advanceTimersByTimeAsync(10000);
+		await vi.waitFor(() => expect(onSignIn).toHaveBeenCalledTimes(1));
+		expect(api.envLogin).not.toHaveBeenCalled();
+	});
+
+	it('reports whether a device flow is in flight', async () => {
+		const onPendingChange = vi.fn();
+		api.envLoginState.mockResolvedValue(state('expired'));
+		render(EnvSignIn, { env: dev, login: 'signed_out', identity: null, onPendingChange });
+		await fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+		await screen.findByText('WXYZ-1234');
+		expect(onPendingChange).toHaveBeenLastCalledWith(true);
+		await vi.advanceTimersByTimeAsync(2000);
+		await screen.findByText(/code expired/i);
+		expect(onPendingChange).toHaveBeenLastCalledWith(false);
+	});
+
+	it('releases the picker lock when unmounted mid-flow', async () => {
+		const onPendingChange = vi.fn();
+		api.envLoginState.mockResolvedValue(state('pending'));
+		const view = render(EnvSignIn, { env: dev, login: 'signed_out', identity: null, onPendingChange });
+		await fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+		await screen.findByText('WXYZ-1234');
+		expect(onPendingChange).toHaveBeenLastCalledWith(true);
+		view.unmount();
+		expect(onPendingChange).toHaveBeenLastCalledWith(false);
+	});
+
+	it('says so, and stays signed in, when sign-out is refused', async () => {
+		// #12: a non-OK logout must not be reported as done.
+		const onSignOut = vi.fn();
+		api.envLogout.mockResolvedValue({ ok: false, status: 500, body: { detail: 'cache locked' } });
+		render(EnvSignIn, { env: dev, login: 'signed_in', identity: 'me', onSignOut });
+		await fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+		expect(await screen.findByText(/cache locked/)).toBeTruthy();
+		expect(onSignOut).not.toHaveBeenCalled();
+		expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+	});
+
+	it('turns a rejected sign-out into a message, not an unhandled rejection', async () => {
+		api.envLogout.mockRejectedValue(new TypeError('Failed to fetch'));
+		render(EnvSignIn, { env: dev, login: 'signed_in', identity: 'me' });
+		await fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+		expect(await screen.findByText(/Couldn't sign out/)).toBeTruthy();
+	});
+});

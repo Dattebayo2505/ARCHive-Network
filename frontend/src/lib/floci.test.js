@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import {
 	flociAutoOpen,
 	flociUiUrl,
@@ -59,4 +59,23 @@ test('auto-open defaults on and persists an opt-out', () => {
 	expect(localStorage.getItem('archive-floci-autoopen')).toBe('off');
 	flociAutoOpen.set(true);
 	expect(localStorage.getItem('archive-floci-autoopen')).toBe('on');
+});
+
+test('blocked storage never throws from the auto-open preference', async () => {
+	// Review round 1 #13: a SecurityError on access would break every DevPanel import.
+	const boom = () => {
+		throw new DOMException('blocked', 'SecurityError');
+	};
+	const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(boom);
+	const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(boom);
+	try {
+		vi.resetModules();
+		const fresh = await import('./floci.svelte.js');
+		expect(fresh.flociAutoOpen.enabled).toBe(true);
+		expect(() => fresh.flociAutoOpen.set(false)).not.toThrow();
+		expect(fresh.flociAutoOpen.enabled).toBe(false);
+	} finally {
+		get.mockRestore();
+		set.mockRestore();
+	}
 });

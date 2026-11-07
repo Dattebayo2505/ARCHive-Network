@@ -69,6 +69,27 @@ describe('envChoice', () => {
 		expect(localStorage.getItem('archive-env')).toBe('local');
 	});
 
+	it('ignores another tab’s stored choice on a later reconcile', () => {
+		// Review round 1 #2: tab A wrote 'prod'; this tab, on dev, re-lists after a sign-in.
+		envChoice.set('dev');
+		localStorage.setItem('archive-env', 'prod');
+		expect(envChoice.reconcile(list(), { fromStorage: false })).toBe('dev');
+		expect(envChoice.name).toBe('dev');
+	});
+
+	it('keeps the in-memory env, and the stored one, through an offline later reconcile', () => {
+		envChoice.set('dev');
+		const offline = { api_reachable: false, default: 'local', envs: [], stale_settings: [], errors: [] };
+		expect(envChoice.reconcile(offline, { fromStorage: false })).toBe('dev');
+		expect(localStorage.getItem('archive-env')).toBe('dev');
+	});
+
+	it('still drops an in-memory env that became unusable on a later reconcile', () => {
+		envChoice.set('dev');
+		envChoice.reconcile(list([local, { ...dev, configured: false }, prod]), { fromStorage: false });
+		expect(envChoice.name).toBe('local');
+	});
+
 	it('sits on the default but keeps the stored choice while the API is down', () => {
 		localStorage.setItem('archive-env', 'dev');
 		envChoice.reconcile({ api_reachable: false, default: 'local', envs: [], stale_settings: [], errors: [] });
