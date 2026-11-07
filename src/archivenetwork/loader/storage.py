@@ -183,7 +183,10 @@ class S3Storage:
         if self.exists(key):
             return False
         ctype = mimetypes.guess_type(key)[0] or "application/octet-stream"
-        self.client.upload_file(str(src), self.bucket, key, ExtraArgs={"ContentType": ctype})
+        # put_object, not upload_file: the transfer manager wraps a ClientError in
+        # S3UploadFailedError, which would hide an ExpiredToken code from load()'s triage.
+        with src.open("rb") as body:
+            self.client.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType=ctype)
         return True
 
 
