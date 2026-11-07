@@ -1,0 +1,28 @@
+# environments.local.toml — gitignored. Copy this file to `environments.local.toml`.
+# It is merged over environments.toml key by key, so set only what you need.
+# The real start URL and account ID are in the Archers Network AWS guide (Google Drive).
+
+[env.dev.sso]
+start_url = "https://d-xxxxxxxxxx.awsapps.com/start"
+account_id = "123456789012"
+
+[env.prod.sso]
+start_url = "https://d-xxxxxxxxxx.awsapps.com/start"
+account_id = "123456789012"
+
+# Optional: a personal AWS account for alpha testing before dev.
+[env.personal]
+kind = "aws"
+label = "Personal (AWS)"
+region = "ap-southeast-1"
+s3_bucket = "<you>-archivenetwork-alpha"
+table_prefix = "archers-network-personal"
+confirm = false
+[env.personal.sso]
+start_url = "https://d-yyyyyyyyyy.awsapps.com/start"
+region = "ap-southeast-1"
+account_id = "210987654321"
+role_name = "Curators"
+
+# Already use AWS CLI v2? Replace an env's [sso] table with a named profile instead:
+# profile = "my-profile"   # then sign in with `aws sso login --profile my-profile`

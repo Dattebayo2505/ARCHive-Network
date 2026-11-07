@@ -14,8 +14,9 @@ venv/
 workspace/
 ready/
 
-# Local secrets (dev-mode Postgres URL)
+# Local secrets (machine settings; AWS sign-in values live in environments.local.toml)
 .env
+environments.local.toml
 
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
